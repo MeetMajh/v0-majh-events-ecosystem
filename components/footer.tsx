@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { Logo } from "@/components/logo"
+import { Instagram } from "lucide-react"
 
 const FOOTER_LINKS = [
   {
@@ -32,7 +33,7 @@ const FOOTER_LINKS = [
 
 export function Footer() {
   return (
-    <footer className="border-t border-border bg-background">
+    <footer className="border-t border-border bg-card/50">
       <div className="mx-auto max-w-7xl px-4 py-12">
         <div className="flex flex-col gap-8 md:flex-row md:justify-between">
           <div className="flex flex-col gap-4">
@@ -40,6 +41,17 @@ export function Footer() {
             <p className="max-w-xs text-sm leading-relaxed text-muted-foreground">
               The ultimate esports and entertainment ecosystem. Game, eat, drink, and celebrate -- all under one roof.
             </p>
+            <div className="flex items-center gap-3">
+              <a
+                href="https://www.instagram.com/majheventsbds/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+                aria-label="Follow MAJH EVENTS on Instagram"
+              >
+                <Instagram className="h-4 w-4" />
+              </a>
+            </div>
           </div>
           <div className="flex flex-wrap gap-12">
             {FOOTER_LINKS.map((group) => (
@@ -60,7 +72,10 @@ export function Footer() {
             ))}
           </div>
         </div>
-        <div className="mt-12 border-t border-border pt-6">
+        <div className="mt-12 flex flex-col items-center gap-2 border-t border-border pt-6">
+          <p className="text-center text-xs text-muted-foreground">
+            Millers Building, Tudor Street | @MAJHEVENTSBDS
+          </p>
           <p className="text-center text-xs text-muted-foreground">
             &copy; {new Date().getFullYear()} MAJH EVENTS. All rights reserved.
           </p>

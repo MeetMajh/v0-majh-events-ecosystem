@@ -11,8 +11,9 @@ export default async function SignUpPage(props: {
   const error = searchParams.error
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4 py-12">
-      <div className="w-full max-w-lg space-y-8">
+    <div className="relative flex min-h-screen items-center justify-center bg-background px-4 py-12">
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,oklch(0.45_0.18_300)_0%,transparent_60%)] opacity-15" />
+      <div className="relative w-full max-w-lg space-y-8">
         <div className="flex flex-col items-center gap-4">
           <Logo />
           <div className="text-center">
