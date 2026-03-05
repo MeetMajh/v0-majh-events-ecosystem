@@ -100,7 +100,7 @@ function ParticipantsList({ participants }: { participants: any[] }) {
                     href={`/esports/players/${p.profiles.id || p.user_id}`}
                     className="text-sm font-medium text-foreground hover:text-primary transition-colors"
                   >
-                    {p.profiles.display_name || p.profiles.full_name || "Player"}
+                    {p.profiles.display_name || "Player"}
                   </Link>
                 ) : (
                   <span className="text-sm text-muted-foreground">Unknown Player</span>

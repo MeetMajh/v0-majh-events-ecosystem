@@ -49,9 +49,9 @@ export default async function ThreadPage({ params }: { params: Promise<{ threadI
         <h1 className="text-2xl font-bold text-balance text-foreground">{thread.title}</h1>
         <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
           <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary">
-            {thread.profiles?.full_name?.[0]?.toUpperCase() ?? "?"}
+            {thread.profiles?.display_name?.[0]?.toUpperCase() ?? "?"}
           </div>
-          <span>{thread.profiles?.full_name ?? "Unknown"}</span>
+          <span>{thread.profiles?.display_name ?? "Unknown"}</span>
           <span>{formatDate(thread.created_at)}</span>
         </div>
       </div>
@@ -65,9 +65,9 @@ export default async function ThreadPage({ params }: { params: Promise<{ threadI
             <div key={reply.id} className="rounded-xl border border-border bg-card p-5">
               <div className="mb-3 flex items-center gap-2">
                 <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary">
-                  {reply.profiles?.full_name?.[0]?.toUpperCase() ?? "?"}
+                  {reply.profiles?.display_name?.[0]?.toUpperCase() ?? "?"}
                 </div>
-                <span className="text-sm font-medium text-foreground">{reply.profiles?.full_name ?? "Unknown"}</span>
+                <span className="text-sm font-medium text-foreground">{reply.profiles?.display_name ?? "Unknown"}</span>
                 <span className="text-xs text-muted-foreground">{formatDate(reply.created_at)}</span>
               </div>
               <p className="whitespace-pre-wrap text-sm text-foreground/90 leading-relaxed">{reply.content}</p>

@@ -65,7 +65,7 @@ export default async function CommunityPage({
               className="flex items-start gap-4 p-4 transition-colors hover:bg-muted/50"
             >
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
-                {thread.profiles?.full_name?.[0]?.toUpperCase() ?? "?"}
+                {thread.profiles?.display_name?.[0]?.toUpperCase() ?? "?"}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="mb-1 flex flex-wrap items-center gap-1.5">
@@ -77,7 +77,7 @@ export default async function CommunityPage({
                   <Badge variant="outline" className={`text-[10px] ${CATEGORY_COLORS[thread.category] ?? ""}`}>
                     {thread.category.replace("_", " ")}
                   </Badge>
-                  <span>{thread.profiles?.full_name ?? "Unknown"}</span>
+                  <span>{thread.profiles?.display_name ?? "Unknown"}</span>
                   <span>{formatDate(thread.created_at)}</span>
                 </div>
               </div>
