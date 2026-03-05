@@ -23,8 +23,8 @@ const NAV_ITEMS = [
   { label: "Overview", href: "/dashboard", icon: LayoutDashboard },
   { label: "Profile", href: "/dashboard/profile", icon: User },
   { label: "Points & Rewards", href: "/dashboard/rewards", icon: Gift },
+  { label: "My Orders", href: "/dashboard/orders", icon: UtensilsCrossed },
   { label: "Esports", href: "/dashboard/esports", icon: Gamepad2, disabled: true },
-  { label: "Orders", href: "/dashboard/orders", icon: UtensilsCrossed, disabled: true },
   { label: "My Events", href: "/dashboard/events", icon: CalendarCheck, disabled: true },
   { label: "My Rentals", href: "/dashboard/rentals", icon: Monitor, disabled: true },
 ]

@@ -13,11 +13,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
     redirect("/auth/login")
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", user.id)
-    .single()
+  const [{ data: profile }, { data: staffRole }] = await Promise.all([
+    supabase.from("profiles").select("*").eq("id", user.id).single(),
+    supabase.from("staff_roles").select("role").eq("user_id", user.id).single(),
+  ])
 
   const displayName = profile?.first_name
     ? `${profile.first_name} ${profile.last_name || ""}`.trim()
@@ -25,7 +24,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <div className="flex min-h-screen bg-background">
-      <DashboardSidebar displayName={displayName} email={user.email || ""} />
+      <DashboardSidebar
+        displayName={displayName}
+        email={user.email || ""}
+        userRole={staffRole?.role ?? null}
+      />
       <div className="flex flex-1 flex-col">
         <DashboardHeader displayName={displayName} />
         <main className="flex-1 p-6">{children}</main>

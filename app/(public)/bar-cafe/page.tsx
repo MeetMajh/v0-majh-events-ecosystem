@@ -1,55 +1,65 @@
-import Link from "next/link"
+import { createClient } from "@/lib/supabase/server"
 import Image from "next/image"
-import { Button } from "@/components/ui/button"
 import { IMAGES } from "@/lib/images"
-import { UtensilsCrossed, CreditCard, Gift, Clock } from "lucide-react"
+import { UtensilsCrossed } from "lucide-react"
+import { ShopMenu } from "@/components/shop/shop-menu"
 
-export const metadata = { title: "Bar / Cafe" }
+export const metadata = { title: "Bar & Cafe - Order Online | MAJH EVENTS" }
 
-const FEATURES = [
-  { icon: UtensilsCrossed, title: "Full Menu", description: "Craft cocktails, coffee, snacks, and meals curated for gamers and guests" },
-  { icon: CreditCard, title: "Online Ordering", description: "Order ahead for pickup or dine-in with card, Afterpay, or cash" },
-  { icon: Gift, title: "Loyalty Rewards", description: "Earn points on every purchase, redeemable for discounts and freebies" },
-  { icon: Clock, title: "Games Night Specials", description: "Special pricing during tournament events and gaming sessions" },
-]
+export default async function BarCafePage() {
+  const supabase = await createClient()
 
-export default function BarCafePage() {
+  const { data: categories } = await supabase
+    .from("categories")
+    .select("*")
+    .eq("is_active", true)
+    .order("sort_order")
+
+  const { data: menuItems } = await supabase
+    .from("menu_items")
+    .select("*, categories(name, slug, type), inventory(quantity_on_hand, track_inventory)")
+    .eq("is_available", true)
+    .order("sort_order")
+
+  // Get current user profile for points
+  const { data: { user } } = await supabase.auth.getUser()
+  let pointsBalance = 0
+  if (user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("points_balance")
+      .eq("id", user.id)
+      .single()
+    pointsBalance = profile?.points_balance ?? 0
+  }
+
   return (
-    <div className="mx-auto max-w-7xl px-4 py-16">
-      <div className="relative mb-12 overflow-hidden rounded-2xl border border-border">
-        <div className="relative aspect-[21/9]">
-          <Image src={IMAGES.events.barGaming} alt="Cocktails and FIFA gaming at MAJH EVENTS bar" fill className="object-cover" priority />
-          <div className="absolute inset-0 bg-gradient-to-r from-background/90 via-background/60 to-transparent" />
+    <div className="mx-auto max-w-7xl px-4 py-12">
+      {/* Hero */}
+      <div className="relative mb-10 overflow-hidden rounded-2xl border border-border">
+        <div className="relative aspect-[21/8]">
+          <Image src={IMAGES.events.barGaming} alt="MAJH EVENTS bar and cafe" fill className="object-cover" priority />
+          <div className="absolute inset-0 bg-gradient-to-r from-background/95 via-background/70 to-transparent" />
         </div>
         <div className="absolute inset-0 flex flex-col justify-center p-8 md:p-12">
-          <div className="mb-4 inline-flex w-fit items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+          <div className="mb-3 inline-flex w-fit items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
             <UtensilsCrossed className="h-3 w-3" />
-            Food & Drinks
+            Order Online
           </div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground md:text-5xl">Bar / Cafe</h1>
+          <h1 className="text-balance text-3xl font-bold tracking-tight text-foreground md:text-5xl">Bar & Cafe</h1>
           <p className="mt-3 max-w-lg text-muted-foreground">
-            Fuel your gaming sessions with craft cocktails, food, and drinks. Every purchase earns you loyalty points across the MAJH ecosystem.
+            Browse our full menu and order online for pickup. Every purchase earns loyalty points.
           </p>
         </div>
       </div>
 
-      <div className="mb-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {FEATURES.map((f) => (
-          <div key={f.title} className="rounded-xl border border-border bg-card p-6 transition-colors hover:border-primary/30">
-            <f.icon className="mb-3 h-8 w-8 text-primary" />
-            <h3 className="mb-1 font-semibold text-foreground">{f.title}</h3>
-            <p className="text-sm text-muted-foreground">{f.description}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="rounded-xl border border-dashed border-primary/30 bg-card/50 p-12 text-center">
-        <h2 className="mb-2 text-xl font-semibold text-foreground">Online menu and ordering coming soon</h2>
-        <p className="mb-6 text-muted-foreground">Sign up to get notified when online ordering goes live.</p>
-        <Button asChild>
-          <Link href="/auth/sign-up">Get Notified</Link>
-        </Button>
-      </div>
+      {/* Live Menu */}
+      <ShopMenu
+        categories={categories ?? []}
+        menuItems={menuItems ?? []}
+        isLoggedIn={!!user}
+        pointsBalance={pointsBalance}
+      />
     </div>
   )
 }
