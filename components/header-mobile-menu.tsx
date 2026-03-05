@@ -10,6 +10,8 @@ const NAV_ITEMS = [
   { label: "Bar / Cafe", href: "/bar-cafe" },
   { label: "CARBARDMV Events", href: "/events" },
   { label: "Rentals", href: "/rentals" },
+  { label: "News", href: "/news" },
+  { label: "Community", href: "/community" },
 ]
 
 export function HeaderMobileMenu({ isLoggedIn }: { isLoggedIn: boolean }) {
