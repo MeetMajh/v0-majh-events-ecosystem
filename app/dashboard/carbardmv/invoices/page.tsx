@@ -5,7 +5,7 @@ import { updateInvoiceStatus } from "@/lib/carbardmv-actions"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
-import { ExternalLink, Receipt } from "lucide-react"
+import { ExternalLink, Receipt, Download } from "lucide-react"
 import { NewInvoiceForm } from "@/components/carbardmv/new-invoice-form"
 
 export const metadata = { title: "Invoices | CARBARDMV" }
@@ -80,13 +80,21 @@ export default async function InvoicesPage() {
                     Paid: {formatCents(inv.amount_paid_cents)} ({paidPct}%)
                   </p>
                   <p className="text-[10px] text-muted-foreground">{formatDate(inv.created_at)}</p>
-                  <Link
-                    href={`/share/invoice/${inv.id}`}
-                    target="_blank"
-                    className="mt-1 inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                  >
-                    <ExternalLink className="h-3 w-3" /> Share Link
-                  </Link>
+                  <div className="mt-1 flex items-center justify-end gap-3">
+                    <Link
+                      href={`/invoice/${inv.share_token}`}
+                      target="_blank"
+                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                    >
+                      <ExternalLink className="h-3 w-3" /> View
+                    </Link>
+                    <Link
+                      href={`/api/invoices/${inv.id}/pdf`}
+                      className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      <Download className="h-3 w-3" /> PDF
+                    </Link>
+                  </div>
                 </div>
               </div>
 

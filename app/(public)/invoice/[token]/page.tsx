@@ -3,7 +3,7 @@ import { notFound } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { FileText, Calendar, CheckCircle, Clock, AlertCircle } from "lucide-react"
+import { FileText, Calendar, CheckCircle, Clock, AlertCircle, Download } from "lucide-react"
 import Image from "next/image"
 import { IMAGES } from "@/lib/images"
 import { InvoicePayment } from "@/components/carbardmv/invoice-payment"
@@ -200,9 +200,18 @@ export default async function InvoicePage({ params }: { params: Promise<{ token:
           </CardContent>
         </Card>
 
-        <p className="mt-8 text-center text-xs text-muted-foreground">
-          Questions about this invoice? Contact billing@carbardmv.com
-        </p>
+        <div className="mt-8 flex flex-col items-center gap-2">
+          <a
+            href={`/api/invoices/${invoice.id}/pdf`}
+            className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
+          >
+            <Download className="h-4 w-4" />
+            Download PDF
+          </a>
+          <p className="text-xs text-muted-foreground">
+            Questions about this invoice? Contact billing@carbardmv.com
+          </p>
+        </div>
       </main>
     </div>
   )

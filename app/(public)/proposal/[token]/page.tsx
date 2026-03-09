@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { FileText, Calendar, CheckCircle, XCircle, Clock } from "lucide-react"
+import { FileText, Calendar, CheckCircle, XCircle, Clock, Download } from "lucide-react"
 import { AcceptProposalButton } from "@/components/carbardmv/accept-proposal-button"
 import Image from "next/image"
 import { IMAGES } from "@/lib/images"
@@ -188,9 +188,18 @@ export default async function ProposalPage({ params }: { params: Promise<{ token
           </CardContent>
         </Card>
 
-        <p className="mt-8 text-center text-xs text-muted-foreground">
-          Questions? Contact us at events@carbardmv.com
-        </p>
+        <div className="mt-8 flex flex-col items-center gap-2">
+          <a
+            href={`/api/proposals/${proposal.id}/pdf`}
+            className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
+          >
+            <Download className="h-4 w-4" />
+            Download PDF
+          </a>
+          <p className="text-xs text-muted-foreground">
+            Questions? Contact us at events@carbardmv.com
+          </p>
+        </div>
       </main>
     </div>
   )

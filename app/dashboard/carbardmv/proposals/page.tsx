@@ -5,7 +5,7 @@ import { updateProposalStatus } from "@/lib/carbardmv-actions"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
-import { ExternalLink, FileText } from "lucide-react"
+import { ExternalLink, FileText, Download } from "lucide-react"
 import { NewProposalForm } from "@/components/carbardmv/new-proposal-form"
 
 export const metadata = { title: "Proposals | CARBARDMV" }
@@ -80,13 +80,21 @@ export default async function ProposalsPage() {
                 <div className="text-right">
                   <p className="text-lg font-bold text-foreground">{formatCents(p.total_cents)}</p>
                   <p className="text-[10px] text-muted-foreground">{formatDate(p.created_at)}</p>
-                  <Link
-                    href={`/share/proposal/${p.id}`}
-                    target="_blank"
-                    className="mt-1 inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                  >
-                    <ExternalLink className="h-3 w-3" /> Share Link
-                  </Link>
+                  <div className="mt-1 flex items-center justify-end gap-3">
+                    <Link
+                      href={`/proposal/${p.share_token}`}
+                      target="_blank"
+                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                    >
+                      <ExternalLink className="h-3 w-3" /> View
+                    </Link>
+                    <Link
+                      href={`/api/proposals/${p.id}/pdf`}
+                      className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      <Download className="h-3 w-3" /> PDF
+                    </Link>
+                  </div>
                 </div>
               </div>
 
