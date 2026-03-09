@@ -1,7 +1,8 @@
 import { createClient } from "@/lib/supabase/server"
 import { requireRole } from "@/lib/roles"
 import { notFound } from "next/navigation"
-import { formatDate, formatRelative } from "@/lib/format"
+import { formatDate } from "@/lib/format"
+import { formatDistanceToNow } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
@@ -195,7 +196,7 @@ export default async function ClientDetailPage({
                         <div className="rounded-lg border border-border bg-card/50 p-3">
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-medium capitalize text-muted-foreground">{interaction.type}</span>
-                            <span className="text-xs text-muted-foreground">{formatRelative(interaction.created_at)}</span>
+                            <span className="text-xs text-muted-foreground">{formatDistanceToNow(new Date(interaction.created_at), { addSuffix: true })}</span>
                           </div>
                           {interaction.subject && <p className="mt-1 text-sm font-medium">{interaction.subject}</p>}
                           {interaction.body && <p className="mt-1 text-sm text-muted-foreground">{interaction.body}</p>}

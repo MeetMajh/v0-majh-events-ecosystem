@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { requireRole } from "@/lib/roles"
-import { formatDate, formatRelative } from "@/lib/format"
+import { formatDate } from "@/lib/format"
+import { formatDistanceToNow } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -271,7 +272,7 @@ export default async function MarketingPage() {
                             <span>{automation.trigger_config.days_after} days after</span>
                           )}
                           {automation.last_run_at && (
-                            <span>Last run: {formatRelative(automation.last_run_at)}</span>
+                            <span>Last run: {formatDistanceToNow(new Date(automation.last_run_at), { addSuffix: true })}</span>
                           )}
                         </div>
                       </div>
