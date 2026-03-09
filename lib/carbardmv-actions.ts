@@ -774,3 +774,24 @@ export async function handleStripePaymentSuccess(sessionId: string) {
       .eq("id", rental.id)
   }
 }
+
+// ============================================
+// Proposal Actions (Public)
+// ============================================
+
+export async function acceptProposal(proposalId: string) {
+  const supabase = await createClient()
+
+  const { error } = await supabase
+    .from("cb_proposals")
+    .update({
+      status: "accepted",
+      accepted_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", proposalId)
+    .in("status", ["sent", "viewed"])
+
+  if (error) return { error: error.message }
+  return { success: true }
+}
