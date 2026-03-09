@@ -37,7 +37,7 @@ const GALLERY_ITEMS = [
 export function EventGallery() {
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      {GALLERY_ITEMS.map((item) => (
+      {GALLERY_ITEMS.map((item, index) => (
         <div
           key={item.label}
           className="group relative aspect-[4/3] overflow-hidden rounded-xl border border-border"
@@ -48,6 +48,7 @@ export function EventGallery() {
             fill
             className="object-cover transition-transform duration-300 group-hover:scale-105"
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+            priority={index === 0}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-background/80 via-transparent to-transparent" />
           <div className="absolute bottom-0 left-0 p-4">
