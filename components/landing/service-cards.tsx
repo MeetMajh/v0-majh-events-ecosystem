@@ -37,7 +37,7 @@ const SERVICES = [
 export function ServiceCards() {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      {SERVICES.map((service) => (
+      {SERVICES.map((service, index) => (
         <Link
           key={service.href}
           href={service.href}
@@ -50,6 +50,7 @@ export function ServiceCards() {
               fill
               className="object-cover transition-transform duration-300 group-hover:scale-105"
               sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+              priority={index < 2}
             />
             <div className="absolute inset-0 bg-gradient-to-t from-card via-card/30 to-transparent" />
             <div className="absolute bottom-3 left-3 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/90 text-primary-foreground">

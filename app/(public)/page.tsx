@@ -85,6 +85,7 @@ export default function HomePage() {
             width={80}
             height={80}
             className="rounded-lg"
+            style={{ width: 'auto', height: 'auto' }}
           />
           <h2 className="text-3xl font-bold tracking-tight text-foreground">
             Ready to Level Up?

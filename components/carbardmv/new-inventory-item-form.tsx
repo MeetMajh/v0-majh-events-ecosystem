@@ -20,7 +20,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Plus } from "lucide-react"
-import { createInventoryItem } from "@/lib/carbardmv-actions"
+import { createInventoryItem_CB } from "@/lib/carbardmv-actions"
 import { toast } from "sonner"
 
 const CATEGORIES = [
@@ -64,7 +64,7 @@ export function NewInventoryItemForm() {
       supplier: formData.get("supplier") as string || undefined,
     }
 
-    const result = await createInventoryItem(data)
+    const result = await createInventoryItem_CB(data)
 
     if (result.error) {
       toast.error(result.error)

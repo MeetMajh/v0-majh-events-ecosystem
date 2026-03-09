@@ -18,7 +18,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { Plus, Minus } from "lucide-react"
-import { adjustInventory } from "@/lib/carbardmv-actions"
+import { adjustInventoryStock } from "@/lib/carbardmv-actions"
 import { toast } from "sonner"
 
 interface InventoryItem {
@@ -55,7 +55,7 @@ export function InventoryAdjustment({ item }: { item: InventoryItem }) {
       qty = -qty
     }
 
-    const result = await adjustInventory({
+    const result = await adjustInventoryStock({
       item_id: item.id,
       change_qty: qty,
       reason: reason as "restock" | "used" | "waste" | "adjustment" | "returned",
