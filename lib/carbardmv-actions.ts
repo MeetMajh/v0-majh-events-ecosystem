@@ -382,6 +382,9 @@ export async function updateClient_CRM(clientId: string, formData: FormData) {
     source: (formData.get("source") as string) || "website",
     status: (formData.get("status") as string) || "lead",
     notes: (formData.get("notes") as string) || null,
+    birthday: (formData.get("birthday") as string) || null,
+    anniversary: (formData.get("anniversary") as string) || null,
+    preferred_contact: (formData.get("preferred_contact") as string) || "email",
     updated_at: new Date().toISOString(),
   }
 

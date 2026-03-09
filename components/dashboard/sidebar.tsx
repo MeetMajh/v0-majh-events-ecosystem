@@ -26,6 +26,8 @@ import {
   Clock,
   BarChart3,
   Boxes,
+  Filter,
+  Mail,
 } from "lucide-react"
 import { signOut } from "@/lib/actions"
 import { Button } from "@/components/ui/button"
@@ -55,6 +57,8 @@ const CARBARDMV_ITEMS = [
   { label: "Catering", href: "/dashboard/carbardmv/catering", icon: UtensilsCrossed },
   { label: "Rentals", href: "/dashboard/carbardmv/rentals", icon: Monitor },
   { label: "Clients (CRM)", href: "/dashboard/carbardmv/clients", icon: UserCheck },
+  { label: "Segments", href: "/dashboard/carbardmv/segments", icon: Filter },
+  { label: "Marketing", href: "/dashboard/carbardmv/marketing", icon: Mail },
   { label: "Proposals", href: "/dashboard/carbardmv/proposals", icon: FileText },
   { label: "Invoices", href: "/dashboard/carbardmv/invoices", icon: Receipt },
   { label: "Staff Schedule", href: "/dashboard/carbardmv/staff", icon: Clock },

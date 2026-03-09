@@ -2,8 +2,9 @@ import { createClient } from "@/lib/supabase/server"
 import { requireRole } from "@/lib/roles"
 import { formatDate } from "@/lib/format"
 import { Badge } from "@/components/ui/badge"
-import { Mail, Phone, Building2, MapPin } from "lucide-react"
+import { Mail, Phone, Building2, MapPin, ChevronRight } from "lucide-react"
 import { NewClientForm } from "@/components/carbardmv/new-client-form"
+import Link from "next/link"
 
 export const metadata = { title: "Clients CRM | CARBARDMV" }
 
@@ -36,7 +37,11 @@ export default async function ClientsCRMPage() {
 
       <div className="space-y-3">
         {clients?.map((client: Record<string, any>) => (
-          <div key={client.id} className="rounded-xl border border-border bg-card p-5">
+          <Link 
+            key={client.id} 
+            href={`/dashboard/carbardmv/clients/${client.id}`}
+            className="block rounded-xl border border-border bg-card p-5 transition-colors hover:border-primary/30 hover:bg-card/80"
+          >
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="space-y-1">
                 <div className="flex items-center gap-3">
@@ -54,14 +59,17 @@ export default async function ClientsCRMPage() {
                   {client.company_name && <span className="flex items-center gap-1"><Building2 className="h-3 w-3" /> {client.company_name}</span>}
                   {client.city && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" /> {client.city}, {client.state}</span>}
                 </div>
-                {client.notes && <p className="text-xs text-muted-foreground italic">{client.notes}</p>}
+                {client.notes && <p className="text-xs text-muted-foreground italic line-clamp-1">{client.notes}</p>}
               </div>
-              <div className="text-right">
-                <p className="text-xs text-muted-foreground">{formatDate(client.created_at)}</p>
-                <p className="text-xs text-muted-foreground">{client.total_revenue_cents > 0 ? `$${(client.total_revenue_cents / 100).toFixed(0)} revenue` : "No revenue yet"}</p>
+              <div className="flex items-center gap-3">
+                <div className="text-right">
+                  <p className="text-xs text-muted-foreground">{formatDate(client.created_at)}</p>
+                  <p className="text-xs font-medium text-foreground">{client.total_revenue_cents > 0 ? `$${(client.total_revenue_cents / 100).toLocaleString()}` : "$0"}</p>
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground" />
               </div>
             </div>
-          </div>
+          </Link>
         ))}
 
         {(!clients || clients.length === 0) && (
