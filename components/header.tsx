@@ -7,9 +7,7 @@ import { HeaderMobileMenu } from "@/components/header-mobile-menu"
 const NAV_ITEMS = [
   { label: "Esports", href: "/esports" },
   { label: "Bar / Cafe", href: "/bar-cafe" },
-  { label: "Events", href: "/events" },
-  { label: "Catering", href: "/catering" },
-  { label: "Rentals", href: "/rentals" },
+  { label: "CARBARDMV", href: "/carbardmv" },
   { label: "News", href: "/news" },
   { label: "Community", href: "/community" },
 ]
