@@ -130,9 +130,10 @@ export async function createEventBookingCheckout(bookingData: {
   }
 
   // Create Stripe checkout session for deposit
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000"
   const session = await stripe.checkout.sessions.create({
     ui_mode: "embedded",
-    redirect_on_completion: "never",
+    return_url: `${baseUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
     line_items: [
       {
         price_data: {
@@ -231,9 +232,10 @@ export async function createRentalCheckout(rentalData: {
   )
 
   // Create Stripe session
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000"
   const session = await stripe.checkout.sessions.create({
     ui_mode: "embedded",
-    redirect_on_completion: "never",
+    return_url: `${baseUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
     line_items: [
       {
         price_data: {
@@ -794,4 +796,61 @@ export async function acceptProposal(proposalId: string) {
 
   if (error) return { error: error.message }
   return { success: true }
+}
+
+// ============================================
+// Invoice Payment (Public checkout)
+// ============================================
+
+export async function createInvoicePaymentCheckout(invoiceId: string) {
+  const supabase = await createClient()
+
+  // Fetch invoice from DB for server-side validation
+  const { data: invoice } = await supabase
+    .from("cb_invoices")
+    .select("*, cb_clients(contact_name, email)")
+    .eq("id", invoiceId)
+    .single()
+
+  if (!invoice) throw new Error("Invoice not found")
+
+  // Calculate balance due
+  const balanceDue = invoice.total_cents - invoice.amount_paid_cents
+  if (balanceDue <= 0) throw new Error("Invoice is already paid")
+
+  // Create Stripe checkout session
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000"
+  const session = await stripe.checkout.sessions.create({
+    ui_mode: "embedded",
+    return_url: `${baseUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+    line_items: [
+      {
+        price_data: {
+          currency: "usd",
+          product_data: {
+            name: `Invoice ${invoice.invoice_number}`,
+            description: invoice.title || "Payment for services",
+          },
+          unit_amount: balanceDue,
+        },
+        quantity: 1,
+      },
+    ],
+    mode: "payment",
+    customer_email: invoice.cb_clients?.email || undefined,
+    metadata: {
+      type: "invoice_payment",
+      invoice_id: invoice.id,
+    },
+  })
+
+  // Update invoice to mark as viewed
+  if (invoice.status === "sent") {
+    await supabase
+      .from("cb_invoices")
+      .update({ status: "viewed", updated_at: new Date().toISOString() })
+      .eq("id", invoiceId)
+  }
+
+  return { clientSecret: session.client_secret }
 }

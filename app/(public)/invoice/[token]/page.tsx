@@ -2,12 +2,11 @@ import { createClient } from "@/lib/supabase/server"
 import { notFound } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { FileText, Calendar, CheckCircle, Clock, AlertCircle, CreditCard } from "lucide-react"
+import { FileText, Calendar, CheckCircle, Clock, AlertCircle } from "lucide-react"
 import Image from "next/image"
 import { IMAGES } from "@/lib/images"
-import Link from "next/link"
+import { InvoicePayment } from "@/components/carbardmv/invoice-payment"
 
 const STATUS_CONFIG: Record<string, { label: string; icon: React.ElementType; variant: "default" | "secondary" | "outline" | "destructive" }> = {
   draft: { label: "Draft", icon: FileText, variant: "outline" },
@@ -181,20 +180,10 @@ export default async function InvoicePage({ params }: { params: Promise<{ token:
             )}
 
             {/* Payment Actions */}
-            {canPay && invoice.stripe_payment_link && (
+            {canPay && (
               <>
                 <Separator />
-                <div className="flex flex-col items-center gap-4 pt-4">
-                  <p className="text-center text-sm text-muted-foreground">
-                    Pay securely online with credit card
-                  </p>
-                  <Button asChild size="lg" className="gap-2">
-                    <Link href={invoice.stripe_payment_link}>
-                      <CreditCard className="h-4 w-4" />
-                      Pay ${(amountDue / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                    </Link>
-                  </Button>
-                </div>
+                <InvoicePayment invoiceId={invoice.id} amountDue={amountDue} />
               </>
             )}
 
