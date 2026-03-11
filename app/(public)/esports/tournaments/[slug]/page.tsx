@@ -2,6 +2,7 @@ import { notFound } from "next/navigation"
 import Link from "next/link"
 import { getTournamentBySlug } from "@/lib/esports-actions"
 import { createClient } from "@/lib/supabase/server"
+import { getTournamentStandings, getCurrentRound, getTournamentPhases } from "@/lib/tournament-controller-actions"
 import { RegistrationButton } from "@/components/esports/registration-button"
 import { TournamentTabs } from "@/components/esports/tournament-tabs"
 import { Badge } from "@/components/ui/badge"
@@ -35,6 +36,17 @@ export default async function TournamentDetailPage({ params }: { params: Promise
   const isRegistered = tournament.participants.some((p: any) => p.user_id === user?.id)
   const isFull = tournament.max_participants ? tournament.participants.length >= tournament.max_participants : false
   const status = STATUS_STYLES[tournament.status] ?? STATUS_STYLES.draft
+
+  // Fetch phases, standings and current round for in-progress tournaments
+  const [phases, currentRound] = await Promise.all([
+    getTournamentPhases(tournament.id),
+    getCurrentRound(tournament.id),
+  ])
+
+  const currentPhase = phases.find((p: any) => p.is_current) || phases[0]
+  const standings = currentPhase 
+    ? await getTournamentStandings(tournament.id, currentPhase.id)
+    : []
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-16">
@@ -117,6 +129,9 @@ export default async function TournamentDetailPage({ params }: { params: Promise
         tournament={tournament}
         matches={tournament.matches ?? []}
         participants={tournament.participants ?? []}
+        standings={standings}
+        currentRound={currentRound}
+        currentUserId={user?.id}
       />
     </div>
   )
