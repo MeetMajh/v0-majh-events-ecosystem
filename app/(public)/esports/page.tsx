@@ -3,10 +3,11 @@ import Image from "next/image"
 import { Suspense } from "react"
 import { Button } from "@/components/ui/button"
 import { IMAGES } from "@/lib/images"
-import { Gamepad2, Trophy, BarChart3, Users, ArrowRight, Zap } from "lucide-react"
+import { Gamepad2, Trophy, BarChart3, Users, ArrowRight, Zap, Globe } from "lucide-react"
 import { getGames, getTournaments, getLeaderboard } from "@/lib/esports-actions"
 import { TournamentCard } from "@/components/esports/tournament-card"
 import { EsportsHubClient } from "@/components/esports/esports-hub-client"
+import { ExternalTournaments } from "@/components/esports/external-tournaments"
 
 export const metadata = {
   title: "Esports Arena | MAJH EVENTS",
@@ -103,6 +104,11 @@ export default async function EsportsPage() {
           </div>
         )}
       </section>
+
+      {/* External Tournaments (TopDeck.gg integration) */}
+      <Suspense fallback={<div className="h-40 animate-pulse rounded-xl bg-muted" />}>
+        <ExternalTournaments />
+      </Suspense>
 
       {/* Leaderboard preview + Images */}
       <div className="grid gap-6 lg:grid-cols-2">

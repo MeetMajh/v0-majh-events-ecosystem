@@ -28,6 +28,10 @@ import {
   Boxes,
   Filter,
   Mail,
+  Settings,
+  Newspaper,
+  Trophy,
+  MessageSquare,
 } from "lucide-react"
 import { signOut } from "@/lib/actions"
 import { Button } from "@/components/ui/button"
@@ -44,6 +48,9 @@ const NAV_ITEMS = [
 
 const ADMIN_ITEMS = [
   { label: "Admin Overview", href: "/dashboard/admin", icon: ShieldCheck },
+  { label: "Site Settings", href: "/dashboard/admin/site", icon: Settings },
+  { label: "News Articles", href: "/dashboard/admin/news", icon: Newspaper },
+  { label: "TO Requests", href: "/dashboard/admin/organizers", icon: Trophy },
   { label: "Menu Items", href: "/dashboard/admin/menu", icon: Package },
   { label: "Inventory", href: "/dashboard/admin/inventory", icon: Warehouse },
   { label: "Orders", href: "/dashboard/admin/orders", icon: ClipboardList },
