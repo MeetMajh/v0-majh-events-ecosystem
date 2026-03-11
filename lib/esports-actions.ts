@@ -538,6 +538,135 @@ export async function createTeam(formData: FormData) {
   return { success: true, slug }
 }
 
+export async function joinTeam(teamId: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: "You must be signed in" }
+
+  const { error } = await supabase.from("team_members").insert({
+    team_id: teamId,
+    user_id: user.id,
+    role: "member",
+  })
+
+  if (error) {
+    if (error.code === "23505") return { error: "Already a member of this team" }
+    return { error: error.message }
+  }
+
+  revalidatePath("/esports/teams")
+  return { success: true }
+}
+
+export async function leaveTeam(teamId: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: "You must be signed in" }
+
+  // Check if captain
+  const { data: team } = await supabase.from("teams").select("captain_id").eq("id", teamId).single()
+  if (team?.captain_id === user.id) {
+    return { error: "Captain cannot leave. Transfer ownership first." }
+  }
+
+  await supabase.from("team_members").delete().eq("team_id", teamId).eq("user_id", user.id)
+  revalidatePath("/esports/teams")
+  return { success: true }
+}
+
+export async function inviteTeamMember(teamId: string, email: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: "You must be signed in" }
+
+  // Verify captain
+  const { data: team } = await supabase.from("teams").select("captain_id").eq("id", teamId).single()
+  if (!team || team.captain_id !== user.id) {
+    return { error: "Only the team captain can invite members" }
+  }
+
+  // Find user by email
+  const { data: targetProfile } = await supabase
+    .from("profiles")
+    .select("id")
+    .ilike("id", `%`)
+    .limit(1)
+
+  // Use auth.admin if available, otherwise search profiles
+  const { data: authUsers } = await supabase.auth.admin.listUsers()
+  const targetUser = authUsers?.users?.find((u) => u.email?.toLowerCase() === email.toLowerCase())
+
+  if (!targetUser) {
+    return { error: "No user found with that email" }
+  }
+
+  // Check if already a member
+  const { data: existing } = await supabase
+    .from("team_members")
+    .select("id")
+    .eq("team_id", teamId)
+    .eq("user_id", targetUser.id)
+    .single()
+
+  if (existing) {
+    return { error: "User is already a team member" }
+  }
+
+  // Add as member
+  const { error } = await supabase.from("team_members").insert({
+    team_id: teamId,
+    user_id: targetUser.id,
+    role: "member",
+  })
+
+  if (error) return { error: error.message }
+
+  revalidatePath("/esports/teams")
+  return { success: true }
+}
+
+export async function removeTeamMember(teamId: string, memberId: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: "You must be signed in" }
+
+  // Verify captain
+  const { data: team } = await supabase.from("teams").select("captain_id").eq("id", teamId).single()
+  if (!team || team.captain_id !== user.id) {
+    return { error: "Only the team captain can remove members" }
+  }
+
+  // Cannot remove captain
+  if (memberId === team.captain_id) {
+    return { error: "Cannot remove the team captain" }
+  }
+
+  await supabase.from("team_members").delete().eq("team_id", teamId).eq("user_id", memberId)
+  revalidatePath("/esports/teams")
+  return { success: true }
+}
+
+export async function promoteTeamMember(teamId: string, memberId: string, role: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: "You must be signed in" }
+
+  // Verify captain
+  const { data: team } = await supabase.from("teams").select("captain_id").eq("id", teamId).single()
+  if (!team || team.captain_id !== user.id) {
+    return { error: "Only the team captain can change roles" }
+  }
+
+  const validRoles = ["member", "officer"]
+  if (!validRoles.includes(role)) {
+    return { error: "Invalid role" }
+  }
+
+  await supabase.from("team_members").update({ role }).eq("team_id", teamId).eq("user_id", memberId)
+  revalidatePath("/esports/teams")
+  return { success: true }
+}
+
 // ── Social Links ──
 
 export async function getSocialLinks() {
