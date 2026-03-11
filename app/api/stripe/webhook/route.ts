@@ -64,9 +64,9 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
     return
   }
 
-  const { type, booking_id, rental_id, invoice_id } = metadata
+  const { type, booking_id, rental_id, invoice_id, tournament_id, registration_id, player_id } = metadata
 
-  console.log("[Stripe Webhook] Processing checkout complete:", { type, booking_id, rental_id, invoice_id })
+  console.log("[Stripe Webhook] Processing checkout complete:", { type, booking_id, rental_id, invoice_id, tournament_id })
 
   try {
     if (type === "event_booking" && booking_id) {
@@ -134,6 +134,73 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
         } else {
           console.log("[Stripe Webhook] Invoice payment recorded:", invoice_id)
         }
+      }
+    }
+
+    // ── Tournament Registration Payment ──
+    if (type === "tournament_registration" && tournament_id && registration_id) {
+      const { error } = await supabaseAdmin
+        .from("tournament_registrations")
+        .update({
+          payment_status: "paid",
+          status: "registered",
+          stripe_payment_intent: session.payment_intent as string,
+          stripe_checkout_session: session.id,
+          payment_amount_cents: session.amount_total,
+          paid_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", registration_id)
+
+      if (error) {
+        console.error("[Stripe Webhook] Failed to update tournament registration:", error)
+      } else {
+        console.log("[Stripe Webhook] Tournament registration payment confirmed:", registration_id)
+
+        // Optionally create a points transaction for registering
+        if (player_id) {
+          await supabaseAdmin.from("points_transactions").insert({
+            user_id: player_id,
+            amount: 10, // Award 10 points for tournament registration
+            type: "tournament_registration",
+            description: "Points earned for tournament registration",
+            reference_id: tournament_id,
+          })
+
+          // Update profile points balance
+          const { data: profile } = await supabaseAdmin
+            .from("profiles")
+            .select("points_balance")
+            .eq("id", player_id)
+            .single()
+
+          if (profile) {
+            await supabaseAdmin
+              .from("profiles")
+              .update({ points_balance: (profile.points_balance ?? 0) + 10 })
+              .eq("id", player_id)
+          }
+        }
+      }
+    }
+
+    // ── Tournament Refund Processing ──
+    if (type === "tournament_refund" && registration_id) {
+      const { error } = await supabaseAdmin
+        .from("tournament_registrations")
+        .update({
+          payment_status: "refunded",
+          status: "dropped",
+          refund_amount_cents: session.amount_total,
+          refunded_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", registration_id)
+
+      if (error) {
+        console.error("[Stripe Webhook] Failed to process tournament refund:", error)
+      } else {
+        console.log("[Stripe Webhook] Tournament refund processed:", registration_id)
       }
     }
   } catch (err) {

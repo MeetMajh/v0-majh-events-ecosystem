@@ -74,17 +74,25 @@ const CARBARDMV_ITEMS = [
   { label: "Reports", href: "/dashboard/carbardmv/reports", icon: BarChart3 },
 ]
 
+const TOURNAMENT_ITEMS = [
+  { label: "My Tournaments", href: "/dashboard/tournaments", icon: Trophy },
+  { label: "Create Tournament", href: "/dashboard/tournaments/new", icon: CalendarCheck },
+]
+
 export function DashboardSidebar({
   displayName,
   email,
   userRole,
+  isOrganizer = false,
 }: {
   displayName: string
   email: string
   userRole?: string | null
+  isOrganizer?: boolean
 }) {
   const pathname = usePathname()
   const isStaff = userRole === "owner" || userRole === "manager" || userRole === "staff"
+  const canOrganize = isStaff || userRole === "organizer" || isOrganizer
   const showStaffManagement = userRole === "owner"
 
   const adminItems = isStaff
@@ -97,6 +105,7 @@ export function DashboardSidebar({
     : []
 
   const carbardmvItems = isStaff ? CARBARDMV_ITEMS : []
+  const tournamentItems = canOrganize ? TOURNAMENT_ITEMS : []
 
   return (
     <aside className="hidden w-64 flex-col border-r border-sidebar-border bg-sidebar md:flex">
@@ -134,6 +143,37 @@ export function DashboardSidebar({
             </Link>
           )
         })}
+
+        {tournamentItems.length > 0 && (
+          <>
+            <div className="my-3 border-t border-sidebar-border" />
+            <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
+              Tournament Organizing
+            </p>
+            {tournamentItems.map((item) => {
+              const isActive = item.href === "/dashboard/tournaments"
+                ? pathname === "/dashboard/tournaments"
+                : pathname.startsWith(item.href)
+
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                    isActive
+                      ? "bg-sidebar-accent text-sidebar-primary"
+                      : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                  )}
+                  aria-current={isActive ? "page" : undefined}
+                >
+                  <item.icon className="h-4 w-4" />
+                  {item.label}
+                </Link>
+              )
+            })}
+          </>
+        )}
 
         {adminItems.length > 0 && (
           <>
