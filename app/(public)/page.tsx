@@ -5,102 +5,137 @@ import { ServiceCards } from "@/components/landing/service-cards"
 import { HeroStats } from "@/components/landing/hero-stats"
 import { EventGallery } from "@/components/landing/event-gallery"
 import { IMAGES } from "@/lib/images"
-import { Crown, ArrowRight } from "lucide-react"
+import { Crown, ArrowRight, X } from "lucide-react"
+import { getHomepageSections, getSiteInfo, HomepageSections } from "@/lib/site-settings-actions"
 
-export default function HomePage() {
+export default async function HomePage() {
+  const [sections, siteInfo] = await Promise.all([
+    getHomepageSections(),
+    getSiteInfo(),
+  ])
+
+  // Sort sections by order and filter visible ones
+  const sortedSections = Object.entries(sections)
+    .filter(([, config]) => config.visible)
+    .sort(([, a], [, b]) => a.order - b.order)
+    .map(([key]) => key) as (keyof HomepageSections)[]
+
   return (
     <>
-      {/* Hero Section */}
-      <section className="relative overflow-hidden border-b border-border">
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,var(--border)_1px,transparent_1px),linear-gradient(to_bottom,var(--border)_1px,transparent_1px)] bg-[size:4rem_4rem] opacity-15" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,oklch(0.45_0.18_300)_0%,transparent_60%)] opacity-20" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,oklch(0.78_0.15_85)_0%,transparent_50%)] opacity-[0.08]" />
-
-        <div className="relative mx-auto flex max-w-7xl flex-col items-center gap-8 px-4 py-24 text-center md:py-32">
-          <div className="flex items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-4 py-1.5">
-            <Crown className="h-4 w-4 text-primary" />
-            <span className="text-xs font-medium text-primary">The Ultimate Entertainment Ecosystem</span>
-          </div>
-
-          <h1 className="max-w-4xl text-balance text-4xl font-bold tracking-tight text-foreground md:text-6xl lg:text-7xl">
-            Game. Eat. Drink.{" "}
-            <span className="text-primary">Celebrate.</span>
-          </h1>
-
-          <p className="max-w-2xl text-pretty text-lg leading-relaxed text-muted-foreground md:text-xl">
-            MAJH EVENTS is your all-in-one esports and entertainment platform. Compete in tournaments, grab a drink, book a mobile entertainment hub, or rent equipment -- all through one account.
-          </p>
-
-          <div className="flex flex-col items-center gap-3 sm:flex-row">
-            <Button size="lg" asChild>
-              <Link href="/auth/sign-up">
-                Get Started
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Link>
-            </Button>
-            <Button size="lg" variant="outline" asChild>
-              <Link href="/esports">Explore Esports</Link>
-            </Button>
-          </div>
-
-          <HeroStats />
+      {/* Announcement Banner */}
+      {siteInfo.announcement_visible && siteInfo.announcement_banner && (
+        <div className="border-b border-primary/20 bg-primary/5 px-4 py-3 text-center text-sm font-medium text-primary">
+          {siteInfo.announcement_banner}
         </div>
-      </section>
+      )}
 
-      {/* Services Section */}
-      <section className="mx-auto max-w-7xl px-4 py-20">
-        <div className="mb-12 text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-foreground md:text-4xl">
-            One Platform, Endless Experiences
-          </h2>
-          <p className="mt-3 text-muted-foreground">
-            Everything you need for the ultimate entertainment experience
-          </p>
-        </div>
-        <ServiceCards />
-      </section>
+      {sortedSections.map((sectionKey) => {
+        switch (sectionKey) {
+          case "hero":
+            return (
+              <section key="hero" className="relative overflow-hidden border-b border-border">
+                <div className="absolute inset-0 bg-[linear-gradient(to_right,var(--border)_1px,transparent_1px),linear-gradient(to_bottom,var(--border)_1px,transparent_1px)] bg-[size:4rem_4rem] opacity-15" />
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,oklch(0.45_0.18_300)_0%,transparent_60%)] opacity-20" />
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,oklch(0.78_0.15_85)_0%,transparent_50%)] opacity-[0.08]" />
 
-      {/* Event Gallery Section */}
-      <section className="border-y border-border bg-card/30">
-        <div className="mx-auto max-w-7xl px-4 py-20">
-          <div className="mb-12 text-center">
-            <h2 className="text-3xl font-bold tracking-tight text-foreground md:text-4xl">
-              Our Community in Action
-            </h2>
-            <p className="mt-3 text-muted-foreground">
-              From tournament nights to outdoor events -- see what MAJH EVENTS is all about
-            </p>
-          </div>
-          <EventGallery />
-        </div>
-      </section>
+                <div className="relative mx-auto flex max-w-7xl flex-col items-center gap-8 px-4 py-24 text-center md:py-32">
+                  <div className="flex items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-4 py-1.5">
+                    <Crown className="h-4 w-4 text-primary" />
+                    <span className="text-xs font-medium text-primary">{siteInfo.tagline}</span>
+                  </div>
 
-      {/* CTA Section */}
-      <section className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,oklch(0.45_0.18_300)_0%,transparent_70%)] opacity-10" />
-        <div className="relative mx-auto flex max-w-3xl flex-col items-center gap-6 px-4 py-20 text-center">
-          <Image
-            src={IMAGES.brand.graphic}
-            alt="MAJH EVENTS Crest"
-            width={80}
-            height={80}
-            className="rounded-lg"
-            style={{ width: 'auto', height: 'auto' }}
-          />
-          <h2 className="text-3xl font-bold tracking-tight text-foreground">
-            Ready to Level Up?
-          </h2>
-          <p className="text-muted-foreground">
-            Join the MAJH EVENTS community. Create your free account and start earning points with every interaction across our ecosystem.
-          </p>
-          <Button size="lg" asChild>
-            <Link href="/auth/sign-up">
-              Create Your Account
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Link>
-          </Button>
-        </div>
-      </section>
+                  <h1 className="max-w-4xl text-balance text-4xl font-bold tracking-tight text-foreground md:text-6xl lg:text-7xl">
+                    Game. Eat. Drink.{" "}
+                    <span className="text-primary">Celebrate.</span>
+                  </h1>
+
+                  <p className="max-w-2xl text-pretty text-lg leading-relaxed text-muted-foreground md:text-xl">
+                    MAJH EVENTS is your all-in-one esports and entertainment platform. Compete in tournaments, grab a drink, book a mobile entertainment hub, or rent equipment -- all through one account.
+                  </p>
+
+                  <div className="flex flex-col items-center gap-3 sm:flex-row">
+                    <Button size="lg" asChild>
+                      <Link href="/auth/sign-up">
+                        Get Started
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </Link>
+                    </Button>
+                    <Button size="lg" variant="outline" asChild>
+                      <Link href="/esports">Explore Esports</Link>
+                    </Button>
+                  </div>
+
+                  <HeroStats />
+                </div>
+              </section>
+            )
+
+          case "services":
+            return (
+              <section key="services" className="mx-auto max-w-7xl px-4 py-20">
+                <div className="mb-12 text-center">
+                  <h2 className="text-3xl font-bold tracking-tight text-foreground md:text-4xl">
+                    One Platform, Endless Experiences
+                  </h2>
+                  <p className="mt-3 text-muted-foreground">
+                    Everything you need for the ultimate entertainment experience
+                  </p>
+                </div>
+                <ServiceCards />
+              </section>
+            )
+
+          case "gallery":
+            return (
+              <section key="gallery" className="border-y border-border bg-card/30">
+                <div className="mx-auto max-w-7xl px-4 py-20">
+                  <div className="mb-12 text-center">
+                    <h2 className="text-3xl font-bold tracking-tight text-foreground md:text-4xl">
+                      Our Community in Action
+                    </h2>
+                    <p className="mt-3 text-muted-foreground">
+                      From tournament nights to outdoor events -- see what MAJH EVENTS is all about
+                    </p>
+                  </div>
+                  <EventGallery />
+                </div>
+              </section>
+            )
+
+          case "cta":
+            return (
+              <section key="cta" className="relative overflow-hidden">
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,oklch(0.45_0.18_300)_0%,transparent_70%)] opacity-10" />
+                <div className="relative mx-auto flex max-w-3xl flex-col items-center gap-6 px-4 py-20 text-center">
+                  <Image
+                    src={IMAGES.brand.graphic}
+                    alt="MAJH EVENTS Crest"
+                    width={80}
+                    height={80}
+                    className="rounded-lg"
+                    style={{ width: 'auto', height: 'auto' }}
+                  />
+                  <h2 className="text-3xl font-bold tracking-tight text-foreground">
+                    Ready to Level Up?
+                  </h2>
+                  <p className="text-muted-foreground">
+                    Join the MAJH EVENTS community. Create your free account and start earning points with every interaction across our ecosystem.
+                  </p>
+                  <Button size="lg" asChild>
+                    <Link href="/auth/sign-up">
+                      Create Your Account
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </Link>
+                  </Button>
+                </div>
+              </section>
+            )
+
+          // upcoming_events and testimonials can be added when those components exist
+          default:
+            return null
+        }
+      })}
     </>
   )
 }

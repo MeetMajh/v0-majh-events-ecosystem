@@ -275,3 +275,237 @@ export async function updateApplicationStatus(id: string, status: string) {
   revalidatePath("/dashboard/admin/recruitment")
   return { success: true }
 }
+
+// ── Community Rooms (Discord-like) ──
+
+export async function getCommunityRooms() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  let query = supabase
+    .from("community_rooms")
+    .select("*")
+    .eq("is_archived", false)
+    .order("category")
+    .order("name")
+  
+  const { data, error } = await query
+  
+  if (error) {
+    console.error("Error fetching rooms:", error)
+    return []
+  }
+  
+  return data || []
+}
+
+export async function getCommunityRoom(slug: string) {
+  const supabase = await createClient()
+  
+  const { data } = await supabase
+    .from("community_rooms")
+    .select("*")
+    .eq("slug", slug)
+    .single()
+  
+  return data
+}
+
+export async function createCommunityRoom(formData: FormData) {
+  const { supabase, userId } = await requireAuth()
+  
+  const name = formData.get("name") as string
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
+  
+  const { error } = await supabase
+    .from("community_rooms")
+    .insert({
+      name,
+      slug,
+      description: formData.get("description") as string || null,
+      icon: formData.get("icon") as string || null,
+      room_type: formData.get("room_type") as string || "public",
+      category: formData.get("category") as string || "general",
+      created_by: userId,
+    })
+  
+  if (error) {
+    return { error: error.message }
+  }
+  
+  revalidatePath("/community")
+  return { success: true, slug }
+}
+
+// ── Room Messages ──
+
+export async function getRoomMessages(roomId: string, limit = 50, before?: string) {
+  const supabase = await createClient()
+  
+  let query = supabase
+    .from("community_messages")
+    .select(`
+      *,
+      profiles:user_id(id, display_name, avatar_url)
+    `)
+    .eq("room_id", roomId)
+    .eq("is_deleted", false)
+    .order("created_at", { ascending: false })
+    .limit(limit)
+  
+  if (before) {
+    query = query.lt("created_at", before)
+  }
+  
+  const { data, error } = await query
+  
+  if (error) {
+    console.error("Error fetching messages:", error)
+    return []
+  }
+  
+  // Return in ascending order for display
+  return (data || []).reverse()
+}
+
+export async function sendMessage(roomId: string, content: string, replyToId?: string) {
+  const { supabase, userId } = await requireAuth()
+  
+  if (!content?.trim()) {
+    return { error: "Message cannot be empty" }
+  }
+  
+  const { data, error } = await supabase
+    .from("community_messages")
+    .insert({
+      room_id: roomId,
+      user_id: userId,
+      content: content.trim(),
+      reply_to_id: replyToId || null,
+    })
+    .select(`
+      *,
+      profiles:user_id(id, display_name, avatar_url)
+    `)
+    .single()
+  
+  if (error) {
+    return { error: error.message }
+  }
+  
+  return { success: true, message: data }
+}
+
+export async function editMessage(messageId: string, content: string) {
+  const { supabase, userId } = await requireAuth()
+  
+  const { error } = await supabase
+    .from("community_messages")
+    .update({ 
+      content: content.trim(),
+      edited_at: new Date().toISOString(),
+    })
+    .eq("id", messageId)
+    .eq("user_id", userId)
+  
+  if (error) {
+    return { error: error.message }
+  }
+  
+  return { success: true }
+}
+
+export async function deleteMessage(messageId: string) {
+  const { supabase, userId } = await requireAuth()
+  
+  // Soft delete - check if user owns message or is staff
+  const { data: staffRole } = await supabase
+    .from("staff_roles")
+    .select("role")
+    .eq("user_id", userId)
+    .maybeSingle()
+  
+  let query = supabase
+    .from("community_messages")
+    .update({ is_deleted: true })
+    .eq("id", messageId)
+  
+  // If not staff, restrict to own messages
+  if (!staffRole || !["owner", "manager"].includes(staffRole.role)) {
+    query = query.eq("user_id", userId)
+  }
+  
+  const { error } = await query
+  
+  if (error) {
+    return { error: error.message }
+  }
+  
+  return { success: true }
+}
+
+export async function togglePinMessage(messageId: string, isPinned: boolean) {
+  const { supabase, userId } = await requireAuth()
+  
+  // Check if user is moderator or staff
+  const { data: staffRole } = await supabase
+    .from("staff_roles")
+    .select("role")
+    .eq("user_id", userId)
+    .maybeSingle()
+  
+  const { data: moderator } = await supabase
+    .from("community_moderators")
+    .select("id")
+    .eq("user_id", userId)
+    .maybeSingle()
+  
+  if (!staffRole && !moderator) {
+    return { error: "Unauthorized" }
+  }
+  
+  const { error } = await supabase
+    .from("community_messages")
+    .update({ is_pinned: isPinned })
+    .eq("id", messageId)
+  
+  if (error) {
+    return { error: error.message }
+  }
+  
+  return { success: true }
+}
+
+// ── Room Membership ──
+
+export async function joinRoom(roomId: string) {
+  const { supabase, userId } = await requireAuth()
+  
+  const { error } = await supabase
+    .from("community_room_members")
+    .insert({ room_id: roomId, user_id: userId })
+  
+  if (error && !error.message.includes("duplicate")) {
+    return { error: error.message }
+  }
+  
+  revalidatePath("/community")
+  return { success: true }
+}
+
+export async function leaveRoom(roomId: string) {
+  const { supabase, userId } = await requireAuth()
+  
+  const { error } = await supabase
+    .from("community_room_members")
+    .delete()
+    .eq("room_id", roomId)
+    .eq("user_id", userId)
+  
+  if (error) {
+    return { error: error.message }
+  }
+  
+  revalidatePath("/community")
+  return { success: true }
+}

@@ -31,6 +31,7 @@ export async function signUp(formData: FormData) {
   const lastName = formData.get("last_name") as string
   const phone = formData.get("phone") as string
   const birthday = formData.get("birthday") as string
+  const country = formData.get("country") as string
   const addressLine1 = formData.get("address_line1") as string
   const addressLine2 = formData.get("address_line2") as string
   const city = formData.get("city") as string
@@ -51,11 +52,12 @@ export async function signUp(formData: FormData) {
         last_name: lastName,
         phone,
         birthday: birthday || null,
-        address_line1: addressLine1,
-        address_line2: addressLine2,
-        city,
-        state,
-        zip_code: zipCode,
+        country: country || "US",
+        address_line1: addressLine1 || null,
+        address_line2: addressLine2 || null,
+        city: city || null,
+        state: state || null,
+        zip_code: zipCode || null,
         marketing_email_opt_in: marketingEmail,
         marketing_sms_opt_in: marketingSms,
       },
@@ -118,11 +120,12 @@ export async function updateProfile(formData: FormData) {
     last_name: formData.get("last_name") as string,
     phone: formData.get("phone") as string,
     birthday: (formData.get("birthday") as string) || null,
-    address_line1: formData.get("address_line1") as string,
-    address_line2: formData.get("address_line2") as string,
-    city: formData.get("city") as string,
-    state: formData.get("state") as string,
-    zip_code: formData.get("zip_code") as string,
+    country: (formData.get("country") as string) || null,
+    address_line1: (formData.get("address_line1") as string) || null,
+    address_line2: (formData.get("address_line2") as string) || null,
+    city: (formData.get("city") as string) || null,
+    state: (formData.get("state") as string) || null,
+    zip_code: (formData.get("zip_code") as string) || null,
     marketing_email_opt_in: formData.get("marketing_email_opt_in") === "on",
     marketing_sms_opt_in: formData.get("marketing_sms_opt_in") === "on",
   }

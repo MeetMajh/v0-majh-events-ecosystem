@@ -15,15 +15,25 @@ async function requireStaffRole(allowed: string[]) {
 
 // ── News Articles ──
 
-export async function getArticles(filters?: { category?: string; limit?: number }) {
+export async function getNewsCategories() {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from("news_categories")
+    .select("*")
+    .order("name")
+  return data ?? []
+}
+
+export async function getArticles(filters?: { category?: string; limit?: number; featured?: boolean }) {
   const supabase = await createClient()
   let query = supabase
     .from("news_articles")
-    .select("*, profiles!news_articles_author_id_fkey(display_name, avatar_url), tournaments(name, slug)")
+    .select("*, profiles!news_articles_author_id_fkey(display_name, avatar_url), news_categories(name, slug, color)")
     .eq("is_published", true)
     .order("published_at", { ascending: false })
 
   if (filters?.category) query = query.eq("category", filters.category)
+  if (filters?.featured) query = query.eq("featured", true)
   if (filters?.limit) query = query.limit(filters.limit)
 
   const { data } = await query
@@ -34,9 +44,18 @@ export async function getArticleBySlug(slug: string) {
   const supabase = await createClient()
   const { data } = await supabase
     .from("news_articles")
-    .select("*, profiles!news_articles_author_id_fkey(display_name, avatar_url), tournaments(name, slug)")
+    .select("*, profiles!news_articles_author_id_fkey(display_name, avatar_url), news_categories(name, slug, color)")
     .eq("slug", slug)
     .single()
+  
+  // Increment view count
+  if (data) {
+    await supabase
+      .from("news_articles")
+      .update({ view_count: (data.view_count || 0) + 1 })
+      .eq("id", data.id)
+  }
+  
   return data
 }
 
@@ -44,16 +63,18 @@ export async function getAllArticlesAdmin() {
   const supabase = await createClient()
   const { data } = await supabase
     .from("news_articles")
-    .select("*, profiles!news_articles_author_id_fkey(display_name)")
+    .select("*, profiles!news_articles_author_id_fkey(display_name), news_categories(name, slug, color)")
     .order("created_at", { ascending: false })
   return data ?? []
 }
 
 export async function createArticle(formData: FormData) {
-  const { supabase, userId } = await requireStaffRole(["owner", "manager"])
+  const { supabase, userId } = await requireStaffRole(["owner", "manager", "staff"])
   const title = formData.get("title") as string
   const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
   const isPublished = formData.get("is_published") === "on"
+  const isFeatured = formData.get("featured") === "on"
+  const categoryId = formData.get("category_id") as string
 
   const { error } = await supabase.from("news_articles").insert({
     title,
@@ -61,10 +82,11 @@ export async function createArticle(formData: FormData) {
     excerpt: formData.get("excerpt") as string,
     content: formData.get("content") as string,
     cover_image_url: formData.get("cover_image_url") as string || null,
-    category: formData.get("category") as string,
-    tournament_id: formData.get("tournament_id") as string || null,
+    category: formData.get("category") as string || "news",
+    category_id: categoryId || null,
     author_id: userId,
     is_published: isPublished,
+    featured: isFeatured,
     published_at: isPublished ? new Date().toISOString() : null,
   })
 
@@ -75,9 +97,17 @@ export async function createArticle(formData: FormData) {
 }
 
 export async function updateArticle(formData: FormData) {
-  const { supabase } = await requireStaffRole(["owner", "manager"])
+  const { supabase } = await requireStaffRole(["owner", "manager", "staff"])
   const id = formData.get("id") as string
   const isPublished = formData.get("is_published") === "on"
+  const isFeatured = formData.get("featured") === "on"
+
+  // Get current article to check publish state
+  const { data: current } = await supabase
+    .from("news_articles")
+    .select("is_published, published_at")
+    .eq("id", id)
+    .single()
 
   const { error } = await supabase.from("news_articles").update({
     title: formData.get("title") as string,
@@ -85,12 +115,32 @@ export async function updateArticle(formData: FormData) {
     content: formData.get("content") as string,
     cover_image_url: formData.get("cover_image_url") as string || null,
     category: formData.get("category") as string,
+    category_id: formData.get("category_id") as string || null,
     is_published: isPublished,
-    published_at: isPublished ? new Date().toISOString() : null,
+    featured: isFeatured,
+    // Only set published_at if newly published
+    published_at: isPublished 
+      ? (current?.is_published ? current.published_at : new Date().toISOString())
+      : null,
+    updated_at: new Date().toISOString(),
   }).eq("id", id)
 
   if (error) return { error: error.message }
   revalidatePath("/news")
+  revalidatePath("/dashboard/admin/news")
+  return { success: true }
+}
+
+export async function toggleArticleFeatured(id: string, featured: boolean) {
+  const { supabase } = await requireStaffRole(["owner", "manager"])
+  const { error } = await supabase
+    .from("news_articles")
+    .update({ featured })
+    .eq("id", id)
+  
+  if (error) return { error: error.message }
+  revalidatePath("/news")
+  revalidatePath("/dashboard/admin/news")
   return { success: true }
 }
 

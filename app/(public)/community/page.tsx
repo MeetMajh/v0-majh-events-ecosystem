@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { formatDate } from "@/lib/format"
-import { MessageSquare, Pin, Lock, Plus } from "lucide-react"
+import { MessageSquare, Pin, Lock, Plus, Hash } from "lucide-react"
 import { ForumCategoryFilter } from "@/components/community/forum-category-filter"
 
 export const metadata = { title: "Community Forums | MAJH EVENTS" }
@@ -38,14 +38,22 @@ export default async function CommunityPage({
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Community</h1>
           <p className="mt-1 text-muted-foreground">Discuss matches, find groups, and connect with fellow players.</p>
         </div>
-        {user && (
-          <Button asChild size="sm">
-            <Link href="/community/new">
-              <Plus className="mr-1.5 h-3.5 w-3.5" />
-              New Thread
+        <div className="flex items-center gap-2">
+          <Button asChild variant="outline" size="sm">
+            <Link href="/community/chat">
+              <Hash className="mr-1.5 h-3.5 w-3.5" />
+              Live Chat
             </Link>
           </Button>
-        )}
+          {user && (
+            <Button asChild size="sm">
+              <Link href="/community/new">
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                New Thread
+              </Link>
+            </Button>
+          )}
+        </div>
       </div>
 
       <ForumCategoryFilter current={category} />
