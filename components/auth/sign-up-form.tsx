@@ -5,6 +5,42 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+
+const COUNTRIES = [
+  { code: "US", name: "United States" },
+  { code: "CA", name: "Canada" },
+  { code: "GB", name: "United Kingdom" },
+  { code: "BB", name: "Barbados" },
+  { code: "JM", name: "Jamaica" },
+  { code: "TT", name: "Trinidad and Tobago" },
+  { code: "GY", name: "Guyana" },
+  { code: "BS", name: "Bahamas" },
+  { code: "AG", name: "Antigua and Barbuda" },
+  { code: "LC", name: "Saint Lucia" },
+  { code: "VC", name: "Saint Vincent and the Grenadines" },
+  { code: "GD", name: "Grenada" },
+  { code: "DM", name: "Dominica" },
+  { code: "KN", name: "Saint Kitts and Nevis" },
+  { code: "MX", name: "Mexico" },
+  { code: "AU", name: "Australia" },
+  { code: "DE", name: "Germany" },
+  { code: "FR", name: "France" },
+  { code: "ES", name: "Spain" },
+  { code: "IT", name: "Italy" },
+  { code: "NL", name: "Netherlands" },
+  { code: "BR", name: "Brazil" },
+  { code: "AR", name: "Argentina" },
+  { code: "CO", name: "Colombia" },
+  { code: "JP", name: "Japan" },
+  { code: "KR", name: "South Korea" },
+  { code: "IN", name: "India" },
+  { code: "NG", name: "Nigeria" },
+  { code: "ZA", name: "South Africa" },
+  { code: "GH", name: "Ghana" },
+  { code: "KE", name: "Kenya" },
+  { code: "OTHER", name: "Other" },
+]
 
 export function SignUpForm() {
   return (
@@ -14,27 +50,44 @@ export function SignUpForm() {
         <legend className="text-sm font-semibold text-foreground">Personal Information</legend>
         <div className="flex gap-3">
           <div className="flex-1 space-y-2">
-            <Label htmlFor="first_name">First Name</Label>
+            <Label htmlFor="first_name">First Name <span className="text-destructive">*</span></Label>
             <Input id="first_name" name="first_name" placeholder="First name" required />
           </div>
           <div className="flex-1 space-y-2">
-            <Label htmlFor="last_name">Last Name</Label>
+            <Label htmlFor="last_name">Last Name <span className="text-destructive">*</span></Label>
             <Input id="last_name" name="last_name" placeholder="Last name" required />
           </div>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="phone">Phone Number</Label>
-          <Input id="phone" name="phone" type="tel" placeholder="(555) 123-4567" />
+          <Label htmlFor="phone">Phone Number <span className="text-destructive">*</span></Label>
+          <Input id="phone" name="phone" type="tel" placeholder="+1 (555) 123-4567" required />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="birthday">Birthday</Label>
+          <Label htmlFor="birthday">Birthday <span className="text-xs text-muted-foreground">(optional)</span></Label>
           <Input id="birthday" name="birthday" type="date" />
         </div>
       </fieldset>
 
-      {/* Address */}
+      {/* Address - Optional */}
       <fieldset className="space-y-4">
-        <legend className="text-sm font-semibold text-foreground">Address</legend>
+        <legend className="text-sm font-semibold text-foreground">
+          Address <span className="text-xs font-normal text-muted-foreground">(optional)</span>
+        </legend>
+        <div className="space-y-2">
+          <Label htmlFor="country">Country</Label>
+          <Select name="country" defaultValue="US">
+            <SelectTrigger id="country">
+              <SelectValue placeholder="Select country" />
+            </SelectTrigger>
+            <SelectContent>
+              {COUNTRIES.map((country) => (
+                <SelectItem key={country.code} value={country.code}>
+                  {country.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         <div className="space-y-2">
           <Label htmlFor="address_line1">Address Line 1</Label>
           <Input id="address_line1" name="address_line1" placeholder="123 Main St" />
@@ -48,13 +101,13 @@ export function SignUpForm() {
             <Label htmlFor="city">City</Label>
             <Input id="city" name="city" placeholder="City" />
           </div>
-          <div className="w-24 space-y-2">
-            <Label htmlFor="state">State</Label>
-            <Input id="state" name="state" placeholder="MD" maxLength={2} />
+          <div className="w-32 space-y-2">
+            <Label htmlFor="state">State/Province</Label>
+            <Input id="state" name="state" placeholder="State" />
           </div>
           <div className="w-28 space-y-2">
-            <Label htmlFor="zip_code">Zip</Label>
-            <Input id="zip_code" name="zip_code" placeholder="20001" />
+            <Label htmlFor="zip_code">Postal Code</Label>
+            <Input id="zip_code" name="zip_code" placeholder="12345" />
           </div>
         </div>
       </fieldset>
