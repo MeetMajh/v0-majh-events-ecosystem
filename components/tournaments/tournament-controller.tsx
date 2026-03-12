@@ -186,6 +186,7 @@ export function TournamentController({
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null)
   const [isTimerRunning, setIsTimerRunning] = useState(false)
   const [newPlayerEmail, setNewPlayerEmail] = useState("")
+  const [showAddPlayerDialog, setShowAddPlayerDialog] = useState(false)
   const [announcement, setAnnouncement] = useState("")
 
   const activePhase = phases.find(p => p.is_current) || phases[0]
@@ -365,21 +366,28 @@ export function TournamentController({
     })
   }
 
-  const handleAddPlayer = () => {
-    if (!newPlayerEmail.trim()) {
-      toast.error("Enter player email")
-      return
-    }
-    startTransition(async () => {
-      const result = await addPlayerToTournament(tournament.id, newPlayerEmail)
-      if ("error" in result) {
-        toast.error(result.error)
-      } else {
-        toast.success("Player added!")
-        setNewPlayerEmail("")
-        router.refresh()
-      }
-    })
+const handleAddPlayer = () => {
+  if (!newPlayerEmail.trim()) {
+  toast.error("Enter player email")
+  return
+  }
+  startTransition(async () => {
+  const result = await addPlayerToTournament(tournament.id, newPlayerEmail)
+  if ("error" in result) {
+  toast.error(result.error)
+  // Don't close dialog on error so user can retry
+  } else if ("isPreregistration" in result && result.isPreregistration) {
+  toast.success(result.message || `Preregistration created for ${newPlayerEmail}`)
+  setNewPlayerEmail("")
+  setShowAddPlayerDialog(false)
+  router.refresh()
+  } else {
+  toast.success(`${result.playerName} added to tournament!`)
+  setNewPlayerEmail("")
+  setShowAddPlayerDialog(false)
+  router.refresh()
+  }
+  })
   }
 
   return (
@@ -719,7 +727,7 @@ export function TournamentController({
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-semibold">Players ({registrations.length})</h2>
-                <Dialog>
+                <Dialog open={showAddPlayerDialog} onOpenChange={setShowAddPlayerDialog}>
                   <DialogTrigger asChild>
                     <Button>
                       <UserPlus className="mr-2 h-4 w-4" />
@@ -730,7 +738,8 @@ export function TournamentController({
                     <DialogHeader>
                       <DialogTitle>Add Player to Tournament</DialogTitle>
                       <DialogDescription>
-                        Enter the player&apos;s email address to add them to the tournament
+                        Enter the player&apos;s email address to add them to the tournament. 
+                        If they don&apos;t have an account yet, a preregistration will be created.
                       </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
@@ -740,10 +749,18 @@ export function TournamentController({
                           placeholder="player@example.com"
                           value={newPlayerEmail}
                           onChange={(e) => setNewPlayerEmail(e.target.value)}
+                          onKeyDown={(e) => e.key === "Enter" && handleAddPlayer()}
                         />
+                        <p className="text-xs text-muted-foreground">
+                          The player must have an account on majhevents.com to be added directly.
+                          Otherwise, they will be preregistered and added when they sign up.
+                        </p>
                       </div>
                     </div>
                     <DialogFooter>
+                      <Button variant="outline" onClick={() => setShowAddPlayerDialog(false)}>
+                        Cancel
+                      </Button>
                       <Button onClick={handleAddPlayer} disabled={isPending}>
                         <UserPlus className="mr-2 h-4 w-4" />
                         Add Player
