@@ -1908,6 +1908,69 @@ export async function getGlobalLeaderboard(limit = 100) {
   }))
 }
 
+export async function addPlayerToTournament(tournamentId: string, email: string) {
+  const auth = await requireTournamentOrganizer(tournamentId)
+  if ("error" in auth) return auth
+  const { supabase } = auth
+
+  // Find user by email via profiles
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("id, display_name")
+    .eq("email", email.toLowerCase().trim())
+    .single()
+
+  if (!profile) {
+    // Try to find via auth.users (admin only)
+    return { error: "User not found with that email. They must register first." }
+  }
+
+  // Check if already registered
+  const { data: existing } = await supabase
+    .from("tournament_registrations")
+    .select("id")
+    .eq("tournament_id", tournamentId)
+    .eq("player_id", profile.id)
+    .single()
+
+  if (existing) {
+    return { error: "Player is already registered for this tournament" }
+  }
+
+  // Check max participants
+  const { data: tournament } = await supabase
+    .from("tournaments")
+    .select("max_participants")
+    .eq("id", tournamentId)
+    .single()
+
+  if (tournament?.max_participants) {
+    const { count } = await supabase
+      .from("tournament_registrations")
+      .select("*", { count: "exact", head: true })
+      .eq("tournament_id", tournamentId)
+      .neq("status", "dropped")
+      .neq("status", "disqualified")
+
+    if (count && count >= tournament.max_participants) {
+      return { error: "Tournament is full" }
+    }
+  }
+
+  // Add player
+  const { error } = await supabase.from("tournament_registrations").insert({
+    tournament_id: tournamentId,
+    player_id: profile.id,
+    status: "registered",
+    payment_status: "paid", // Admin adds are considered paid
+  })
+
+  if (error) return { error: error.message }
+
+  revalidatePath(`/dashboard/tournaments/${tournamentId}`)
+  return { success: true, playerName: profile.display_name }
+}
+
 export async function getPlayerStats(playerId: string) {
   const supabase = await createClient()
 

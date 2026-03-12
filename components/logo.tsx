@@ -10,8 +10,7 @@ export function Logo({ className }: { className?: string }) {
         alt="MAJH EVENTS Logo"
         width={36}
         height={36}
-        className="rounded-md"
-        style={{ width: 36, height: 'auto' }}
+        className="rounded-md h-auto"
       />
       <span className="text-lg font-bold tracking-tight text-foreground">
         MAJH <span className="text-primary">EVENTS</span>

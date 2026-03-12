@@ -112,8 +112,7 @@ export default async function HomePage() {
                     alt="MAJH EVENTS Crest"
                     width={80}
                     height={80}
-                    className="rounded-lg"
-                    style={{ width: 'auto', height: 'auto' }}
+                    className="rounded-lg w-auto h-auto"
                   />
                   <h2 className="text-3xl font-bold tracking-tight text-foreground">
                     Ready to Level Up?
