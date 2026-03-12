@@ -634,21 +634,32 @@ export async function deleteStaffShift(shiftId: string) {
 
 // ════════════════════════════════════════════
 // PREP TASKS
-// ════════════════════════════════════════════
+// ════════════════���═══════════════════════════
 
-export async function createPrepTask(formData: FormData) {
+export async function createPrepTask(data: {
+  title: string
+  description?: string
+  category: string
+  priority: string
+  due_date?: string
+  due_time?: string
+  booking_id?: string
+  catering_order_id?: string
+  assigned_to?: string
+}) {
   const { supabase } = await requireStaff()
 
   const task = {
-    booking_id: (formData.get("booking_id") as string) || null,
-    catering_order_id: (formData.get("catering_order_id") as string) || null,
-    assigned_to: (formData.get("assigned_to") as string) || null,
-    title: formData.get("title") as string,
-    description: (formData.get("description") as string) || null,
-    category: formData.get("category") as string,
-    priority: formData.get("priority") as string,
-    due_date: (formData.get("due_date") as string) || null,
-    due_time: (formData.get("due_time") as string) || null,
+    booking_id: data.booking_id || null,
+    catering_order_id: data.catering_order_id || null,
+    assigned_to: data.assigned_to || null,
+    title: data.title,
+    description: data.description || null,
+    category: data.category,
+    priority: data.priority,
+    due_date: data.due_date || null,
+    due_time: data.due_time || null,
+    status: "pending",
   }
 
   const { error } = await supabase.from("cb_prep_tasks").insert(task)
