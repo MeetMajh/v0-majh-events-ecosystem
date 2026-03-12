@@ -649,17 +649,17 @@ export async function createPrepTask(data: {
   description?: string
   category: string
   priority: string
+  start_date?: string
   due_date?: string
   due_time?: string
   booking_id?: string
   catering_order_id?: string
   assigned_to?: string
+  time_estimate_minutes?: number
+  tags?: string[]
 }) {
-  console.log("[v0] createPrepTask called with:", data)
-  
   try {
     const { supabase } = await requireStaff()
-    console.log("[v0] Staff auth passed")
 
     const task = {
       booking_id: data.booking_id || null,
@@ -669,24 +669,23 @@ export async function createPrepTask(data: {
       description: data.description || null,
       category: data.category,
       priority: data.priority,
+      start_date: data.start_date || null,
       due_date: data.due_date || null,
       due_time: data.due_time || null,
+      time_estimate_minutes: data.time_estimate_minutes || null,
+      tags: data.tags || null,
       status: "pending",
     }
 
-    console.log("[v0] Inserting prep task:", task)
-    const { data: inserted, error } = await supabase.from("cb_prep_tasks").insert(task).select()
+    const { error } = await supabase.from("cb_prep_tasks").insert(task).select()
     
     if (error) {
-      console.log("[v0] Prep task insert error:", error.message, error.code)
       return { error: error.message }
     }
 
-    console.log("[v0] Prep task created successfully:", inserted)
     revalidatePath("/dashboard/carbardmv/prep")
     return { success: true }
   } catch (e: any) {
-    console.log("[v0] createPrepTask exception:", e.message)
     return { error: e.message || "Failed to create prep task" }
   }
 }
