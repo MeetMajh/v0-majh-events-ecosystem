@@ -2056,3 +2056,97 @@ export async function getPlayerStats(playerId: string) {
     },
   }
 }
+
+// ── Announcements ──
+
+export async function sendTournamentAnnouncement(
+  tournamentId: string, 
+  message: string,
+  priority: "normal" | "high" | "urgent" = "normal"
+) {
+  const auth = await requireTournamentOrganizer(tournamentId)
+  if ("error" in auth) return auth
+  const { supabase, userId } = auth
+
+  if (!message.trim()) {
+    return { error: "Announcement message cannot be empty" }
+  }
+
+  // Insert announcement into tournament_announcements table
+  const { data, error } = await supabase
+    .from("tournament_announcements")
+    .insert({
+      tournament_id: tournamentId,
+      message: message.trim(),
+      priority,
+      created_by: userId,
+    })
+    .select()
+    .single()
+
+  if (error) {
+    // If table doesn't exist, provide helpful error
+    if (error.code === "42P01") {
+      return { error: "Announcements table not set up. Please contact support." }
+    }
+    return { error: error.message }
+  }
+
+  revalidatePath(`/dashboard/tournaments/${tournamentId}`)
+  revalidatePath(`/esports/tournaments/${tournamentId}`)
+  
+  return { success: true, announcement: data }
+}
+
+export async function getTournamentAnnouncements(tournamentId: string) {
+  const supabase = await createClient()
+
+  const { data, error } = await supabase
+    .from("tournament_announcements")
+    .select(`
+      id,
+      message,
+      priority,
+      created_at,
+      created_by,
+      profiles:created_by (display_name, avatar_url)
+    `)
+    .eq("tournament_id", tournamentId)
+    .order("created_at", { ascending: false })
+
+  if (error) {
+    // If table doesn't exist, return empty array
+    if (error.code === "42P01") {
+      return { announcements: [] }
+    }
+    return { error: error.message }
+  }
+
+  return { announcements: data ?? [] }
+}
+
+export async function deleteAnnouncement(announcementId: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: "Not authenticated" }
+
+  // Check staff role
+  const { data: staffRole } = await supabase
+    .from("staff_roles")
+    .select("role")
+    .eq("user_id", user.id)
+    .single()
+
+  if (!staffRole || !["owner", "manager", "organizer"].includes(staffRole.role)) {
+    return { error: "Not authorized to delete announcements" }
+  }
+
+  const { error } = await supabase
+    .from("tournament_announcements")
+    .delete()
+    .eq("id", announcementId)
+
+  if (error) return { error: error.message }
+
+  return { success: true }
+}

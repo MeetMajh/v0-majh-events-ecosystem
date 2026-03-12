@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -9,16 +10,26 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { createStaffShift } from "@/lib/carbardmv-actions"
 import { Plus, Loader2 } from "lucide-react"
+import { toast } from "sonner"
 
 export function NewShiftForm({ staffMembers }: { staffMembers: Array<Record<string, any>> }) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
+  const router = useRouter()
 
   async function handleSubmit(formData: FormData) {
     setLoading(true)
-    await createStaffShift(formData)
+    const result = await createStaffShift(formData)
     setLoading(false)
+    
+    if (result && "error" in result) {
+      toast.error(result.error)
+      return
+    }
+    
+    toast.success("Shift created successfully!")
     setOpen(false)
+    router.refresh()
   }
 
   return (

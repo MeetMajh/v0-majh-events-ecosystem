@@ -65,6 +65,9 @@ import {
   createTournamentPhase,
   recalculateStandings,
   addPlayerToTournament,
+  sendTournamentAnnouncement,
+  getTournamentAnnouncements,
+  deleteAnnouncement,
   type PlayerStanding,
 } from "@/lib/tournament-controller-actions"
 import type { TournamentStatus } from "@/lib/tournament-controller-actions"
@@ -188,6 +191,9 @@ export function TournamentController({
   const [newPlayerEmail, setNewPlayerEmail] = useState("")
   const [showAddPlayerDialog, setShowAddPlayerDialog] = useState(false)
   const [announcement, setAnnouncement] = useState("")
+  const [announcementPriority, setAnnouncementPriority] = useState<"normal" | "high" | "urgent">("normal")
+  const [announcements, setAnnouncements] = useState<any[]>([])
+  const [loadingAnnouncements, setLoadingAnnouncements] = useState(false)
 
   const activePhase = phases.find(p => p.is_current) || phases[0]
   const checkedInCount = registrations.filter(r => r.status === "checked_in").length
@@ -223,6 +229,19 @@ export function TournamentController({
       setIsTimerRunning(false)
     }
   }, [currentRound?.end_time, currentRound?.status])
+
+  // Load announcements when section changes to announcements
+  useEffect(() => {
+    if (activeSection === "announcements") {
+      setLoadingAnnouncements(true)
+      getTournamentAnnouncements(tournament.id).then((result) => {
+        if ("announcements" in result) {
+          setAnnouncements(result.announcements)
+        }
+        setLoadingAnnouncements(false)
+      })
+    }
+  }, [activeSection, tournament.id])
 
   const formatTime = useCallback((seconds: number) => {
     const mins = Math.floor(seconds / 60)
@@ -388,6 +407,40 @@ const handleAddPlayer = () => {
   router.refresh()
   }
   })
+  }
+
+  const handleSendAnnouncement = () => {
+    if (!announcement.trim()) {
+      toast.error("Please enter an announcement message")
+      return
+    }
+    startTransition(async () => {
+      const result = await sendTournamentAnnouncement(tournament.id, announcement, announcementPriority)
+      if ("error" in result) {
+        toast.error(result.error)
+      } else {
+        toast.success("Announcement sent!")
+        setAnnouncement("")
+        setAnnouncementPriority("normal")
+        // Refresh announcements list
+        const refreshResult = await getTournamentAnnouncements(tournament.id)
+        if ("announcements" in refreshResult) {
+          setAnnouncements(refreshResult.announcements)
+        }
+      }
+    })
+  }
+
+  const handleDeleteAnnouncement = (announcementId: string) => {
+    startTransition(async () => {
+      const result = await deleteAnnouncement(announcementId)
+      if ("error" in result) {
+        toast.error(result.error)
+      } else {
+        toast.success("Announcement deleted")
+        setAnnouncements(prev => prev.filter(a => a.id !== announcementId))
+      }
+    })
   }
 
   return (
@@ -1208,10 +1261,96 @@ const handleAddPlayer = () => {
                     onChange={(e) => setAnnouncement(e.target.value)}
                     rows={4}
                   />
-                  <Button disabled={!announcement.trim()}>
-                    <Megaphone className="mr-2 h-4 w-4" />
-                    Send Announcement
-                  </Button>
+                  <div className="flex items-center gap-4">
+                    <div className="space-y-1">
+                      <Label className="text-sm">Priority</Label>
+                      <Select 
+                        value={announcementPriority} 
+                        onValueChange={(v) => setAnnouncementPriority(v as "normal" | "high" | "urgent")}
+                      >
+                        <SelectTrigger className="w-32">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="normal">Normal</SelectItem>
+                          <SelectItem value="high">High</SelectItem>
+                          <SelectItem value="urgent">Urgent</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Button 
+                      onClick={handleSendAnnouncement} 
+                      disabled={!announcement.trim() || isPending}
+                      className="mt-auto"
+                    >
+                      <Megaphone className="mr-2 h-4 w-4" />
+                      Send Announcement
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Past Announcements */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Announcement History</CardTitle>
+                  <CardDescription>Previous announcements sent to participants</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {loadingAnnouncements ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      Loading announcements...
+                    </div>
+                  ) : announcements.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Megaphone className="mx-auto h-12 w-12 mb-4 opacity-50" />
+                      <p>No announcements yet</p>
+                      <p className="text-sm">Send your first announcement above</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {announcements.map((ann) => (
+                        <div 
+                          key={ann.id} 
+                          className={cn(
+                            "p-4 rounded-lg border",
+                            ann.priority === "urgent" && "border-destructive bg-destructive/10",
+                            ann.priority === "high" && "border-yellow-500 bg-yellow-500/10",
+                            ann.priority === "normal" && "border-border"
+                          )}
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                {ann.priority !== "normal" && (
+                                  <Badge variant={ann.priority === "urgent" ? "destructive" : "outline"}>
+                                    {ann.priority}
+                                  </Badge>
+                                )}
+                                <span className="text-sm text-muted-foreground">
+                                  {formatDistanceToNow(new Date(ann.created_at), { addSuffix: true })}
+                                </span>
+                              </div>
+                              <p className="whitespace-pre-wrap">{ann.message}</p>
+                              {ann.profiles && (
+                                <p className="text-xs text-muted-foreground mt-2">
+                                  Sent by {ann.profiles.display_name}
+                                </p>
+                              )}
+                            </div>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => handleDeleteAnnouncement(ann.id)}
+                              disabled={isPending}
+                            >
+                              <UserMinus className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
