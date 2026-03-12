@@ -196,12 +196,12 @@ export function NewPrepTaskForm({ staffMembers = [], bookings = [] }: NewPrepTas
               <User className="h-3.5 w-3.5" />
               Assignee
             </Label>
-            <Select value={assignee} onValueChange={setAssignee}>
+            <Select value={assignee || "unassigned"} onValueChange={(v) => setAssignee(v === "unassigned" ? "" : v)}>
               <SelectTrigger>
                 <SelectValue placeholder="Unassigned" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Unassigned</SelectItem>
+                <SelectItem value="unassigned">Unassigned</SelectItem>
                 {staffMembers.map((s) => (
                   <SelectItem key={s.user_id} value={s.user_id}>
                     {s.profiles?.first_name} {s.profiles?.last_name} ({s.role})
@@ -215,12 +215,12 @@ export function NewPrepTaskForm({ staffMembers = [], bookings = [] }: NewPrepTas
           {bookings.length > 0 && (
             <div className="space-y-2">
               <Label>Linked Event/Booking</Label>
-              <Select value={linkedBooking} onValueChange={setLinkedBooking}>
+              <Select value={linkedBooking || "none"} onValueChange={(v) => setLinkedBooking(v === "none" ? "" : v)}>
                 <SelectTrigger>
                   <SelectValue placeholder="No linked event" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">No linked event</SelectItem>
+                  <SelectItem value="none">No linked event</SelectItem>
                   {bookings.map((b) => (
                     <SelectItem key={b.id} value={b.id}>
                       {b.contact_name} - {b.event_date}
