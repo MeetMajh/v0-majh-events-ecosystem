@@ -435,6 +435,133 @@ export async function removeStaffRole(formData: FormData) {
   revalidatePath("/dashboard/admin/staff")
 }
 
+// ── Organizer Requests ──
+
+export async function getOrganizerRequests(status?: string) {
+  const { supabase } = await requireStaffRole(["owner", "manager"])
+  
+  let query = supabase
+    .from("organizer_requests")
+    .select(`
+      *,
+      user:profiles!user_id(id, first_name, last_name, display_name, avatar_url),
+      reviewer:profiles!reviewed_by(first_name, last_name)
+    `)
+    .order("created_at", { ascending: false })
+  
+  if (status) {
+    query = query.eq("status", status)
+  }
+  
+  const { data, error } = await query
+  if (error) console.error("Error fetching organizer requests:", error)
+  return data ?? []
+}
+
+export async function approveOrganizerRequest(formData: FormData) {
+  const { supabase, userId } = await requireStaffRole(["owner", "manager"])
+  const requestId = formData.get("request_id") as string
+  const notes = formData.get("notes") as string | null
+  
+  // Get the request
+  const { data: request, error: fetchError } = await supabase
+    .from("organizer_requests")
+    .select("user_id")
+    .eq("id", requestId)
+    .single()
+  
+  if (fetchError || !request) {
+    redirect(`/dashboard/admin/organizers?error=${encodeURIComponent("Request not found")}`)
+  }
+  
+  // Update request status
+  const { error: updateError } = await supabase
+    .from("organizer_requests")
+    .update({
+      status: "approved",
+      reviewed_by: userId,
+      reviewed_at: new Date().toISOString(),
+      review_notes: notes,
+    })
+    .eq("id", requestId)
+  
+  if (updateError) {
+    redirect(`/dashboard/admin/organizers?error=${encodeURIComponent(updateError.message)}`)
+  }
+  
+  // Grant organizer role
+  await supabase.from("staff_roles").upsert({
+    user_id: request.user_id,
+    role: "organizer",
+  }, { onConflict: "user_id" })
+  
+  revalidatePath("/dashboard/admin/organizers")
+  redirect(`/dashboard/admin/organizers?success=${encodeURIComponent("Request approved - user is now an organizer")}`)
+}
+
+export async function rejectOrganizerRequest(formData: FormData) {
+  const { supabase, userId } = await requireStaffRole(["owner", "manager"])
+  const requestId = formData.get("request_id") as string
+  const notes = formData.get("notes") as string | null
+  
+  const { error } = await supabase
+    .from("organizer_requests")
+    .update({
+      status: "rejected",
+      reviewed_by: userId,
+      reviewed_at: new Date().toISOString(),
+      review_notes: notes,
+    })
+    .eq("id", requestId)
+  
+  if (error) {
+    redirect(`/dashboard/admin/organizers?error=${encodeURIComponent(error.message)}`)
+  }
+  
+  revalidatePath("/dashboard/admin/organizers")
+  redirect(`/dashboard/admin/organizers?success=${encodeURIComponent("Request rejected")}`)
+}
+
+// User-facing action to submit an organizer request
+export async function submitOrganizerRequest(formData: FormData) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  if (!user) {
+    redirect("/auth/login")
+  }
+  
+  const reason = formData.get("reason") as string
+  const experience = formData.get("experience") as string
+  const gamesOfInterest = formData.getAll("games") as string[]
+  
+  // Check if user already has a pending request
+  const { data: existing } = await supabase
+    .from("organizer_requests")
+    .select("id, status")
+    .eq("user_id", user.id)
+    .eq("status", "pending")
+    .single()
+  
+  if (existing) {
+    return { error: "You already have a pending organizer request" }
+  }
+  
+  const { error } = await supabase.from("organizer_requests").insert({
+    user_id: user.id,
+    reason,
+    experience,
+    games_of_interest: gamesOfInterest,
+  })
+  
+  if (error) {
+    return { error: error.message }
+  }
+  
+  revalidatePath("/dashboard")
+  return { success: true }
+}
+
 // ── POS: Create order (staff-facing) ──
 
 export async function createPosOrder(formData: FormData) {
