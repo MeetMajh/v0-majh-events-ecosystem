@@ -81,15 +81,25 @@ export function CreateTournamentForm({ games, userId }: { games: Game[]; userId:
         formDataObj.set("registration_deadline", `${formData.registration_deadline}T23:59:59`)
       }
 
+      console.log("[v0] Submitting tournament form...")
       const result = await createTournament(formDataObj)
+      console.log("[v0] createTournament result:", result)
 
       if ("error" in result) {
+        console.log("[v0] Tournament creation failed:", result.error)
         toast.error(result.error)
         return
       }
 
+      console.log("[v0] Tournament created successfully!")
       toast.success("Tournament created!")
-      router.push("/dashboard/tournaments")
+      
+      // Redirect to the tournament management page
+      if (result.id) {
+        router.push(`/dashboard/tournaments/${result.id}`)
+      } else {
+        router.push("/dashboard/tournaments")
+      }
     })
   }
 
