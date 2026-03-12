@@ -27,9 +27,8 @@ import { toast } from "sonner"
 const CATEGORIES = [
   { value: "food_prep", label: "Food Prep" },
   { value: "setup", label: "Setup" },
-  { value: "transport", label: "Transport" },
-  { value: "equipment", label: "Equipment" },
-  { value: "cleanup", label: "Cleanup" },
+  { value: "cleaning", label: "Cleaning" },
+  { value: "inventory", label: "Inventory" },
   { value: "other", label: "Other" },
 ]
 

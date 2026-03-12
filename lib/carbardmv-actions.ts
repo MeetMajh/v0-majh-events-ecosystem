@@ -583,33 +583,41 @@ export async function recordInvoicePayment(invoiceId: string, amountCents: numbe
 // ════════════════════════════════════════════
 
 export async function createStaffShift(formData: FormData) {
-  const { supabase } = await requireStaff()
-
-  const shift = {
-    staff_id: formData.get("staff_id") as string,
-    booking_id: (formData.get("booking_id") as string) || null,
-    shift_date: formData.get("shift_date") as string,
-    start_time: formData.get("start_time") as string,
-    end_time: formData.get("end_time") as string,
-    role: formData.get("role") as string,
-    location: (formData.get("location") as string) || null,
-    notes: (formData.get("notes") as string) || null,
-    status: "scheduled",
-  }
-
-  console.log("[v0] Creating staff shift:", shift)
-
-  const { data, error } = await supabase.from("cb_staff_shifts").insert(shift).select()
+  console.log("[v0] createStaffShift called")
   
-  if (error) {
-    console.log("[v0] Error creating shift:", error.message)
-    return { error: error.message }
+  try {
+    const { supabase } = await requireStaff()
+    console.log("[v0] Staff auth passed")
+
+    const shift = {
+      staff_id: formData.get("staff_id") as string,
+      booking_id: (formData.get("booking_id") as string) || null,
+      shift_date: formData.get("shift_date") as string,
+      start_time: formData.get("start_time") as string,
+      end_time: formData.get("end_time") as string,
+      role: formData.get("role") as string,
+      location: (formData.get("location") as string) || null,
+      notes: (formData.get("notes") as string) || null,
+      status: "scheduled",
+    }
+
+    console.log("[v0] Creating staff shift:", shift)
+
+    const { data, error } = await supabase.from("cb_staff_shifts").insert(shift).select()
+    
+    if (error) {
+      console.log("[v0] Error creating shift:", error.message, error.code)
+      return { error: error.message }
+    }
+
+    console.log("[v0] Shift created successfully:", data)
+
+    revalidatePath("/dashboard/carbardmv/staff")
+    return { success: true }
+  } catch (e: any) {
+    console.log("[v0] createStaffShift exception:", e.message)
+    return { error: e.message || "Failed to create shift" }
   }
-
-  console.log("[v0] Shift created successfully:", data)
-
-  revalidatePath("/dashboard/carbardmv/staff")
-  return { success: true }
 }
 
 export async function updateShiftStatus(shiftId: string, status: string) {
@@ -634,7 +642,7 @@ export async function deleteStaffShift(shiftId: string) {
 
 // ════════════════════════════════════════════
 // PREP TASKS
-// ════════════════���═══════════════════════════
+// ═════════════��══���═══════════════════════════
 
 export async function createPrepTask(data: {
   title: string
@@ -647,26 +655,40 @@ export async function createPrepTask(data: {
   catering_order_id?: string
   assigned_to?: string
 }) {
-  const { supabase } = await requireStaff()
+  console.log("[v0] createPrepTask called with:", data)
+  
+  try {
+    const { supabase } = await requireStaff()
+    console.log("[v0] Staff auth passed")
 
-  const task = {
-    booking_id: data.booking_id || null,
-    catering_order_id: data.catering_order_id || null,
-    assigned_to: data.assigned_to || null,
-    title: data.title,
-    description: data.description || null,
-    category: data.category,
-    priority: data.priority,
-    due_date: data.due_date || null,
-    due_time: data.due_time || null,
-    status: "pending",
+    const task = {
+      booking_id: data.booking_id || null,
+      catering_order_id: data.catering_order_id || null,
+      assigned_to: data.assigned_to || null,
+      title: data.title,
+      description: data.description || null,
+      category: data.category,
+      priority: data.priority,
+      due_date: data.due_date || null,
+      due_time: data.due_time || null,
+      status: "pending",
+    }
+
+    console.log("[v0] Inserting prep task:", task)
+    const { data: inserted, error } = await supabase.from("cb_prep_tasks").insert(task).select()
+    
+    if (error) {
+      console.log("[v0] Prep task insert error:", error.message, error.code)
+      return { error: error.message }
+    }
+
+    console.log("[v0] Prep task created successfully:", inserted)
+    revalidatePath("/dashboard/carbardmv/prep")
+    return { success: true }
+  } catch (e: any) {
+    console.log("[v0] createPrepTask exception:", e.message)
+    return { error: e.message || "Failed to create prep task" }
   }
-
-  const { error } = await supabase.from("cb_prep_tasks").insert(task)
-  if (error) return { error: error.message }
-
-  revalidatePath("/dashboard/carbardmv/prep")
-  return { success: true }
 }
 
 export async function updatePrepTaskStatus(taskId: string, status: string) {
