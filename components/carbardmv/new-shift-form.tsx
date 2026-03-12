@@ -15,10 +15,27 @@ import { toast } from "sonner"
 export function NewShiftForm({ staffMembers }: { staffMembers: Array<Record<string, any>> }) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [staffId, setStaffId] = useState("")
+  const [role, setRole] = useState("bartender")
   const router = useRouter()
 
-  async function handleSubmit(formData: FormData) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
     setLoading(true)
+    
+    const formData = new FormData(e.currentTarget)
+    // Manually add select values since shadcn Select doesn't use native inputs
+    formData.set("staff_id", staffId)
+    formData.set("role", role)
+    
+    console.log("[v0] Submitting shift form with:", {
+      staff_id: staffId,
+      role: role,
+      shift_date: formData.get("shift_date"),
+      start_time: formData.get("start_time"),
+      end_time: formData.get("end_time"),
+    })
+    
     const result = await createStaffShift(formData)
     setLoading(false)
     
@@ -29,6 +46,8 @@ export function NewShiftForm({ staffMembers }: { staffMembers: Array<Record<stri
     
     toast.success("Shift created successfully!")
     setOpen(false)
+    setStaffId("")
+    setRole("bartender")
     router.refresh()
   }
 
@@ -41,10 +60,10 @@ export function NewShiftForm({ staffMembers }: { staffMembers: Array<Record<stri
         <DialogHeader>
           <DialogTitle>New Staff Shift</DialogTitle>
         </DialogHeader>
-        <form action={handleSubmit} className="space-y-3">
+        <form onSubmit={handleSubmit} className="space-y-3">
           <div>
             <Label className="text-xs">Staff Member *</Label>
-            <Select name="staff_id" required>
+            <Select value={staffId} onValueChange={setStaffId} required>
               <SelectTrigger className="mt-1"><SelectValue placeholder="Select staff" /></SelectTrigger>
               <SelectContent>
                 {staffMembers.map((s) => {
@@ -60,7 +79,7 @@ export function NewShiftForm({ staffMembers }: { staffMembers: Array<Record<stri
           </div>
           <div>
             <Label className="text-xs">Role *</Label>
-            <Select name="role" defaultValue="bartender">
+            <Select value={role} onValueChange={setRole}>
               <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="bartender">Bartender</SelectItem>
@@ -94,7 +113,7 @@ export function NewShiftForm({ staffMembers }: { staffMembers: Array<Record<stri
             <Label className="text-xs">Notes</Label>
             <Textarea name="notes" rows={2} className="mt-1" />
           </div>
-          <Button type="submit" className="w-full" disabled={loading}>
+          <Button type="submit" className="w-full" disabled={loading || !staffId}>
             {loading ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : null}
             {loading ? "Saving..." : "Add Shift"}
           </Button>
