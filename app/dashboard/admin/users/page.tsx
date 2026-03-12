@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { requireRole } from "@/lib/roles"
 import { createUserManually, deleteUser, assignStaffRole } from "@/lib/admin-actions"
 import { Button } from "@/components/ui/button"
@@ -43,10 +43,20 @@ export default async function UsersAdminPage({
   await requireRole(["owner", "manager"])
   const params = await searchParams
   const supabase = await createClient()
-
-  // Get all users from auth
-  const { data: authUsers } = await supabase.auth.admin.listUsers()
   
+  // Try to use admin client for listing users
+  let authUsers: { users: any[] } | null = null
+  
+  try {
+    const adminClient = createAdminClient()
+    const { data, error } = await adminClient.auth.admin.listUsers()
+    if (!error && data) {
+      authUsers = data
+    }
+  } catch {
+    // Admin client not available - will rely on profiles only
+  }
+
   // Get profiles
   const { data: profiles } = await supabase
     .from("profiles")
@@ -61,16 +71,40 @@ export default async function UsersAdminPage({
   const staffMap = new Map(staffRoles?.map(sr => [sr.user_id, sr.role]) ?? [])
   const profileMap = new Map(profiles?.map(p => [p.id, p]) ?? [])
 
-  // Combine data
-  let users = authUsers?.users?.map(user => ({
-    id: user.id,
-    email: user.email,
-    email_confirmed_at: user.email_confirmed_at,
-    created_at: user.created_at,
-    last_sign_in_at: user.last_sign_in_at,
-    profile: profileMap.get(user.id),
-    staff_role: staffMap.get(user.id),
-  })) ?? []
+  // Combine data - use auth users if available, otherwise fall back to profiles
+  let users: Array<{
+    id: string
+    email: string | undefined
+    email_confirmed_at: string | null
+    created_at: string
+    last_sign_in_at: string | null
+    profile: any
+    staff_role: string | undefined
+  }> = []
+  
+  if (authUsers?.users && authUsers.users.length > 0) {
+    // Use auth users data
+    users = authUsers.users.map(user => ({
+      id: user.id,
+      email: user.email,
+      email_confirmed_at: user.email_confirmed_at || null,
+      created_at: user.created_at,
+      last_sign_in_at: user.last_sign_in_at || null,
+      profile: profileMap.get(user.id),
+      staff_role: staffMap.get(user.id),
+    }))
+  } else if (profiles && profiles.length > 0) {
+    // Fallback to profiles data
+    users = profiles.map(profile => ({
+      id: profile.id,
+      email: profile.email || undefined,
+      email_confirmed_at: profile.email_verified_at || profile.created_at, // Assume verified if in profiles
+      created_at: profile.created_at,
+      last_sign_in_at: profile.updated_at || null,
+      profile: profile,
+      staff_role: staffMap.get(profile.id),
+    }))
+  }
 
   // Filter by search
   if (params.search) {
@@ -86,15 +120,15 @@ export default async function UsersAdminPage({
   // Sort by created_at descending
   users.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
-  // Stats
-  const totalUsers = authUsers?.users?.length ?? 0
-  const verifiedUsers = authUsers?.users?.filter(u => u.email_confirmed_at).length ?? 0
+  // Stats - use the combined users array for accurate counts
+  const totalUsers = users.length
+  const verifiedUsers = users.filter(u => u.email_confirmed_at).length
   const staffCount = staffRoles?.length ?? 0
-  const recentUsers = authUsers?.users?.filter(u => {
+  const recentUsers = users.filter(u => {
     const created = new Date(u.created_at)
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
     return created > weekAgo
-  }).length ?? 0
+  }).length
 
   return (
     <div className="space-y-8">
