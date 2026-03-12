@@ -592,11 +592,21 @@ export async function createStaffShift(formData: FormData) {
     start_time: formData.get("start_time") as string,
     end_time: formData.get("end_time") as string,
     role: formData.get("role") as string,
+    location: (formData.get("location") as string) || null,
     notes: (formData.get("notes") as string) || null,
+    status: "scheduled",
   }
 
-  const { error } = await supabase.from("cb_staff_shifts").insert(shift)
-  if (error) return { error: error.message }
+  console.log("[v0] Creating staff shift:", shift)
+
+  const { data, error } = await supabase.from("cb_staff_shifts").insert(shift).select()
+  
+  if (error) {
+    console.log("[v0] Error creating shift:", error.message)
+    return { error: error.message }
+  }
+
+  console.log("[v0] Shift created successfully:", data)
 
   revalidatePath("/dashboard/carbardmv/staff")
   return { success: true }
