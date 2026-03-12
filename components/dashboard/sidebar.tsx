@@ -55,6 +55,7 @@ const ADMIN_ITEMS = [
   { label: "Inventory", href: "/dashboard/admin/inventory", icon: Warehouse },
   { label: "Orders", href: "/dashboard/admin/orders", icon: ClipboardList },
   { label: "POS Terminal", href: "/dashboard/pos", icon: CreditCard },
+  { label: "All Users", href: "/dashboard/admin/users", icon: UserCheck },
   { label: "Staff", href: "/dashboard/admin/staff", icon: Users },
 ]
 
@@ -93,11 +94,14 @@ export function DashboardSidebar({
   const pathname = usePathname()
   const isStaff = userRole === "owner" || userRole === "manager" || userRole === "staff"
   const canOrganize = isStaff || userRole === "organizer" || isOrganizer
-  const showStaffManagement = userRole === "owner"
+  const isManager = userRole === "owner" || userRole === "manager"
 
   const adminItems = isStaff
     ? ADMIN_ITEMS.filter((item) => {
-        if (item.href === "/dashboard/admin/staff" && !showStaffManagement) return false
+        // Staff and Users pages only for owners and managers
+        if (item.href === "/dashboard/admin/staff" && !isManager) return false
+        if (item.href === "/dashboard/admin/users" && !isManager) return false
+        // Menu and Inventory management only for owners/managers
         if (item.href === "/dashboard/admin/menu" && userRole === "staff") return false
         if (item.href === "/dashboard/admin/inventory" && userRole === "staff") return false
         return true

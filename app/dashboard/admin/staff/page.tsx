@@ -1,29 +1,33 @@
 import { createClient } from "@/lib/supabase/server"
 import { requireRole } from "@/lib/roles"
-import { assignStaffRole, removeStaffRole } from "@/lib/admin-actions"
+import { assignStaffRole, removeStaffRole, cancelInvitation, resendInvitation } from "@/lib/admin-actions"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Trash2, ShieldCheck, Shield, User } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { Trash2, ShieldCheck, Shield, User, Mail, Clock, RefreshCw, X, CheckCircle2, UserPlus } from "lucide-react"
+import { formatDistanceToNow } from "date-fns"
 
 const ROLE_ICONS: Record<string, any> = {
   owner: ShieldCheck,
   manager: Shield,
+  organizer: UserPlus,
   staff: User,
 }
 
 const ROLE_COLORS: Record<string, string> = {
   owner: "bg-primary/10 text-primary",
-  manager: "bg-accent/10 text-accent",
+  manager: "bg-blue-500/10 text-blue-500",
+  organizer: "bg-green-500/10 text-green-500",
   staff: "bg-secondary text-secondary-foreground",
 }
 
 export default async function StaffAdminPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>
+  searchParams: Promise<{ error?: string; success?: string }>
 }) {
-  await requireRole(["owner"])
+  await requireRole(["owner", "manager"])
   const params = await searchParams
   const supabase = await createClient()
 
@@ -35,6 +39,15 @@ export default async function StaffAdminPage({
   // Get emails from auth for each staff member
   const { data: authUsers } = await supabase.auth.admin.listUsers()
   const emailMap = new Map(authUsers?.users?.map((u) => [u.id, u.email]) ?? [])
+  
+  // Get pending staff invitations
+  const { data: pendingInvitations } = await supabase
+    .from("invitations")
+    .select("*")
+    .eq("invitation_type", "staff")
+    .eq("status", "pending")
+    .gt("expires_at", new Date().toISOString())
+    .order("created_at", { ascending: false })
 
   return (
     <div className="space-y-8">
@@ -46,6 +59,13 @@ export default async function StaffAdminPage({
       {params.error && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
           {params.error}
+        </div>
+      )}
+      
+      {params.success && (
+        <div className="rounded-lg border border-green-500/30 bg-green-500/5 p-4 text-sm text-green-600 flex items-center gap-2">
+          <CheckCircle2 className="h-4 w-4" />
+          {params.success}
         </div>
       )}
 
@@ -66,13 +86,68 @@ export default async function StaffAdminPage({
               className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             >
               <option value="staff" className="bg-card">Staff</option>
+              <option value="organizer" className="bg-card">Tournament Organizer</option>
               <option value="manager" className="bg-card">Manager</option>
               <option value="owner" className="bg-card">Owner</option>
             </select>
           </div>
           <Button type="submit">Assign Role</Button>
         </form>
+        <p className="mt-3 text-xs text-muted-foreground">
+          <Mail className="inline h-3 w-3 mr-1" />
+          If the user hasn&apos;t signed up yet, an invitation will be sent to their email.
+        </p>
       </div>
+
+      {/* Pending Invitations */}
+      {pendingInvitations && pendingInvitations.length > 0 && (
+        <div className="rounded-xl border border-border bg-card p-6">
+          <h2 className="mb-4 font-semibold text-foreground flex items-center gap-2">
+            <Clock className="h-4 w-4 text-muted-foreground" />
+            Pending Invitations ({pendingInvitations.length})
+          </h2>
+          <div className="space-y-3">
+            {pendingInvitations.map((inv: any) => {
+              const Icon = ROLE_ICONS[inv.role] || User
+              return (
+                <div key={inv.id} className="flex items-center justify-between rounded-lg border border-border/50 bg-muted/20 p-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-muted">
+                      <Mail className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-foreground">{inv.email}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Expires {formatDistanceToNow(new Date(inv.expires_at), { addSuffix: true })}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Badge className={ROLE_COLORS[inv.role]} variant="secondary">
+                      <Icon className="mr-1 h-3 w-3" />
+                      {inv.role}
+                    </Badge>
+                    <div className="flex gap-1">
+                      <form action={resendInvitation}>
+                        <input type="hidden" name="invitation_id" value={inv.id} />
+                        <Button variant="ghost" size="sm" title="Resend invitation">
+                          <RefreshCw className="h-3.5 w-3.5" />
+                        </Button>
+                      </form>
+                      <form action={cancelInvitation}>
+                        <input type="hidden" name="invitation_id" value={inv.id} />
+                        <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" title="Cancel invitation">
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Staff List */}
       <div className="overflow-hidden rounded-xl border border-border">
