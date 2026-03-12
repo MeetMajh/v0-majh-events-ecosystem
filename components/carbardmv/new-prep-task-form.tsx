@@ -43,6 +43,8 @@ export function NewPrepTaskForm() {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [category, setCategory] = useState("food_prep")
+  const [priority, setPriority] = useState("medium")
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -52,12 +54,13 @@ export function NewPrepTaskForm() {
     const data = {
       title: formData.get("title") as string,
       description: formData.get("description") as string || undefined,
-      category: formData.get("category") as string,
-      priority: formData.get("priority") as string,
+      category: category,  // Use state value since Select doesn't populate FormData
+      priority: priority,  // Use state value since Select doesn't populate FormData
       due_date: formData.get("due_date") as string || undefined,
       due_time: formData.get("due_time") as string || undefined,
     }
 
+    console.log("[v0] Submitting prep task:", data)
     const result = await createPrepTask(data)
 
     if (result.error) {
@@ -97,7 +100,7 @@ export function NewPrepTaskForm() {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="category">Category</Label>
-              <Select name="category" defaultValue="food_prep">
+              <Select value={category} onValueChange={setCategory}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -113,7 +116,7 @@ export function NewPrepTaskForm() {
 
             <div className="space-y-2">
               <Label htmlFor="priority">Priority</Label>
-              <Select name="priority" defaultValue="medium">
+              <Select value={priority} onValueChange={setPriority}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
