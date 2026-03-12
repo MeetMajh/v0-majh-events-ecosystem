@@ -170,7 +170,7 @@ export async function updateOrderStatus(formData: FormData) {
 // ── Staff Roles ──
 
 export async function assignStaffRole(formData: FormData) {
-  const { supabase } = await requireStaffRole(["owner"])
+  const { supabase, userId } = await requireStaffRole(["owner", "manager"])
   const email = formData.get("email") as string
   const role = formData.get("role") as string
 
@@ -179,7 +179,22 @@ export async function assignStaffRole(formData: FormData) {
   const targetUser = users?.users?.find((u) => u.email === email)
 
   if (!targetUser) {
-    redirect(`/dashboard/admin/staff?error=${encodeURIComponent("No user found with that email")}`)
+    // User doesn't exist - create an invitation instead
+    const { error: inviteError } = await supabase
+      .from("invitations")
+      .insert({
+        email: email.toLowerCase(),
+        invitation_type: "staff",
+        role,
+        invited_by: userId,
+      })
+
+    if (inviteError) {
+      redirect(`/dashboard/admin/staff?error=${encodeURIComponent(inviteError.message)}`)
+    }
+
+    revalidatePath("/dashboard/admin/staff")
+    redirect(`/dashboard/admin/staff?success=${encodeURIComponent(`Invitation sent to ${email}`)}`)
   }
 
   const { error } = await supabase
@@ -192,6 +207,223 @@ export async function assignStaffRole(formData: FormData) {
 
   revalidatePath("/dashboard/admin/staff")
   redirect("/dashboard/admin/staff")
+}
+
+export async function cancelInvitation(formData: FormData) {
+  const { supabase } = await requireStaffRole(["owner", "manager"])
+  const invitationId = formData.get("invitation_id") as string
+
+  await supabase
+    .from("invitations")
+    .update({ status: "cancelled" })
+    .eq("id", invitationId)
+
+  revalidatePath("/dashboard/admin/staff")
+}
+
+export async function resendInvitation(formData: FormData) {
+  const { supabase, userId } = await requireStaffRole(["owner", "manager"])
+  const invitationId = formData.get("invitation_id") as string
+
+  // Reset the invitation expiry
+  await supabase
+    .from("invitations")
+    .update({ 
+      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      status: "pending"
+    })
+    .eq("id", invitationId)
+
+  revalidatePath("/dashboard/admin/staff")
+  redirect(`/dashboard/admin/staff?success=${encodeURIComponent("Invitation resent")}`)
+}
+
+// Get all pending invitations
+export async function getPendingInvitations(type?: string) {
+  const { supabase } = await requireStaffRole(["owner", "manager"])
+  
+  let query = supabase
+    .from("invitations")
+    .select("*, inviter:profiles!invited_by(first_name, last_name)")
+    .eq("status", "pending")
+    .gt("expires_at", new Date().toISOString())
+    .order("created_at", { ascending: false })
+  
+  if (type) {
+    query = query.eq("invitation_type", type)
+  }
+  
+  const { data } = await query
+  return data ?? []
+}
+
+// ── User Management ──
+
+export async function getAllUsers() {
+  const { supabase } = await requireStaffRole(["owner", "manager"])
+  
+  const { data: authUsers } = await supabase.auth.admin.listUsers()
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("*")
+    .order("created_at", { ascending: false })
+  
+  const { data: staffRoles } = await supabase
+    .from("staff_roles")
+    .select("user_id, role")
+  
+  const staffMap = new Map(staffRoles?.map(sr => [sr.user_id, sr.role]) ?? [])
+  
+  return authUsers?.users?.map(user => ({
+    id: user.id,
+    email: user.email,
+    email_confirmed_at: user.email_confirmed_at,
+    created_at: user.created_at,
+    last_sign_in_at: user.last_sign_in_at,
+    profile: profiles?.find(p => p.id === user.id),
+    staff_role: staffMap.get(user.id),
+  })) ?? []
+}
+
+export async function createUserManually(formData: FormData) {
+  const { supabase, userId } = await requireStaffRole(["owner", "manager"])
+  
+  const email = formData.get("email") as string
+  const firstName = formData.get("first_name") as string
+  const lastName = formData.get("last_name") as string
+  const role = formData.get("role") as string | null
+  const sendInvite = formData.get("send_invite") === "on"
+  
+  // Check if user already exists
+  const { data: authUsers } = await supabase.auth.admin.listUsers()
+  const existingUser = authUsers?.users?.find(u => u.email === email.toLowerCase())
+  
+  if (existingUser) {
+    redirect(`/dashboard/admin/users?error=${encodeURIComponent("User with this email already exists")}`)
+  }
+  
+  if (sendInvite) {
+    // Create invitation for new user
+    const { error: inviteError } = await supabase
+      .from("invitations")
+      .insert({
+        email: email.toLowerCase(),
+        invitation_type: role ? "staff" : "general",
+        role: role || null,
+        invited_by: userId,
+      })
+    
+    if (inviteError) {
+      redirect(`/dashboard/admin/users?error=${encodeURIComponent(inviteError.message)}`)
+    }
+    
+    revalidatePath("/dashboard/admin/users")
+    redirect(`/dashboard/admin/users?success=${encodeURIComponent(`Invitation sent to ${email}`)}`)
+  } else {
+    // Create user directly using admin API
+    const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
+      email: email.toLowerCase(),
+      email_confirm: true, // Skip email confirmation for manual creation
+      user_metadata: { first_name: firstName, last_name: lastName },
+    })
+    
+    if (createError || !newUser.user) {
+      redirect(`/dashboard/admin/users?error=${encodeURIComponent(createError?.message || "Failed to create user")}`)
+    }
+    
+    // Create profile
+    await supabase.from("profiles").upsert({
+      id: newUser.user.id,
+      first_name: firstName,
+      last_name: lastName,
+      display_name: `${firstName} ${lastName}`.trim(),
+    })
+    
+    // Assign role if specified
+    if (role) {
+      await supabase.from("staff_roles").upsert({
+        user_id: newUser.user.id,
+        role,
+      }, { onConflict: "user_id" })
+    }
+    
+    revalidatePath("/dashboard/admin/users")
+    redirect(`/dashboard/admin/users?success=${encodeURIComponent(`User ${email} created successfully`)}`)
+  }
+}
+
+export async function deleteUser(formData: FormData) {
+  const { supabase } = await requireStaffRole(["owner"])
+  const userId = formData.get("user_id") as string
+  
+  // Delete user from auth (this will cascade to profiles via trigger if set up)
+  const { error } = await supabase.auth.admin.deleteUser(userId)
+  
+  if (error) {
+    redirect(`/dashboard/admin/users?error=${encodeURIComponent(error.message)}`)
+  }
+  
+  revalidatePath("/dashboard/admin/users")
+}
+
+// ── Accept Invitation (for new user signup) ──
+
+export async function acceptInvitation(token: string, userId: string) {
+  const supabase = await createClient()
+  
+  // Find the invitation
+  const { data: invitation, error } = await supabase
+    .from("invitations")
+    .select("*")
+    .eq("token", token)
+    .eq("status", "pending")
+    .gt("expires_at", new Date().toISOString())
+    .single()
+  
+  if (error || !invitation) {
+    return { error: "Invalid or expired invitation" }
+  }
+  
+  // Mark invitation as accepted
+  await supabase
+    .from("invitations")
+    .update({ 
+      status: "accepted",
+      accepted_at: new Date().toISOString(),
+      accepted_by: userId,
+    })
+    .eq("id", invitation.id)
+  
+  // Apply the invitation effect
+  if (invitation.invitation_type === "staff" && invitation.role) {
+    await supabase.from("staff_roles").upsert({
+      user_id: userId,
+      role: invitation.role,
+    }, { onConflict: "user_id" })
+  } else if (invitation.invitation_type === "tournament_participant" && invitation.tournament_id) {
+    // Register user for tournament
+    await supabase.from("tournament_registrations").insert({
+      tournament_id: invitation.tournament_id,
+      user_id: userId,
+      status: "registered",
+    })
+  }
+  
+  return { success: true, invitation }
+}
+
+export async function getInvitationByToken(token: string) {
+  const supabase = await createClient()
+  
+  const { data } = await supabase
+    .from("invitations")
+    .select("*, tournaments(name, slug)")
+    .eq("token", token)
+    .eq("status", "pending")
+    .gt("expires_at", new Date().toISOString())
+    .single()
+  
+  return data
 }
 
 export async function removeStaffRole(formData: FormData) {
