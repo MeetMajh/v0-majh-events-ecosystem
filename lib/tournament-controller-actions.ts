@@ -1911,86 +1911,54 @@ export async function getGlobalLeaderboard(limit = 100) {
 export async function addPlayerToTournament(tournamentId: string, email: string) {
   const auth = await requireTournamentOrganizer(tournamentId)
   if ("error" in auth) return auth
-  const { supabase, userId } = auth
+  const { supabase } = auth
 
   const normalizedEmail = email.toLowerCase().trim()
   
-  // First try to find user by email via profiles
-  let { data: profile } = await supabase
-    .from("profiles")
-    .select("id, display_name, first_name, last_name")
-    .eq("email", normalizedEmail)
-    .single()
-
-  // If not found in profiles, try to find via admin client (auth.users)
-  if (!profile) {
-    try {
-      const { createAdminClient } = await import("@/lib/supabase/server")
-      const adminClient = createAdminClient()
-      const { data: usersData } = await adminClient.auth.admin.listUsers()
+  // Find user by email via admin client (auth.users has the email)
+  let userId: string | null = null
+  let displayName: string | null = null
+  
+  try {
+    const { createAdminClient } = await import("@/lib/supabase/server")
+    const adminClient = createAdminClient()
+    const { data: usersData } = await adminClient.auth.admin.listUsers()
+    
+    const authUser = usersData?.users?.find(
+      u => u.email?.toLowerCase() === normalizedEmail
+    )
+    
+    if (authUser) {
+      userId = authUser.id
       
-      const authUser = usersData?.users?.find(
-        u => u.email?.toLowerCase() === normalizedEmail
-      )
-      
-      if (authUser) {
-        // User exists in auth but maybe profile not synced - get/create profile
-        const { data: existingProfile } = await supabase
-          .from("profiles")
-          .select("id, display_name, first_name, last_name")
-          .eq("id", authUser.id)
-          .single()
-          
-        if (existingProfile) {
-          profile = existingProfile
-        }
+      // Get profile for display name
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("display_name, first_name, last_name")
+        .eq("id", authUser.id)
+        .single()
+        
+      if (profile) {
+        displayName = profile.display_name || 
+          [profile.first_name, profile.last_name].filter(Boolean).join(" ") ||
+          normalizedEmail
+      } else {
+        displayName = authUser.user_metadata?.display_name || 
+          authUser.user_metadata?.full_name ||
+          normalizedEmail
       }
-    } catch {
-      // Admin client not available - continue without it
+    }
+  } catch (e) {
+    console.log("[v0] Admin client error:", e)
+    return { 
+      error: "Unable to look up users. Please ensure SUPABASE_SERVICE_ROLE_KEY is configured.",
     }
   }
 
-  // If still no profile found, create a preregistration entry
-  if (!profile) {
-    // Check if already preregistered
-    const { data: existingPreReg } = await supabase
-      .from("tournament_preregistrations")
-      .select("id, status")
-      .eq("tournament_id", tournamentId)
-      .eq("email", normalizedEmail)
-      .single()
-
-    if (existingPreReg) {
-      return { error: "This email is already preregistered for this tournament" }
-    }
-
-    // Create preregistration entry
-    const { error: preRegError } = await supabase
-      .from("tournament_preregistrations")
-      .insert({
-        tournament_id: tournamentId,
-        email: normalizedEmail,
-        invited_by: userId,
-        status: "pending",
-      })
-
-    if (preRegError) {
-      // If preregistrations table doesn't exist, return a friendly message
-      if (preRegError.code === "42P01") {
-        return { 
-          error: "User not found. They need to create an account at majhevents.com/auth/sign-up first, then you can add them.",
-          preregistrationPending: true 
-        }
-      }
-      return { error: preRegError.message }
-    }
-
-    revalidatePath(`/dashboard/tournaments/${tournamentId}`)
+  // If user not found, return helpful message
+  if (!userId) {
     return { 
-      success: true, 
-      playerName: normalizedEmail,
-      isPreregistration: true,
-      message: `Preregistration created for ${normalizedEmail}. They will be added when they create an account.`
+      error: `No account found for ${normalizedEmail}. They need to sign up at majhevents.com/auth/sign-up first.`,
     }
   }
 
@@ -1999,7 +1967,7 @@ export async function addPlayerToTournament(tournamentId: string, email: string)
     .from("tournament_registrations")
     .select("id")
     .eq("tournament_id", tournamentId)
-    .eq("player_id", profile.id)
+    .eq("player_id", userId)
     .single()
 
   if (existing) {
@@ -2029,19 +1997,15 @@ export async function addPlayerToTournament(tournamentId: string, email: string)
   // Add player
   const { error } = await supabase.from("tournament_registrations").insert({
     tournament_id: tournamentId,
-    player_id: profile.id,
+    player_id: userId,
     status: "registered",
     payment_status: "paid", // Admin adds are considered paid
   })
 
   if (error) return { error: error.message }
 
-  const playerName = profile.display_name || 
-    [profile.first_name, profile.last_name].filter(Boolean).join(" ") ||
-    normalizedEmail
-
   revalidatePath(`/dashboard/tournaments/${tournamentId}`)
-  return { success: true, playerName }
+  return { success: true, playerName: displayName || normalizedEmail }
 }
 
 export async function getPlayerStats(playerId: string) {
