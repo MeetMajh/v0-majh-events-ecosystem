@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/dashboard-header"
+import { Toaster } from "sonner"
 
 export const metadata = { title: "Dashboard" }
 
@@ -33,6 +34,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         <DashboardHeader displayName={displayName} />
         <main className="flex-1 p-6">{children}</main>
       </div>
+      <Toaster position="top-right" richColors />
     </div>
   )
 }

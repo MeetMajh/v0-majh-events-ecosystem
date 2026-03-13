@@ -27,9 +27,13 @@ export function NewShiftForm({ staffMembers }: { staffMembers: StaffMember[] }) 
   const [endTime, setEndTime] = useState("")
   const [location, setLocation] = useState("")
   const [notes, setNotes] = useState("")
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState(false)
   const router = useRouter()
 
   async function handleSubmit() {
+    setError(null)
+    setSuccess(false)
     if (!staffId || !shiftDate || !startTime || !endTime) {
       toast.error("Please fill in all required fields")
       return
@@ -55,11 +59,13 @@ export function NewShiftForm({ staffMembers }: { staffMembers: StaffMember[] }) 
       const result = await response.json()
 
       if (!response.ok) {
+        setError(result.error || "Failed to create shift")
         toast.error(result.error || "Failed to create shift")
         setLoading(false)
         return
       }
 
+      setSuccess(true)
       toast.success("Shift created successfully!")
       setOpen(false)
       // Reset form
@@ -72,6 +78,7 @@ export function NewShiftForm({ staffMembers }: { staffMembers: StaffMember[] }) 
       setNotes("")
       router.refresh()
     } catch (err: any) {
+      setError(err.message || "Failed to create shift")
       toast.error(err.message || "Failed to create shift")
     }
 
@@ -87,6 +94,18 @@ export function NewShiftForm({ staffMembers }: { staffMembers: StaffMember[] }) 
         <DialogHeader>
           <DialogTitle>New Staff Shift</DialogTitle>
         </DialogHeader>
+        
+        {error && (
+          <div className="rounded-md bg-destructive/10 border border-destructive p-3 text-sm text-destructive">
+            Error: {error}
+          </div>
+        )}
+        {success && (
+          <div className="rounded-md bg-green-500/10 border border-green-500 p-3 text-sm text-green-500">
+            Shift created successfully!
+          </div>
+        )}
+        
         <div className="space-y-3">
           <div>
             <Label className="text-xs">Staff Member *</Label>
