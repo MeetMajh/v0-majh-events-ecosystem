@@ -74,7 +74,6 @@ export function NewPrepTaskForm({ staffMembers = [], bookings = [] }: NewPrepTas
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    console.log("[v0] Form submitted")
     setLoading(true)
 
     const formData = new FormData(e.currentTarget)
@@ -89,11 +88,8 @@ export function NewPrepTaskForm({ staffMembers = [], bookings = [] }: NewPrepTas
       due_time: formData.get("due_time") as string || undefined,
     }
 
-    console.log("[v0] Calling createPrepTask with:", data)
-    
     try {
       const result = await createPrepTask(data)
-      console.log("[v0] Result:", result)
 
       if (result.error) {
         toast.error(result.error)
@@ -109,7 +105,6 @@ export function NewPrepTaskForm({ staffMembers = [], bookings = [] }: NewPrepTas
         router.refresh()
       }
     } catch (err: any) {
-      console.log("[v0] Error:", err)
       toast.error(err.message || "Failed to create task")
     }
 
