@@ -12,6 +12,7 @@ import {
   TrendingUp,
   Clock,
 } from "lucide-react"
+import { DatabaseSetup } from "@/components/carbardmv/database-setup"
 
 export const metadata = { title: "CARBARDMV Overview | Dashboard" }
 
@@ -63,6 +64,8 @@ export default async function CarbardmvOverviewPage() {
         <h1 className="text-2xl font-bold text-foreground">CARBARDMV Dashboard</h1>
         <p className="text-muted-foreground">Mobile events, catering, and equipment rental management</p>
       </div>
+
+      <DatabaseSetup />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {stats.map((s) => (

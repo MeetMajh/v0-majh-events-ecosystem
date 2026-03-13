@@ -28,14 +28,6 @@ export function NewShiftForm({ staffMembers }: { staffMembers: Array<Record<stri
     formData.set("staff_id", staffId)
     formData.set("role", role)
     
-    console.log("[v0] Submitting shift form with:", {
-      staff_id: staffId,
-      role: role,
-      shift_date: formData.get("shift_date"),
-      start_time: formData.get("start_time"),
-      end_time: formData.get("end_time"),
-    })
-    
     const result = await createStaffShift(formData)
     setLoading(false)
     
