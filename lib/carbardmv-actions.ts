@@ -658,34 +658,38 @@ export async function createPrepTask(data: {
   time_estimate_minutes?: number
   tags?: string[]
 }) {
+  console.log("[v0] createPrepTask called with:", JSON.stringify(data))
+  
   try {
     const { supabase } = await requireStaff()
+    console.log("[v0] Staff auth passed")
 
-    const task = {
-      booking_id: data.booking_id || null,
-      catering_order_id: data.catering_order_id || null,
-      assigned_to: data.assigned_to || null,
+    // Only include columns that exist in the original table schema
+    const task: Record<string, unknown> = {
       title: data.title,
       description: data.description || null,
       category: data.category,
       priority: data.priority,
-      start_date: data.start_date || null,
+      status: "pending",
       due_date: data.due_date || null,
       due_time: data.due_time || null,
-      time_estimate_minutes: data.time_estimate_minutes || null,
-      tags: data.tags || null,
-      status: "pending",
+      assigned_to: data.assigned_to || null,
+      booking_id: data.booking_id || null,
     }
 
-    const { error } = await supabase.from("cb_prep_tasks").insert(task).select()
+    console.log("[v0] Inserting task:", JSON.stringify(task))
+    const { data: inserted, error } = await supabase.from("cb_prep_tasks").insert(task).select()
     
     if (error) {
+      console.log("[v0] Insert error:", error.message, error.code, error.details)
       return { error: error.message }
     }
 
+    console.log("[v0] Task created:", JSON.stringify(inserted))
     revalidatePath("/dashboard/carbardmv/prep")
     return { success: true }
   } catch (e: any) {
+    console.log("[v0] Exception:", e.message)
     return { error: e.message || "Failed to create prep task" }
   }
 }
