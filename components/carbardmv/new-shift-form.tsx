@@ -21,6 +21,7 @@ export function NewShiftForm({ staffMembers }: { staffMembers: Array<Record<stri
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    console.log("[v0] Form submitted, staffId:", staffId, "role:", role)
     setLoading(true)
     
     const formData = new FormData(e.currentTarget)
@@ -28,19 +29,27 @@ export function NewShiftForm({ staffMembers }: { staffMembers: Array<Record<stri
     formData.set("staff_id", staffId)
     formData.set("role", role)
     
-    const result = await createStaffShift(formData)
-    setLoading(false)
-    
-    if (result && "error" in result) {
-      toast.error(result.error)
-      return
+    console.log("[v0] Calling createStaffShift...")
+    try {
+      const result = await createStaffShift(formData)
+      console.log("[v0] Result:", result)
+      setLoading(false)
+      
+      if (result && "error" in result) {
+        toast.error(result.error)
+        return
+      }
+      
+      toast.success("Shift created successfully!")
+      setOpen(false)
+      setStaffId("")
+      setRole("bartender")
+      router.refresh()
+    } catch (err: any) {
+      console.log("[v0] Error:", err)
+      setLoading(false)
+      toast.error(err.message || "Failed to create shift")
     }
-    
-    toast.success("Shift created successfully!")
-    setOpen(false)
-    setStaffId("")
-    setRole("bartender")
-    router.refresh()
   }
 
   return (
