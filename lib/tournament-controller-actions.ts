@@ -1664,11 +1664,16 @@ export async function bulkAddPreregistrations(
 export async function getTournamentRegistrations(tournamentId: string) {
   const supabase = await createClient()
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("tournament_registrations")
-    .select("*, profiles(id, display_name, avatar_url, first_name, last_name)")
+    .select("*, profiles(id, display_name, first_name, last_name)")
     .eq("tournament_id", tournamentId)
     .order("registered_at", { ascending: false })
+
+  if (error) {
+    console.log("[v0] getTournamentRegistrations error:", error.message, error.code)
+  }
+  console.log("[v0] getTournamentRegistrations result:", data?.length, "registrations found")
 
   return data ?? []
 }
