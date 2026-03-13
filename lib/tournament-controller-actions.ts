@@ -1666,14 +1666,14 @@ export async function getTournamentRegistrations(tournamentId: string) {
 
   const { data, error } = await supabase
     .from("tournament_registrations")
-    .select("*, profiles(id, display_name, first_name, last_name)")
+    .select("*, profiles(id, display_name, avatar_url)")
     .eq("tournament_id", tournamentId)
     .order("registered_at", { ascending: false })
 
   if (error) {
     console.log("[v0] getTournamentRegistrations error:", error.message, error.code)
+    return []
   }
-  console.log("[v0] getTournamentRegistrations result:", data?.length, "registrations found")
 
   return data ?? []
 }
