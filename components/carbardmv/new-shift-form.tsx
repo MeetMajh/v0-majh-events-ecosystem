@@ -21,7 +21,7 @@ export function NewShiftForm({ staffMembers }: { staffMembers: Array<Record<stri
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    console.log("[v0] Form submitted, staffId:", staffId, "role:", role)
+    alert("Form submitted! staffId: " + staffId + ", role: " + role)
     setLoading(true)
     
     const formData = new FormData(e.currentTarget)
