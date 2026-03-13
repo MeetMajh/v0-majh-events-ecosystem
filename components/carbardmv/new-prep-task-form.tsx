@@ -74,6 +74,7 @@ export function NewPrepTaskForm({ staffMembers = [], bookings = [] }: NewPrepTas
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    console.log("[v0] Form submitted")
     setLoading(true)
 
     const formData = new FormData(e.currentTarget)
@@ -84,27 +85,32 @@ export function NewPrepTaskForm({ staffMembers = [], bookings = [] }: NewPrepTas
       priority: priority,
       assigned_to: assignee || undefined,
       booking_id: linkedBooking || undefined,
-      start_date: formData.get("start_date") as string || undefined,
       due_date: formData.get("due_date") as string || undefined,
       due_time: formData.get("due_time") as string || undefined,
-      time_estimate_minutes: parseInt(formData.get("time_estimate") as string) || undefined,
-      tags: tags.length > 0 ? tags : undefined,
     }
 
-    const result = await createPrepTask(data)
+    console.log("[v0] Calling createPrepTask with:", data)
+    
+    try {
+      const result = await createPrepTask(data)
+      console.log("[v0] Result:", result)
 
-    if (result.error) {
-      toast.error(result.error)
-    } else {
-      toast.success("Prep task created")
-      setOpen(false)
-      // Reset form
-      setCategory("food_prep")
-      setPriority("medium")
-      setAssignee("")
-      setLinkedBooking("")
-      setTags([])
-      router.refresh()
+      if (result.error) {
+        toast.error(result.error)
+      } else {
+        toast.success("Prep task created")
+        setOpen(false)
+        // Reset form
+        setCategory("food_prep")
+        setPriority("medium")
+        setAssignee("")
+        setLinkedBooking("")
+        setTags([])
+        router.refresh()
+      }
+    } catch (err: any) {
+      console.log("[v0] Error:", err)
+      toast.error(err.message || "Failed to create task")
     }
 
     setLoading(false)
