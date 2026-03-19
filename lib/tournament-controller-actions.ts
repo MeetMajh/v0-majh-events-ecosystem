@@ -1666,7 +1666,7 @@ export async function getTournamentRegistrations(tournamentId: string) {
 
   const { data, error } = await supabase
     .from("tournament_registrations")
-    .select("*, profiles(id, display_name, avatar_url)")
+    .select("*, profiles(id, first_name, last_name, display_name)")
     .eq("tournament_id", tournamentId)
     .order("registered_at", { ascending: false })
 
@@ -1675,7 +1675,17 @@ export async function getTournamentRegistrations(tournamentId: string) {
     return []
   }
 
-  return data ?? []
+  // Transform data to ensure profiles has avatar_url (even if null) for component compatibility
+  const transformed = (data ?? []).map(reg => ({
+    ...reg,
+    profiles: reg.profiles ? {
+      ...reg.profiles,
+      avatar_url: null,
+      display_name: reg.profiles.display_name || `${reg.profiles.first_name || ''} ${reg.profiles.last_name || ''}`.trim() || 'Unknown Player'
+    } : null
+  }))
+
+  return transformed
 }
 
 export async function getPlayerTournamentHistory(playerId: string) {
