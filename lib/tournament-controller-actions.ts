@@ -1665,26 +1665,39 @@ export async function getTournamentRegistrations(tournamentId: string) {
   // Use admin client to bypass RLS - tournament organizers need to see all registrations
   const supabase = createAdminClient()
 
-  const { data, error } = await supabase
+  // Step 1: Get registrations WITHOUT profile join
+  const { data: registrations, error: regError } = await supabase
     .from("tournament_registrations")
-    .select("*, profiles(id, first_name, last_name)")
+    .select("*")
     .eq("tournament_id", tournamentId)
     .order("registered_at", { ascending: false })
 
-  if (error) {
-    console.log("[v0] getTournamentRegistrations error:", error.message)
+  if (regError || !registrations?.length) {
     return []
   }
 
-  // Transform data to match expected interface
-  const transformed = (data ?? []).map(reg => ({
-    ...reg,
-    profiles: reg.profiles ? {
-      id: reg.profiles.id,
-      display_name: `${reg.profiles.first_name || ''} ${reg.profiles.last_name || ''}`.trim() || 'Unknown Player',
-      avatar_url: null
-    } : null
-  }))
+  // Step 2: Get profiles for all player IDs
+  const playerIds = registrations.map(r => r.player_id).filter(Boolean)
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("id, first_name, last_name")
+    .in("id", playerIds)
+
+  // Create a lookup map
+  const profileMap = new Map(profiles?.map(p => [p.id, p]) || [])
+
+  // Step 3: Combine the data
+  const transformed = registrations.map(reg => {
+    const profile = profileMap.get(reg.player_id)
+    return {
+      ...reg,
+      profiles: profile ? {
+        id: profile.id,
+        display_name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'Unknown Player',
+        avatar_url: null
+      } : null
+    }
+  })
 
   return transformed
 }
