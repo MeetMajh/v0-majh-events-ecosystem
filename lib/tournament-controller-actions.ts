@@ -1,6 +1,6 @@
 "use server"
 
-import { createClient } from "@/lib/supabase/server"
+import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 
@@ -1662,26 +1662,27 @@ export async function bulkAddPreregistrations(
 // ══════════════════════════════════════════════════════════════════════════════
 
 export async function getTournamentRegistrations(tournamentId: string) {
-  const supabase = await createClient()
+  // Use admin client to bypass RLS - tournament organizers need to see all registrations
+  const supabase = createAdminClient()
 
   const { data, error } = await supabase
     .from("tournament_registrations")
-    .select("*, profiles(id, first_name, last_name, display_name)")
+    .select("*, profiles(id, first_name, last_name)")
     .eq("tournament_id", tournamentId)
     .order("registered_at", { ascending: false })
 
   if (error) {
-    console.log("[v0] getTournamentRegistrations error:", error.message, error.code)
+    console.log("[v0] getTournamentRegistrations error:", error.message)
     return []
   }
 
-  // Transform data to ensure profiles has avatar_url (even if null) for component compatibility
+  // Transform data to match expected interface
   const transformed = (data ?? []).map(reg => ({
     ...reg,
     profiles: reg.profiles ? {
-      ...reg.profiles,
-      avatar_url: null,
-      display_name: reg.profiles.display_name || `${reg.profiles.first_name || ''} ${reg.profiles.last_name || ''}`.trim() || 'Unknown Player'
+      id: reg.profiles.id,
+      display_name: `${reg.profiles.first_name || ''} ${reg.profiles.last_name || ''}`.trim() || 'Unknown Player',
+      avatar_url: null
     } : null
   }))
 
