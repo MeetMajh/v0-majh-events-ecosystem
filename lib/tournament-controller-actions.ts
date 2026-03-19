@@ -1,6 +1,6 @@
 "use server"
 
-import { createClient } from "@/lib/supabase/server"
+import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 
@@ -1662,20 +1662,17 @@ export async function bulkAddPreregistrations(
 // ══════════════════════════════════════════════════════════════════════════════
 
 export async function getTournamentRegistrations(tournamentId: string) {
-  const supabase = await createClient()
+  // Use admin client to bypass RLS - tournament organizers need to see all registrations
+  const supabase = createAdminClient()
 
-  // Simplified query - just get registrations with basic profile info
   const { data, error } = await supabase
     .from("tournament_registrations")
     .select("*, profiles(id, first_name, last_name)")
     .eq("tournament_id", tournamentId)
     .order("registered_at", { ascending: false })
 
-  console.log("[v0] getTournamentRegistrations for:", tournamentId)
-  console.log("[v0] Raw data count:", data?.length ?? 0)
-  console.log("[v0] Error:", error?.message ?? "none")
-
   if (error) {
+    console.log("[v0] getTournamentRegistrations error:", error.message)
     return []
   }
 
@@ -1688,8 +1685,6 @@ export async function getTournamentRegistrations(tournamentId: string) {
       avatar_url: null
     } : null
   }))
-
-  console.log("[v0] Transformed count:", transformed.length)
 
   return transformed
 }

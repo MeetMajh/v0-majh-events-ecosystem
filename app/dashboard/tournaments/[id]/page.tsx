@@ -45,14 +45,12 @@ export default async function TournamentControllerPage({
   }
 
   // Fetch all tournament data in parallel
-  console.log("[v0] Fetching data for tournament:", tournament.id)
   const [phases, registrations, currentRound, paymentSummary] = await Promise.all([
     getTournamentPhases(tournament.id),
     getTournamentRegistrations(tournament.id),
     getCurrentRound(tournament.id),
     getPaymentSummary(tournament.id),
   ])
-  console.log("[v0] Registrations received in page:", registrations.length)
 
   // Get standings for current phase if exists
   const currentPhase = phases.find(p => p.is_current) || phases[0]
