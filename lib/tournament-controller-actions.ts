@@ -1667,7 +1667,7 @@ export async function getTournamentRegistrations(tournamentId: string) {
 
   const { data, error } = await supabase
     .from("tournament_registrations")
-    .select("*, profiles(id, first_name, last_name)")
+    .select("*, profiles!player_id(id, first_name, last_name)")
     .eq("tournament_id", tournamentId)
     .order("registered_at", { ascending: false })
 
