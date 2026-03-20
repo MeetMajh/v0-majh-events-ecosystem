@@ -128,164 +128,183 @@ export async function getTournamentPhases(tournamentId: string) {
 }
 
 export async function createSwissRound(tournamentId: string, phaseId: string) {
-  const auth = await requireTournamentOrganizer(tournamentId)
-  if ("error" in auth) return auth
-  const { supabase, userId } = auth
+  try {
+    const auth = await requireTournamentOrganizer(tournamentId)
+    if ("error" in auth) return auth
+    const { supabase, userId } = auth
 
-  // Get phase settings
-  const { data: phase } = await supabase
-    .from("tournament_phases")
-    .select("*")
-    .eq("id", phaseId)
-    .single()
+    // Get phase settings
+    const { data: phase, error: phaseError } = await supabase
+      .from("tournament_phases")
+      .select("*")
+      .eq("id", phaseId)
+      .single()
 
-  if (!phase) return { error: "Phase not found" }
+    if (phaseError) {
+      console.error("[v0] createSwissRound phase error:", phaseError)
+      return { error: `Phase error: ${phaseError.message}` }
+    }
+    if (!phase) return { error: "Phase not found" }
 
-  // Get current round number
-  const { data: existingRounds } = await supabase
-    .from("tournament_rounds")
-    .select("round_number")
-    .eq("phase_id", phaseId)
-    .order("round_number", { ascending: false })
-    .limit(1)
+    // Get current round number
+    const { data: existingRounds } = await supabase
+      .from("tournament_rounds")
+      .select("round_number")
+      .eq("phase_id", phaseId)
+      .order("round_number", { ascending: false })
+      .limit(1)
 
-  const roundNumber = (existingRounds?.[0]?.round_number ?? 0) + 1
+    const roundNumber = (existingRounds?.[0]?.round_number ?? 0) + 1
 
-  // Get all registered players (not dropped)
-  const { data: registrations } = await supabase
-    .from("tournament_registrations")
-    .select("player_id")
-    .eq("tournament_id", tournamentId)
-    .neq("status", "dropped")
-    .neq("status", "disqualified")
+    // Get all registered players (not dropped)
+    const { data: registrations } = await supabase
+      .from("tournament_registrations")
+      .select("player_id")
+      .eq("tournament_id", tournamentId)
+      .neq("status", "dropped")
+      .neq("status", "disqualified")
 
-  if (!registrations || registrations.length < 2) {
-    return { error: "Need at least 2 active players" }
-  }
+    if (!registrations || registrations.length < 2) {
+      return { error: "Need at least 2 active players" }
+    }
 
-  // Get player stats for pairing
-  const { data: stats } = await supabase
-    .from("tournament_player_stats")
-    .select("*")
-    .eq("tournament_id", tournamentId)
-    .eq("phase_id", phaseId)
+    // Get player stats for pairing
+    const { data: stats } = await supabase
+      .from("tournament_player_stats")
+      .select("*")
+      .eq("tournament_id", tournamentId)
+      .eq("phase_id", phaseId)
 
-  // Get previous matches to track opponents
-  const { data: previousMatches } = await supabase
-    .from("tournament_matches")
-    .select("player1_id, player2_id")
-    .eq("tournament_id", tournamentId)
-    .not("player1_id", "is", null)
-    .not("player2_id", "is", null)
+    // Get previous matches to track opponents
+    const { data: previousMatches } = await supabase
+      .from("tournament_matches")
+      .select("player1_id, player2_id")
+      .eq("tournament_id", tournamentId)
+      .not("player1_id", "is", null)
+      .not("player2_id", "is", null)
 
-  // Build player data for Swiss pairing
-  const playerMap = new Map<string, SwissPlayer>()
-  for (const reg of registrations) {
-    const playerStats = stats?.find(s => s.player_id === reg.player_id)
-    const opponents: string[] = []
-    
-    // Find all previous opponents
-    for (const match of previousMatches ?? []) {
-      if (match.player1_id === reg.player_id && match.player2_id) {
-        opponents.push(match.player2_id)
-      } else if (match.player2_id === reg.player_id && match.player1_id) {
-        opponents.push(match.player1_id)
+    // Build player data for Swiss pairing
+    const playerMap = new Map<string, SwissPlayer>()
+    for (const reg of registrations) {
+      const playerStats = stats?.find(s => s.player_id === reg.player_id)
+      const opponents: string[] = []
+      
+      // Find all previous opponents
+      for (const match of previousMatches ?? []) {
+        if (match.player1_id === reg.player_id && match.player2_id) {
+          opponents.push(match.player2_id)
+        } else if (match.player2_id === reg.player_id && match.player1_id) {
+          opponents.push(match.player1_id)
+        }
+      }
+
+      playerMap.set(reg.player_id, {
+        id: reg.player_id,
+        points: playerStats?.points ?? 0,
+        opponents,
+        hasHadBye: (playerStats?.byes ?? 0) > 0,
+      })
+    }
+
+    const players = Array.from(playerMap.values())
+    const pairings = generateSwissPairings(players)
+
+    // Create round
+    const { data: round, error: roundError } = await supabase
+      .from("tournament_rounds")
+      .insert({
+        phase_id: phaseId,
+        tournament_id: tournamentId,
+        round_number: roundNumber,
+        round_type: "swiss",
+        status: "pending",
+        time_limit_minutes: 50,
+      })
+      .select()
+      .single()
+
+    if (roundError || !round) return { error: roundError?.message ?? "Failed to create round" }
+
+    // Create matches
+    const matchInserts = pairings.map(([p1, p2], idx) => ({
+      round_id: round.id,
+      tournament_id: tournamentId,
+      table_number: idx + 1,
+      player1_id: p1,
+      player2_id: p2,
+      is_bye: p2 === null,
+      status: "pending" as const,
+    }))
+
+    const { error: matchError } = await supabase
+      .from("tournament_matches")
+      .insert(matchInserts)
+
+    if (matchError) return { error: matchError.message }
+
+    // Initialize player stats for new players
+    for (const reg of registrations) {
+      const existingStats = stats?.find(s => s.player_id === reg.player_id)
+      if (!existingStats) {
+        await supabase.from("tournament_player_stats").insert({
+          tournament_id: tournamentId,
+          phase_id: phaseId,
+          player_id: reg.player_id,
+        })
       }
     }
 
-    playerMap.set(reg.player_id, {
-      id: reg.player_id,
-      points: playerStats?.points ?? 0,
-      opponents,
-      hasHadBye: (playerStats?.byes ?? 0) > 0,
-    })
-  }
+    // Auto-complete bye matches
+    const byeMatches = pairings.filter(([, p2]) => p2 === null)
+    for (const [byePlayer] of byeMatches) {
+      const { data: byeMatch } = await supabase
+        .from("tournament_matches")
+        .select("id")
+        .eq("round_id", round.id)
+        .eq("player1_id", byePlayer)
+        .eq("is_bye", true)
+        .single()
 
-  const players = Array.from(playerMap.values())
-  const pairings = generateSwissPairings(players)
+      if (byeMatch) {
+        await supabase.from("tournament_matches").update({
+          winner_id: byePlayer,
+          status: "confirmed",
+          confirmed_at: new Date().toISOString(),
+        }).eq("id", byeMatch.id)
 
-  // Create round
-  const { data: round, error: roundError } = await supabase
-    .from("tournament_rounds")
-    .insert({
-      phase_id: phaseId,
+        // Update player stats for bye - fetch current stats first
+        const { data: currentStats } = await supabase
+          .from("tournament_player_stats")
+          .select("match_wins, byes, points")
+          .eq("tournament_id", tournamentId)
+          .eq("phase_id", phaseId)
+          .eq("player_id", byePlayer)
+          .single()
+
+        if (currentStats) {
+          await supabase.from("tournament_player_stats").update({
+            match_wins: (currentStats.match_wins ?? 0) + 1,
+            byes: (currentStats.byes ?? 0) + 1,
+            points: (currentStats.points ?? 0) + phase.win_points,
+          }).eq("tournament_id", tournamentId).eq("phase_id", phaseId).eq("player_id", byePlayer)
+        }
+      }
+    }
+
+    // Create announcement
+    await supabase.from("tournament_announcements").insert({
       tournament_id: tournamentId,
-      round_number: roundNumber,
-      round_type: "swiss",
-      status: "pending",
-      time_limit_minutes: 50,
+      author_id: userId,
+      message: `Round ${round.round_number} pairings are now posted! Check the Matches tab to find your opponent and table number.`,
+      priority: "high",
     })
-    .select()
-    .single()
 
-  if (roundError || !round) return { error: roundError?.message ?? "Failed to create round" }
-
-  // Create matches
-  const matchInserts = pairings.map(([p1, p2], idx) => ({
-    round_id: round.id,
-    tournament_id: tournamentId,
-    table_number: idx + 1,
-    player1_id: p1,
-    player2_id: p2,
-    is_bye: p2 === null,
-    status: "pending" as const,
-  }))
-
-  const { error: matchError } = await supabase
-    .from("tournament_matches")
-    .insert(matchInserts)
-
-  if (matchError) return { error: matchError.message }
-
-  // Initialize player stats for new players
-  for (const reg of registrations) {
-    const existingStats = stats?.find(s => s.player_id === reg.player_id)
-    if (!existingStats) {
-      await supabase.from("tournament_player_stats").insert({
-        tournament_id: tournamentId,
-        phase_id: phaseId,
-        player_id: reg.player_id,
-      })
-    }
+    revalidatePath(`/dashboard/tournaments/${tournamentId}`)
+    return { success: true, roundId: round.id }
+  } catch (err) {
+    console.error("[v0] createSwissRound exception:", err)
+    return { error: `Unexpected error: ${err instanceof Error ? err.message : String(err)}` }
   }
-
-  // Auto-complete bye matches
-  const byeMatches = pairings.filter(([, p2]) => p2 === null)
-  for (const [byePlayer] of byeMatches) {
-    const { data: byeMatch } = await supabase
-      .from("tournament_matches")
-      .select("id")
-      .eq("round_id", round.id)
-      .eq("player1_id", byePlayer)
-      .eq("is_bye", true)
-      .single()
-
-    if (byeMatch) {
-      await supabase.from("tournament_matches").update({
-        winner_id: byePlayer,
-        status: "confirmed",
-        confirmed_at: new Date().toISOString(),
-      }).eq("id", byeMatch.id)
-
-      // Update player stats for bye
-      await supabase.from("tournament_player_stats").update({
-        match_wins: supabase.rpc("increment", { x: 1 }),
-        byes: supabase.rpc("increment", { x: 1 }),
-        points: supabase.rpc("increment", { x: phase.win_points }),
-      } as never).eq("tournament_id", tournamentId).eq("phase_id", phaseId).eq("player_id", byePlayer)
-    }
-  }
-
-  // Create announcement
-  await supabase.from("tournament_announcements").insert({
-    tournament_id: tournamentId,
-    author_id: userId,
-    message: `Round ${round.round_number} pairings are now posted! Check the Matches tab to find your opponent and table number.`,
-    priority: "high",
-  })
-
-  revalidatePath(`/dashboard/tournaments/${tournamentId}`)
-  return { success: true, roundId: round.id }
 }
 
 export async function regeneratePairings(tournamentId: string, roundId: string) {
@@ -836,18 +855,19 @@ export async function updateTournamentStatus(tournamentId: string, status: Tourn
 }
 
 export async function startTournament(tournamentId: string) {
-  const auth = await requireTournamentOrganizer(tournamentId)
-  if ("error" in auth) return auth
-  const { supabase, userId } = auth
-  
-  // Get tournament details for format
-  const { data: tournament } = await supabase
-    .from("tournaments")
-    .select("format")
-    .eq("id", tournamentId)
-    .single()
-  
-  if (!tournament) return { error: "Tournament not found" }
+  try {
+    const auth = await requireTournamentOrganizer(tournamentId)
+    if ("error" in auth) return auth
+    const { supabase, userId } = auth
+    
+    // Get tournament details for format
+    const { data: tournament } = await supabase
+      .from("tournaments")
+      .select("format")
+      .eq("id", tournamentId)
+      .single()
+    
+    if (!tournament) return { error: "Tournament not found" }
   
   // Check if tournament has phases, if not create a default one
   const { data: phases } = await supabase
@@ -903,16 +923,20 @@ export async function startTournament(tournamentId: string) {
   if (error) return { error: error.message }
 
   // Create announcement
-  await supabase.from("tournament_announcements").insert({
-    tournament_id: tournamentId,
-    author_id: userId,
-    message: `The tournament has officially STARTED! Please check the Matches tab for your first round pairing.`,
-    priority: "high",
-  })
+    await supabase.from("tournament_announcements").insert({
+      tournament_id: tournamentId,
+      author_id: userId,
+      message: `The tournament has officially STARTED! Please check the Matches tab for your first round pairing.`,
+      priority: "high",
+    })
 
-  revalidatePath(`/dashboard/tournaments/${tournamentId}`)
-  revalidatePath(`/esports/tournaments`)
-  return { success: true }
+    revalidatePath(`/dashboard/tournaments/${tournamentId}`)
+    revalidatePath(`/esports/tournaments`)
+    return { success: true }
+  } catch (err) {
+    console.error("[v0] startTournament exception:", err)
+    return { error: `Unexpected error: ${err instanceof Error ? err.message : String(err)}` }
+  }
 }
 
 export async function completeTournament(tournamentId: string) {
@@ -1729,7 +1753,7 @@ export async function addTimeToRound(tournamentId: string, roundId: string, minu
   return { success: true }
 }
 
-// ════════════════════════════════════════════��═════════════════════════════════
+// ════════════════════════════════════════════��═══════���═════════════════════════
 // Manual Match Management
 // ══════════════════��═══════════════════════════════════════════════════════════
 
@@ -1901,9 +1925,9 @@ export async function updateMatchPlayers(
   return { success: true }
 }
 
-// ═══��═════════════════════════════════════════════════════════���═════��══════════
+// ═══��══════���══════════════════════════════════════════════════���═════��══════════
 // Decklist Management
-// ══════════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════���═══════════════════════════════════════════════
 
 export async function submitDecklist(
   tournamentId: string,
@@ -2223,7 +2247,7 @@ export async function getTournamentMatches(tournamentId: string, roundId?: strin
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Leaderboard & Stats Updates
-// ═════════════════════════════��════════════════════════════════════════════════
+// ═══════════════════════════���═��════════════════════════════════════════════════
 
 // Point system for placements
 const PLACEMENT_POINTS: Record<number, number> = {
