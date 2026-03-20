@@ -267,12 +267,22 @@ export async function createSwissRound(tournamentId: string, phaseId: string) {
         confirmed_at: new Date().toISOString(),
       }).eq("id", byeMatch.id)
 
-      // Update player stats for bye
-      await supabase.from("tournament_player_stats").update({
-        match_wins: supabase.rpc("increment", { x: 1 }),
-        byes: supabase.rpc("increment", { x: 1 }),
-        points: supabase.rpc("increment", { x: phase.win_points }),
-      } as never).eq("tournament_id", tournamentId).eq("phase_id", phaseId).eq("player_id", byePlayer)
+      // Update player stats for bye - fetch current stats first
+      const { data: currentStats } = await supabase
+        .from("tournament_player_stats")
+        .select("match_wins, byes, points")
+        .eq("tournament_id", tournamentId)
+        .eq("phase_id", phaseId)
+        .eq("player_id", byePlayer)
+        .single()
+
+      if (currentStats) {
+        await supabase.from("tournament_player_stats").update({
+          match_wins: (currentStats.match_wins ?? 0) + 1,
+          byes: (currentStats.byes ?? 0) + 1,
+          points: (currentStats.points ?? 0) + phase.win_points,
+        }).eq("tournament_id", tournamentId).eq("phase_id", phaseId).eq("player_id", byePlayer)
+      }
     }
   }
 
@@ -1903,7 +1913,7 @@ export async function updateMatchPlayers(
 
 // ═══��═════════════════════════════════════════════════════════���═════��══════════
 // Decklist Management
-// ══════════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════���═══════════════════════════════════════════════
 
 export async function submitDecklist(
   tournamentId: string,
