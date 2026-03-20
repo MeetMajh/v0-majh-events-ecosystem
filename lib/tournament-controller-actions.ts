@@ -107,13 +107,13 @@ export async function createTournamentPhase(
 
 export async function getTournamentPhases(tournamentId: string) {
   const supabase = createAdminClient()
-
+  
   const { data: phases } = await supabase
     .from("tournament_phases")
     .select("*")
     .eq("tournament_id", tournamentId)
     .order("phase_order", { ascending: true })
-
+  
   return phases ?? []
 }
 
@@ -1997,7 +1997,7 @@ export async function getTournamentDecklists(tournamentId: string) {
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Registration Codes & Preregistrations
-// ══════════════════════════════════════════════════════���═══════════════════════
+// ═══════════════════════════════════════════════��══════���═══════════════════════
 
 export async function createRegistrationCode(
   tournamentId: string,
