@@ -82,160 +82,45 @@ export async function createTournamentPhase(
   if ("error" in auth) return auth
   const { supabase } = auth
 
-  const { error } = await supabase.from("tournament_phases").insert({
-    tournament_id: tournamentId,
-    name: data.name,
-    phase_type: data.phaseType,
-    phase_order: data.phaseOrder,
-    best_of: data.bestOf ?? 3,
-    win_points: data.winPoints ?? 3,
-    draw_points: data.drawPoints ?? 1,
-    loss_points: data.lossPoints ?? 0,
-    rounds_count: data.roundsCount,
-    advancement_count: data.advancementCount,
-  })
-
-  if (error) return { error: error.message }
-  revalidatePath(`/dashboard/tournaments/${tournamentId}`)
-  return { success: true }
-}
-
-export async function updateTournamentPhase(
-  phaseId: string,
-  data: Partial<{
-    name: string
-    phaseType: PhaseType
-    bestOf: number
-    winPoints: number
-    drawPoints: number
-    lossPoints: number
-    roundsCount: number
-    advancementCount: number
-    isCurrent: boolean
-    isComplete: boolean
-  }>
-) {
-  const supabase = await createClient()
-  
-  // Get tournament ID for auth check
-  const { data: phase } = await supabase
+  const { data: phase, error } = await supabase
     .from("tournament_phases")
-    .select("tournament_id")
-    .eq("id", phaseId)
+    .insert({
+      tournament_id: tournamentId,
+      name: data.name,
+      phase_type: data.phaseType,
+      phase_order: data.phaseOrder,
+      best_of: data.bestOf ?? 1,
+      win_points: data.winPoints ?? 3,
+      draw_points: data.drawPoints ?? 1,
+      loss_points: data.lossPoints ?? 0,
+      rounds_count: data.roundsCount,
+      advancement_count: data.advancementCount,
+    })
+    .select()
     .single()
 
-  if (!phase) return { error: "Phase not found" }
-
-  const auth = await requireTournamentOrganizer(phase.tournament_id)
-  if ("error" in auth) return auth
-
-  const updateData: Record<string, unknown> = {}
-  if (data.name !== undefined) updateData.name = data.name
-  if (data.phaseType !== undefined) updateData.phase_type = data.phaseType
-  if (data.bestOf !== undefined) updateData.best_of = data.bestOf
-  if (data.winPoints !== undefined) updateData.win_points = data.winPoints
-  if (data.drawPoints !== undefined) updateData.draw_points = data.drawPoints
-  if (data.lossPoints !== undefined) updateData.loss_points = data.lossPoints
-  if (data.roundsCount !== undefined) updateData.rounds_count = data.roundsCount
-  if (data.advancementCount !== undefined) updateData.advancement_count = data.advancementCount
-  if (data.isCurrent !== undefined) updateData.is_current = data.isCurrent
-  if (data.isComplete !== undefined) updateData.is_complete = data.isComplete
-
-  const { error } = await supabase
-    .from("tournament_phases")
-    .update(updateData)
-    .eq("id", phaseId)
-
   if (error) return { error: error.message }
-  revalidatePath(`/dashboard/tournaments/${phase.tournament_id}`)
-  return { success: true }
+
+  revalidatePath(`/dashboard/tournaments/${tournamentId}`)
+  return { success: true, phase }
 }
 
 export async function getTournamentPhases(tournamentId: string) {
-  const supabase = await createClient()
-  const { data } = await supabase
+  const supabase = createAdminClient()
+
+  const { data: phases } = await supabase
     .from("tournament_phases")
     .select("*")
     .eq("tournament_id", tournamentId)
-    .order("phase_order")
-  return data ?? []
+    .order("phase_order", { ascending: true })
+
+  return phases ?? []
 }
-
-// ── Swiss Pairing Algorithm ──
-
-interface SwissPlayer {
-  id: string
-  points: number
-  opponents: string[]
-  hasHadBye: boolean
-}
-
-function generateSwissPairings(players: SwissPlayer[]): Array<[string, string | null]> {
-  // Sort players by points (descending), then shuffle within same points for randomness
-  const sortedPlayers = [...players].sort((a, b) => {
-    if (b.points !== a.points) return b.points - a.points
-    return Math.random() - 0.5
-  })
-
-  const paired: Set<string> = new Set()
-  const pairings: Array<[string, string | null]> = []
-
-  for (const player of sortedPlayers) {
-    if (paired.has(player.id)) continue
-
-    // Find best opponent: similar points, haven't played before
-    let bestOpponent: SwissPlayer | null = null
-    let bestScore = -Infinity
-
-    for (const candidate of sortedPlayers) {
-      if (candidate.id === player.id) continue
-      if (paired.has(candidate.id)) continue
-      if (player.opponents.includes(candidate.id)) continue // Avoid rematches
-
-      // Score based on point similarity (prefer similar points)
-      const pointDiff = Math.abs(player.points - candidate.points)
-      const score = 1000 - pointDiff * 10
-
-      if (score > bestScore) {
-        bestScore = score
-        bestOpponent = candidate
-      }
-    }
-
-    if (bestOpponent) {
-      pairings.push([player.id, bestOpponent.id])
-      paired.add(player.id)
-      paired.add(bestOpponent.id)
-    }
-  }
-
-  // Assign bye to unpaired player (odd number of players)
-  for (const player of sortedPlayers) {
-    if (!paired.has(player.id)) {
-      // Prefer giving bye to player who hasn't had one
-      if (!player.hasHadBye) {
-        pairings.push([player.id, null])
-        paired.add(player.id)
-      }
-    }
-  }
-
-  // If still someone unpaired (everyone had a bye), give bye anyway
-  for (const player of sortedPlayers) {
-    if (!paired.has(player.id)) {
-      pairings.push([player.id, null])
-    }
-  }
-
-  return pairings
-}
-
-// ── Round Management ──
 
 export async function createSwissRound(tournamentId: string, phaseId: string) {
   const auth = await requireTournamentOrganizer(tournamentId)
   if ("error" in auth) return auth
-  const { supabase } = auth
+  const { supabase, userId } = auth
 
   // Get phase settings
   const { data: phase } = await supabase
@@ -328,7 +213,6 @@ export async function createSwissRound(tournamentId: string, phaseId: string) {
   // Create matches
   const matchInserts = pairings.map(([p1, p2], idx) => ({
     round_id: round.id,
-    phase_id: phaseId,
     tournament_id: tournamentId,
     table_number: idx + 1,
     player1_id: p1,
@@ -476,7 +360,6 @@ export async function regeneratePairings(tournamentId: string, roundId: string) 
   // Create matches
   const matchInserts = pairings.map(([p1, p2], idx) => ({
     round_id: roundId,
-    phase_id: round.phase_id,
     tournament_id: tournamentId,
     table_number: idx + 1,
     player1_id: p1,
@@ -2003,7 +1886,7 @@ export async function updateMatchPlayers(
   return { success: true }
 }
 
-// ═══��═══════════════════════════════════════════════════════════════��══════════
+// ═══��═════════════════════════════════════════════════════════���═════��══════════
 // Decklist Management
 // ══════════════════════════════════════════════════════════════════════════════
 

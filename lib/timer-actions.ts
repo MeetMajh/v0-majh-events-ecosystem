@@ -5,10 +5,13 @@ import { revalidatePath } from "next/cache"
 
 async function requireTournamentOrganizer(tournamentId: string) {
   const supabase = await createClient()
+  const adminClient = createAdminClient()
+  
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: "Unauthorized" }
 
-  const { data: tournament } = await supabase
+  // Use admin client to bypass RLS
+  const { data: tournament } = await adminClient
     .from("tournaments")
     .select("organizer_id")
     .eq("id", tournamentId)
@@ -16,7 +19,7 @@ async function requireTournamentOrganizer(tournamentId: string) {
 
   if (!tournament) return { error: "Tournament not found" }
   if (tournament.organizer_id !== user.id) {
-    const { data: staff } = await supabase
+    const { data: staff } = await adminClient
       .from("tournament_staff")
       .select("role")
       .eq("tournament_id", tournamentId)
@@ -26,7 +29,7 @@ async function requireTournamentOrganizer(tournamentId: string) {
     if (!staff) return { error: "Not authorized" }
   }
 
-  return { supabase: createAdminClient(), userId: user.id }
+  return { supabase: adminClient, userId: user.id }
 }
 
 export async function resetRoundTimer(tournamentId: string, roundId: string) {
