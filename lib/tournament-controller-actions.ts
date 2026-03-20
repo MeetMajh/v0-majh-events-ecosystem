@@ -931,7 +931,8 @@ export async function getTournamentStandings(tournamentId: string, phaseId?: str
 }
 
 export async function getCurrentRound(tournamentId: string) {
-  const supabase = await createClient()
+  // Use admin client to bypass RLS
+  const supabase = createAdminClient()
 
   const { data: round } = await supabase
     .from("tournament_rounds")
@@ -944,15 +945,47 @@ export async function getCurrentRound(tournamentId: string) {
 
   if (!round) return null
 
-  const { data: matches } = await supabase
+  // Get matches without profile join
+  const { data: rawMatches } = await supabase
     .from("tournament_matches")
-    .select("*, player1:profiles!tournament_matches_player1_id_fkey(id, display_name, avatar_url), player2:profiles!tournament_matches_player2_id_fkey(id, display_name, avatar_url)")
+    .select("*")
     .eq("round_id", round.id)
     .order("table_number")
 
+  if (!rawMatches?.length) {
+    return { ...round, matches: [] }
+  }
+
+  // Get all player IDs from matches
+  const playerIds = new Set<string>()
+  rawMatches.forEach(m => {
+    if (m.player1_id) playerIds.add(m.player1_id)
+    if (m.player2_id) playerIds.add(m.player2_id)
+  })
+
+  // Fetch profiles separately
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("id, first_name, last_name")
+    .in("id", Array.from(playerIds))
+
+  // Create profile lookup
+  const profileMap = new Map(profiles?.map(p => [p.id, {
+    id: p.id,
+    display_name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unknown',
+    avatar_url: null
+  }]) || [])
+
+  // Map matches with player data
+  const matches = rawMatches.map(match => ({
+    ...match,
+    player1: match.player1_id ? profileMap.get(match.player1_id) || null : null,
+    player2: match.player2_id ? profileMap.get(match.player2_id) || null : null,
+  }))
+
   return {
     ...round,
-    matches: matches ?? [],
+    matches,
   }
 }
 
