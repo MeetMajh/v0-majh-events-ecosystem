@@ -654,7 +654,7 @@ const handleAddPlayer = () => {
                       </DropdownMenuItem>
                     </>
                   )}
-                  {currentRound?.status === "active" && (
+                  {(currentRound?.status === "active" || currentRound?.status === "paused") && (
                     <>
                       <DropdownMenuItem onClick={handleCompleteRound}>
                         <CheckCircle2 className="mr-2 h-4 w-4" />
@@ -716,8 +716,8 @@ const handleAddPlayer = () => {
           {activeSection === "overview" && (
             <div className="space-y-6">
               {/* Timer Card */}
-              {currentRound && currentRound.status === "active" && (
-                <Card className="border-2 border-primary/20">
+              {currentRound && (currentRound.status === "active" || currentRound.status === "paused") && (
+                <Card className={cn("border-2", currentRound.status === "paused" ? "border-destructive/40" : "border-primary/20")}>
                   <CardContent className="flex items-center justify-between py-6">
                     <div className="flex items-center gap-4">
                       <div className={cn(

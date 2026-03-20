@@ -9,7 +9,7 @@ import { redirect } from "next/navigation"
 export type PhaseType = "swiss" | "single_elimination" | "double_elimination" | "round_robin"
 export type TournamentStatus = "draft" | "published" | "registration_closed" | "in_progress" | "complete" | "cancelled"
 export type MatchStatus = "pending" | "in_progress" | "player1_reported" | "player2_reported" | "confirmed" | "disputed"
-export type RoundStatus = "pending" | "active" | "complete"
+export type RoundStatus = "pending" | "active" | "paused" | "complete"
 
 export interface PlayerStanding {
   playerId: string
@@ -382,6 +382,14 @@ export async function createSwissRound(tournamentId: string, phaseId: string) {
     }
   }
 
+  // Create announcement
+  await supabase.from("tournament_announcements").insert({
+    tournament_id: tournamentId,
+    author_id: userId,
+    message: `Round ${round.round_number} pairings are now posted! Check the Matches tab to find your opponent and table number.`,
+    priority: "high",
+  })
+
   revalidatePath(`/dashboard/tournaments/${tournamentId}`)
   return { success: true, roundId: round.id }
 }
@@ -500,7 +508,7 @@ export async function startRound(roundId: string) {
 
   const { data: round } = await supabase
     .from("tournament_rounds")
-    .select("tournament_id, time_limit_minutes")
+    .select("tournament_id, time_limit_minutes, round_number")
     .eq("id", roundId)
     .single()
 
@@ -508,6 +516,7 @@ export async function startRound(roundId: string) {
 
   const auth = await requireTournamentOrganizer(round.tournament_id)
   if ("error" in auth) return auth
+  const { userId } = auth
 
   const now = new Date()
   const endTime = new Date(now.getTime() + (round.time_limit_minutes ?? 50) * 60 * 1000)
@@ -530,6 +539,14 @@ export async function startRound(roundId: string) {
     .eq("round_id", roundId)
     .eq("status", "pending")
 
+  // Create announcement
+  await supabase.from("tournament_announcements").insert({
+    tournament_id: round.tournament_id,
+    author_id: userId,
+    message: `Round ${round.round_number} has STARTED! You have ${round.time_limit_minutes ?? 50} minutes. Find your table and begin your match.`,
+    priority: "high",
+  })
+
   revalidatePath(`/dashboard/tournaments/${round.tournament_id}`)
   return { success: true }
 }
@@ -539,7 +556,7 @@ export async function completeRound(roundId: string) {
 
   const { data: round } = await supabase
     .from("tournament_rounds")
-    .select("tournament_id, phase_id")
+    .select("tournament_id, phase_id, round_number")
     .eq("id", roundId)
     .single()
 
@@ -547,6 +564,7 @@ export async function completeRound(roundId: string) {
 
   const auth = await requireTournamentOrganizer(round.tournament_id)
   if ("error" in auth) return auth
+  const { userId } = auth
 
   // Check all matches are confirmed
   const { data: matches } = await supabase
@@ -571,6 +589,14 @@ export async function completeRound(roundId: string) {
 
   // Recalculate standings
   await recalculateStandings(round.tournament_id, round.phase_id)
+
+  // Create announcement
+  await supabase.from("tournament_announcements").insert({
+    tournament_id: round.tournament_id,
+    author_id: userId,
+    message: `Round ${round.round_number} is now COMPLETE. Standings have been updated. Please wait for the next round to begin.`,
+    priority: "normal",
+  })
 
   revalidatePath(`/dashboard/tournaments/${round.tournament_id}`)
   return { success: true }
@@ -836,7 +862,14 @@ export async function recalculateStandings(tournamentId: string, phaseId: string
 export async function dropPlayer(tournamentId: string, playerId: string, roundNumber?: number) {
   const auth = await requireTournamentOrganizer(tournamentId)
   if ("error" in auth) return auth
-  const { supabase } = auth
+  const { supabase, userId } = auth
+
+  // Get player name for announcement
+  const { data: player } = await supabase
+    .from("profiles")
+    .select("display_name")
+    .eq("id", playerId)
+    .single()
 
   // Update registration status
   const { error: regError } = await supabase
@@ -860,6 +893,14 @@ export async function dropPlayer(tournamentId: string, playerId: string, roundNu
     .eq("tournament_id", tournamentId)
     .eq("player_id", playerId)
 
+  // Create announcement
+  await supabase.from("tournament_announcements").insert({
+    tournament_id: tournamentId,
+    author_id: userId,
+    message: `Player ${player?.display_name || 'Unknown'} has dropped from the tournament${roundNumber ? ` after round ${roundNumber}` : ''}.`,
+    priority: "normal",
+  })
+
   revalidatePath(`/dashboard/tournaments/${tournamentId}`)
   return { success: true }
 }
@@ -869,7 +910,7 @@ export async function dropPlayer(tournamentId: string, playerId: string, roundNu
 export async function updateTournamentStatus(tournamentId: string, status: TournamentStatus) {
   const auth = await requireTournamentOrganizer(tournamentId)
   if ("error" in auth) return auth
-  const { supabase } = auth
+  const { supabase, userId } = auth
 
   const { error } = await supabase
     .from("tournaments")
@@ -877,6 +918,24 @@ export async function updateTournamentStatus(tournamentId: string, status: Tourn
     .eq("id", tournamentId)
 
   if (error) return { error: error.message }
+
+  // Create announcement for significant status changes
+  const statusMessages: Record<string, string> = {
+    registration: "Registration is now OPEN. New players can join the tournament.",
+    registration_closed: "Registration is now CLOSED. No new players can join.",
+    in_progress: "The tournament is now IN PROGRESS.",
+    cancelled: "The tournament has been CANCELLED.",
+    completed: "The tournament has been marked as COMPLETE.",
+  }
+  
+  if (statusMessages[status]) {
+    await supabase.from("tournament_announcements").insert({
+      tournament_id: tournamentId,
+      author_id: userId,
+      message: statusMessages[status],
+      priority: status === "cancelled" ? "high" : "normal",
+    })
+  }
 
   revalidatePath(`/dashboard/tournaments/${tournamentId}`)
   revalidatePath(`/esports/tournaments`)
@@ -950,6 +1009,14 @@ export async function startTournament(tournamentId: string) {
 
   if (error) return { error: error.message }
 
+  // Create announcement
+  await supabase.from("tournament_announcements").insert({
+    tournament_id: tournamentId,
+    author_id: userId,
+    message: `The tournament has officially STARTED! Please check the Matches tab for your first round pairing.`,
+    priority: "high",
+  })
+
   revalidatePath(`/dashboard/tournaments/${tournamentId}`)
   revalidatePath(`/esports/tournaments`)
   return { success: true }
@@ -958,7 +1025,7 @@ export async function startTournament(tournamentId: string) {
 export async function completeTournament(tournamentId: string) {
   const auth = await requireTournamentOrganizer(tournamentId)
   if ("error" in auth) return auth
-  const { supabase } = auth
+  const { supabase, userId } = auth
 
   // Mark all phases as complete
   await supabase
@@ -976,6 +1043,14 @@ export async function completeTournament(tournamentId: string) {
 
   // Award tournament results and update leaderboards
   await awardTournamentResults(tournamentId)
+
+  // Create announcement
+  await supabase.from("tournament_announcements").insert({
+    tournament_id: tournamentId,
+    author_id: userId,
+    message: `The tournament is now COMPLETE! Thank you for participating. Check the Standings tab for final results.`,
+    priority: "high",
+  })
 
   revalidatePath(`/dashboard/tournaments/${tournamentId}`)
   revalidatePath(`/esports/tournaments`)
@@ -1048,7 +1123,7 @@ export async function getCurrentRound(tournamentId: string) {
     .from("tournament_rounds")
     .select("*, tournament_phases(*)")
     .eq("tournament_id", tournamentId)
-    .in("status", ["pending", "active"])
+    .in("status", ["pending", "active", "paused"])
     .order("round_number", { ascending: false })
     .limit(1)
     .single()
@@ -1756,7 +1831,7 @@ export async function addTimeToRound(tournamentId: string, roundId: string, minu
   return { success: true }
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════��═════════════════════════════════
 // Manual Match Management
 // ══════════════════��═══════════════════════════════════════════════════════════
 
@@ -1928,7 +2003,7 @@ export async function updateMatchPlayers(
   return { success: true }
 }
 
-// ═══════════════════════════════════════════════════════════════════��══════════
+// ═══��═══════════════════════════════════════════════════════════════��══════════
 // Decklist Management
 // ══════════════════════════════════════════════════════════════════════════════
 
@@ -2250,7 +2325,7 @@ export async function getTournamentMatches(tournamentId: string, roundId?: strin
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Leaderboard & Stats Updates
-// ══════════════════════════════════════════════════════════════════════════════
+// ═════════════════════════════��════════════════════════════════════════════════
 
 // Point system for placements
 const PLACEMENT_POINTS: Record<number, number> = {
