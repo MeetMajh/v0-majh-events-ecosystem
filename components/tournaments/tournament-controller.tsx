@@ -566,7 +566,7 @@ const handleAddPlayer = () => {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
-                  {tournament.status === "published" && (
+                  {(tournament.status === "published" || tournament.status === "registration") && (
                     <DropdownMenuItem onClick={handleStartTournament} disabled={registeredCount < 2}>
                       <Play className="mr-2 h-4 w-4" />
                       Start Tournament
@@ -724,7 +724,7 @@ const handleAddPlayer = () => {
                 </CardHeader>
                 <CardContent>
                   <div className="flex flex-wrap gap-3">
-                    {tournament.status === "published" && (
+                    {(tournament.status === "published" || tournament.status === "registration") && (
                       <Button onClick={handleStartTournament} disabled={isPending || registeredCount < 2}>
                         <Play className="mr-2 h-4 w-4" />
                         Start Tournament
