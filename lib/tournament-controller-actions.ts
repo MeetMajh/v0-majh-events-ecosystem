@@ -78,7 +78,7 @@ export async function createTournamentPhase(
     advancementCount?: number
   }
 ) {
-const auth = await requireTournamentOrganizer(tournamentId)
+  const auth = await requireTournamentOrganizer(tournamentId)
   if ("error" in auth) return auth
   const { supabase, userId } = auth
 
