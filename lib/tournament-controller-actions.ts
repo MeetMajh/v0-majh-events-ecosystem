@@ -106,15 +106,25 @@ export async function createTournamentPhase(
 }
 
 export async function getTournamentPhases(tournamentId: string) {
-  const supabase = createAdminClient()
-  
-  const { data: phases } = await supabase
-    .from("tournament_phases")
-    .select("*")
-    .eq("tournament_id", tournamentId)
-    .order("phase_order", { ascending: true })
-  
-  return phases ?? []
+  try {
+    const supabase = createAdminClient()
+    
+    const { data: phases, error } = await supabase
+      .from("tournament_phases")
+      .select("*")
+      .eq("tournament_id", tournamentId)
+      .order("phase_order", { ascending: true })
+    
+    if (error) {
+      console.error("[v0] getTournamentPhases error:", error)
+      return []
+    }
+    
+    return phases ?? []
+  } catch (err) {
+    console.error("[v0] getTournamentPhases exception:", err)
+    return []
+  }
 }
 
 export async function createSwissRound(tournamentId: string, phaseId: string) {
@@ -999,61 +1009,66 @@ export async function getTournamentStandings(tournamentId: string, phaseId?: str
 }
 
 export async function getCurrentRound(tournamentId: string) {
-  // Use admin client to bypass RLS
-  const supabase = createAdminClient()
+  try {
+    // Use admin client to bypass RLS
+    const supabase = createAdminClient()
+    
+    const { data: round, error: roundError } = await supabase
+      .from("tournament_rounds")
+      .select("*, tournament_phases(*)")
+      .eq("tournament_id", tournamentId)
+      .in("status", ["pending", "active", "paused"])
+      .order("round_number", { ascending: false })
+      .limit(1)
+      .single()
+    
+    if (roundError || !round) return null
+    
+    // Get matches without profile join
+    const { data: rawMatches } = await supabase
+      .from("tournament_matches")
+      .select("*")
+      .eq("round_id", round.id)
+      .order("table_number")
+    
+    if (!rawMatches?.length) {
+      return { ...round, matches: [] }
+    }
+    
+    // Get all player IDs from matches
+    const playerIds = new Set<string>()
+    rawMatches.forEach(m => {
+      if (m.player1_id) playerIds.add(m.player1_id)
+      if (m.player2_id) playerIds.add(m.player2_id)
+    })
+    
+    // Fetch profiles separately
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, first_name, last_name")
+      .in("id", Array.from(playerIds))
 
-  const { data: round } = await supabase
-    .from("tournament_rounds")
-    .select("*, tournament_phases(*)")
-    .eq("tournament_id", tournamentId)
-    .in("status", ["pending", "active", "paused"])
-    .order("round_number", { ascending: false })
-    .limit(1)
-    .single()
+    // Create profile lookup
+    const profileMap = new Map(profiles?.map(p => [p.id, {
+      id: p.id,
+      display_name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unknown',
+      avatar_url: null
+    }]) || [])
 
-  if (!round) return null
+    // Map matches with player data
+    const matches = rawMatches.map(match => ({
+      ...match,
+      player1: match.player1_id ? profileMap.get(match.player1_id) || null : null,
+      player2: match.player2_id ? profileMap.get(match.player2_id) || null : null,
+    }))
 
-  // Get matches without profile join
-  const { data: rawMatches } = await supabase
-    .from("tournament_matches")
-    .select("*")
-    .eq("round_id", round.id)
-    .order("table_number")
-
-  if (!rawMatches?.length) {
-    return { ...round, matches: [] }
-  }
-
-  // Get all player IDs from matches
-  const playerIds = new Set<string>()
-  rawMatches.forEach(m => {
-    if (m.player1_id) playerIds.add(m.player1_id)
-    if (m.player2_id) playerIds.add(m.player2_id)
-  })
-
-  // Fetch profiles separately
-  const { data: profiles } = await supabase
-    .from("profiles")
-    .select("id, first_name, last_name")
-    .in("id", Array.from(playerIds))
-
-  // Create profile lookup
-  const profileMap = new Map(profiles?.map(p => [p.id, {
-    id: p.id,
-    display_name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unknown',
-    avatar_url: null
-  }]) || [])
-
-  // Map matches with player data
-  const matches = rawMatches.map(match => ({
-    ...match,
-    player1: match.player1_id ? profileMap.get(match.player1_id) || null : null,
-    player2: match.player2_id ? profileMap.get(match.player2_id) || null : null,
-  }))
-
-  return {
-    ...round,
-    matches,
+    return {
+      ...round,
+      matches,
+    }
+  } catch (err) {
+    console.error("[v0] getCurrentRound exception:", err)
+    return null
   }
 }
 
@@ -1997,7 +2012,7 @@ export async function getTournamentDecklists(tournamentId: string) {
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Registration Codes & Preregistrations
-// ═══════════════════════════════════════════════��══════���═══════════════════════
+// ══════════════════════════════════════════════�����══════���═══════════════════════
 
 export async function createRegistrationCode(
   tournamentId: string,
