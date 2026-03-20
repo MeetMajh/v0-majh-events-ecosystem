@@ -78,8 +78,10 @@ import {
   createManualMatch,
   deleteMatch,
   updateMatchPlayers,
+  regeneratePairings,
   type PlayerStanding,
 } from "@/lib/tournament-controller-actions"
+import { resetRoundTimer } from "@/lib/timer-actions"
 import type { TournamentStatus } from "@/lib/tournament-controller-actions"
 
 interface TournamentControllerProps {
@@ -131,7 +133,6 @@ currentRound: {
   started_at: string | null
   end_time: string | null
   time_limit_minutes?: number
-  paused_time_remaining_ms?: number | null
     matches: Array<{
       id: string
       table_number: number
@@ -633,6 +634,20 @@ const handleAddPlayer = () => {
                         <Play className="mr-2 h-4 w-4" />
                         Start Round {currentRound.round_number}
                       </DropdownMenuItem>
+                      <DropdownMenuItem onClick={async () => {
+                        startTransition(async () => {
+                          const result = await regeneratePairings(tournament.id, currentRound.id)
+                          if ("error" in result) {
+                            toast.error(result.error)
+                          } else {
+                            toast.success(`Generated ${result.pairingsCount} pairings`)
+                            router.refresh()
+                          }
+                        })
+                      }}>
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                        Regenerate Pairings
+                      </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => setShowManualPairingDialog(true)}>
                         <Shuffle className="mr-2 h-4 w-4" />
                         Edit Pairings
@@ -644,6 +659,20 @@ const handleAddPlayer = () => {
                       <DropdownMenuItem onClick={handleCompleteRound}>
                         <CheckCircle2 className="mr-2 h-4 w-4" />
                         Complete Round
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={async () => {
+                        startTransition(async () => {
+                          const result = await regeneratePairings(tournament.id, currentRound.id)
+                          if ("error" in result) {
+                            toast.error(result.error)
+                          } else {
+                            toast.success(`Regenerated ${result.pairingsCount} pairings`)
+                            router.refresh()
+                          }
+                        })
+                      }}>
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                        Regenerate Pairings
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => setShowManualPairingDialog(true)}>
                         <Shuffle className="mr-2 h-4 w-4" />
@@ -1020,7 +1049,7 @@ const handleAddPlayer = () => {
                           <Badge variant="outline" className="flex items-center gap-1">
                             <Timer className="h-3 w-3" />
                             {currentRound.status === "paused" 
-                              ? formatTime(Math.floor((currentRound.paused_time_remaining_ms || 0) / 1000))
+                              ? `${currentRound.time_limit_minutes || 0}:00`
                               : timeRemaining !== null ? formatTime(timeRemaining) : "--:--"}
                           </Badge>
                         )}
@@ -1090,6 +1119,23 @@ const handleAddPlayer = () => {
                                 ))}
                               </DropdownMenuContent>
                             </DropdownMenu>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={async () => {
+                                const result = await resetRoundTimer(tournament.id, currentRound.id)
+                                if ("error" in result) {
+                                  toast.error(result.error)
+                                } else {
+                                  toast.success(`Timer reset to ${result.minutes} minutes`)
+                                  router.refresh()
+                                }
+                              }}
+                              disabled={isPending}
+                            >
+                              <RotateCcw className="h-3 w-3 mr-1" />
+                              Reset
+                            </Button>
                           </div>
                         )}
                       </div>
