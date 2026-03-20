@@ -128,18 +128,23 @@ export async function getTournamentPhases(tournamentId: string) {
 }
 
 export async function createSwissRound(tournamentId: string, phaseId: string) {
-  const auth = await requireTournamentOrganizer(tournamentId)
-  if ("error" in auth) return auth
-  const { supabase, userId } = auth
+  try {
+    const auth = await requireTournamentOrganizer(tournamentId)
+    if ("error" in auth) return auth
+    const { supabase, userId } = auth
 
-  // Get phase settings
-  const { data: phase } = await supabase
-    .from("tournament_phases")
-    .select("*")
-    .eq("id", phaseId)
-    .single()
+    // Get phase settings
+    const { data: phase, error: phaseError } = await supabase
+      .from("tournament_phases")
+      .select("*")
+      .eq("id", phaseId)
+      .single()
 
-  if (!phase) return { error: "Phase not found" }
+    if (phaseError) {
+      console.error("[v0] createSwissRound phase error:", phaseError)
+      return { error: `Phase error: ${phaseError.message}` }
+    }
+    if (!phase) return { error: "Phase not found" }
 
   // Get current round number
   const { data: existingRounds } = await supabase
@@ -287,15 +292,19 @@ export async function createSwissRound(tournamentId: string, phaseId: string) {
   }
 
   // Create announcement
-  await supabase.from("tournament_announcements").insert({
-    tournament_id: tournamentId,
-    author_id: userId,
-    message: `Round ${round.round_number} pairings are now posted! Check the Matches tab to find your opponent and table number.`,
-    priority: "high",
-  })
+    await supabase.from("tournament_announcements").insert({
+      tournament_id: tournamentId,
+      author_id: userId,
+      message: `Round ${round.round_number} pairings are now posted! Check the Matches tab to find your opponent and table number.`,
+      priority: "high",
+    })
 
-  revalidatePath(`/dashboard/tournaments/${tournamentId}`)
-  return { success: true, roundId: round.id }
+    revalidatePath(`/dashboard/tournaments/${tournamentId}`)
+    return { success: true, roundId: round.id }
+  } catch (err) {
+    console.error("[v0] createSwissRound exception:", err)
+    return { error: `Unexpected error: ${err instanceof Error ? err.message : String(err)}` }
+  }
 }
 
 export async function regeneratePairings(tournamentId: string, roundId: string) {
@@ -846,18 +855,19 @@ export async function updateTournamentStatus(tournamentId: string, status: Tourn
 }
 
 export async function startTournament(tournamentId: string) {
-  const auth = await requireTournamentOrganizer(tournamentId)
-  if ("error" in auth) return auth
-  const { supabase, userId } = auth
-  
-  // Get tournament details for format
-  const { data: tournament } = await supabase
-    .from("tournaments")
-    .select("format")
-    .eq("id", tournamentId)
-    .single()
-  
-  if (!tournament) return { error: "Tournament not found" }
+  try {
+    const auth = await requireTournamentOrganizer(tournamentId)
+    if ("error" in auth) return auth
+    const { supabase, userId } = auth
+    
+    // Get tournament details for format
+    const { data: tournament } = await supabase
+      .from("tournaments")
+      .select("format")
+      .eq("id", tournamentId)
+      .single()
+    
+    if (!tournament) return { error: "Tournament not found" }
   
   // Check if tournament has phases, if not create a default one
   const { data: phases } = await supabase
@@ -913,16 +923,20 @@ export async function startTournament(tournamentId: string) {
   if (error) return { error: error.message }
 
   // Create announcement
-  await supabase.from("tournament_announcements").insert({
-    tournament_id: tournamentId,
-    author_id: userId,
-    message: `The tournament has officially STARTED! Please check the Matches tab for your first round pairing.`,
-    priority: "high",
-  })
+    await supabase.from("tournament_announcements").insert({
+      tournament_id: tournamentId,
+      author_id: userId,
+      message: `The tournament has officially STARTED! Please check the Matches tab for your first round pairing.`,
+      priority: "high",
+    })
 
-  revalidatePath(`/dashboard/tournaments/${tournamentId}`)
-  revalidatePath(`/esports/tournaments`)
-  return { success: true }
+    revalidatePath(`/dashboard/tournaments/${tournamentId}`)
+    revalidatePath(`/esports/tournaments`)
+    return { success: true }
+  } catch (err) {
+    console.error("[v0] startTournament exception:", err)
+    return { error: `Unexpected error: ${err instanceof Error ? err.message : String(err)}` }
+  }
 }
 
 export async function completeTournament(tournamentId: string) {
@@ -1739,7 +1753,7 @@ export async function addTimeToRound(tournamentId: string, roundId: string, minu
   return { success: true }
 }
 
-// ════════════════════════════════════════════��═════════════════════════════════
+// ════════════════════════════════════════════��═══════���═════════════════════════
 // Manual Match Management
 // ══════════════════��═══════════════════════════════════════════════════════════
 
@@ -1911,7 +1925,7 @@ export async function updateMatchPlayers(
   return { success: true }
 }
 
-// ═══��═════════════════════════════════════════════════════════���═════��══════════
+// ═══��══════���══════════════════════════════════════════════════���═════��══════════
 // Decklist Management
 // ══════════════════════════════���═══════════════════════════════════════════════
 
@@ -2233,7 +2247,7 @@ export async function getTournamentMatches(tournamentId: string, roundId?: strin
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Leaderboard & Stats Updates
-// ═════════════════════════════��════════════════════════════════════════════════
+// ═══════════════════════════���═��════════════════════════════════════════════════
 
 // Point system for placements
 const PLACEMENT_POINTS: Record<number, number> = {
