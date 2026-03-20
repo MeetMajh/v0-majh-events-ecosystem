@@ -9,7 +9,7 @@ import { redirect } from "next/navigation"
 export type PhaseType = "swiss" | "single_elimination" | "double_elimination" | "round_robin"
 export type TournamentStatus = "draft" | "published" | "registration_closed" | "in_progress" | "complete" | "cancelled"
 export type MatchStatus = "pending" | "in_progress" | "player1_reported" | "player2_reported" | "confirmed" | "disputed"
-export type RoundStatus = "pending" | "active" | "complete"
+export type RoundStatus = "pending" | "active" | "paused" | "complete"
 
 export interface PlayerStanding {
   playerId: string
@@ -1048,7 +1048,7 @@ export async function getCurrentRound(tournamentId: string) {
     .from("tournament_rounds")
     .select("*, tournament_phases(*)")
     .eq("tournament_id", tournamentId)
-    .in("status", ["pending", "active"])
+    .in("status", ["pending", "active", "paused"])
     .order("round_number", { ascending: false })
     .limit(1)
     .single()
