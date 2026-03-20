@@ -68,6 +68,9 @@ import {
   sendTournamentAnnouncement,
   getTournamentAnnouncements,
   deleteAnnouncement,
+  pauseRound,
+  resumeRound,
+  addTimeToRound,
   type PlayerStanding,
 } from "@/lib/tournament-controller-actions"
 import type { TournamentStatus } from "@/lib/tournament-controller-actions"
@@ -113,14 +116,15 @@ interface TournamentControllerProps {
       avatar_url: string | null
     }
   }>
-  currentRound: {
-    id: string
-    round_number: number
-    round_type: string
-    status: string
-    started_at: string | null
-    end_time: string | null
-    time_limit_minutes?: number
+currentRound: {
+  id: string
+  round_number: number
+  round_type: string
+  status: string
+  started_at: string | null
+  end_time: string | null
+  time_limit_minutes?: number
+  paused_time_remaining_ms?: number | null
     matches: Array<{
       id: string
       table_number: number
@@ -890,12 +894,23 @@ const handleAddPlayer = () => {
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-1">
-                              {!reg.check_in_at && tournament.check_in_required && (
+                              {!reg.check_in_at && reg.status !== "dropped" && (
                                 <Button 
                                   size="sm" 
                                   variant="outline"
-                                  onClick={() => handleCheckIn(reg.player_id)}
+                                  onClick={async () => {
+                                    startTransition(async () => {
+                                      const result = await adminCheckInPlayer(tournament.id, reg.player_id, true)
+                                      if ("error" in result) {
+                                        toast.error(result.error)
+                                      } else {
+                                        toast.success(`${reg.profiles?.display_name || 'Player'} checked in`)
+                                        router.refresh()
+                                      }
+                                    })
+                                  }}
                                   disabled={isPending}
+                                  title="Check in player"
                                 >
                                   <CheckCircle2 className="h-3 w-3" />
                                 </Button>
@@ -907,6 +922,7 @@ const handleAddPlayer = () => {
                                   onClick={() => handleDropPlayer(reg.player_id)}
                                   disabled={isPending}
                                   className="text-destructive hover:text-destructive"
+                                  title="Drop player"
                                 >
                                   <UserMinus className="h-3 w-3" />
                                 </Button>
@@ -940,14 +956,84 @@ const handleAddPlayer = () => {
                     <div className="flex items-center justify-between">
                       <CardTitle>Round {currentRound.round_number} Pairings</CardTitle>
                       <div className="flex items-center gap-2">
-                        <Badge variant={currentRound.status === "active" ? "default" : "secondary"}>
+                        <Badge variant={currentRound.status === "active" ? "default" : currentRound.status === "paused" ? "destructive" : "secondary"}>
                           {currentRound.status}
                         </Badge>
-                        {currentRound.end_time && currentRound.status === "active" && (
+                        {(currentRound.end_time || currentRound.status === "paused") && (
                           <Badge variant="outline" className="flex items-center gap-1">
                             <Timer className="h-3 w-3" />
-                            {timeRemaining !== null ? formatTime(timeRemaining) : "--:--"}
+                            {currentRound.status === "paused" 
+                              ? formatTime(Math.floor((currentRound.paused_time_remaining_ms || 0) / 1000))
+                              : timeRemaining !== null ? formatTime(timeRemaining) : "--:--"}
                           </Badge>
+                        )}
+                        {/* Timer Controls */}
+                        {(currentRound.status === "active" || currentRound.status === "paused") && (
+                          <div className="flex items-center gap-1 ml-2">
+                            {currentRound.status === "active" ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={async () => {
+                                  const result = await pauseRound(tournament.id, currentRound.id)
+                                  if ("error" in result) {
+                                    toast.error(result.error)
+                                  } else {
+                                    toast.success("Round paused")
+                                    router.refresh()
+                                  }
+                                }}
+                                disabled={isPending}
+                              >
+                                <Pause className="h-3 w-3 mr-1" />
+                                Pause
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={async () => {
+                                  const result = await resumeRound(tournament.id, currentRound.id)
+                                  if ("error" in result) {
+                                    toast.error(result.error)
+                                  } else {
+                                    toast.success("Round resumed")
+                                    router.refresh()
+                                  }
+                                }}
+                                disabled={isPending}
+                              >
+                                <Play className="h-3 w-3 mr-1" />
+                                Resume
+                              </Button>
+                            )}
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="outline" size="sm">
+                                  <Plus className="h-3 w-3 mr-1" />
+                                  Add Time
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent>
+                                {[1, 3, 5, 10, 15].map((mins) => (
+                                  <DropdownMenuItem
+                                    key={mins}
+                                    onClick={async () => {
+                                      const result = await addTimeToRound(tournament.id, currentRound.id, mins)
+                                      if ("error" in result) {
+                                        toast.error(result.error)
+                                      } else {
+                                        toast.success(`Added ${mins} minute${mins !== 1 ? 's' : ''}`)
+                                        router.refresh()
+                                      }
+                                    }}
+                                  >
+                                    +{mins} min
+                                  </DropdownMenuItem>
+                                ))}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         )}
                       </div>
                     </div>
