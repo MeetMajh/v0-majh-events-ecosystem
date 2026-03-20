@@ -259,7 +259,7 @@ export async function createSwissRound(tournamentId: string, phaseId: string) {
   // Get all registered players (not dropped)
   const { data: registrations } = await supabase
     .from("tournament_registrations")
-    .select("player_id, profiles(id, display_name)")
+    .select("player_id")
     .eq("tournament_id", tournamentId)
     .neq("status", "dropped")
     .neq("status", "disqualified")
@@ -778,14 +778,47 @@ export async function startTournament(tournamentId: string) {
   if ("error" in auth) return auth
   const { supabase } = auth
 
-  // Verify tournament has phases
+  // Get tournament details for format
+  const { data: tournament } = await supabase
+    .from("tournaments")
+    .select("format")
+    .eq("id", tournamentId)
+    .single()
+
+  if (!tournament) return { error: "Tournament not found" }
+
+  // Check if tournament has phases, if not create a default one
   const { data: phases } = await supabase
     .from("tournament_phases")
     .select("id")
     .eq("tournament_id", tournamentId)
 
   if (!phases || phases.length === 0) {
-    return { error: "Tournament must have at least one phase" }
+    // Auto-create a default phase based on tournament format
+    const phaseType = tournament.format || "swiss"
+    const { error: phaseError } = await supabase
+      .from("tournament_phases")
+      .insert({
+        tournament_id: tournamentId,
+        name: phaseType === "swiss" ? "Swiss Rounds" : phaseType === "single_elimination" ? "Bracket" : "Main Phase",
+        phase_type: phaseType,
+        phase_order: 1,
+        is_current: true,
+        started_at: new Date().toISOString(),
+        win_points: 3,
+        draw_points: 1,
+        loss_points: 0,
+      })
+    
+    if (phaseError) return { error: `Failed to create phase: ${phaseError.message}` }
+  } else {
+    // Set first phase as current
+    await supabase
+      .from("tournament_phases")
+      .update({ is_current: true, started_at: new Date().toISOString() })
+      .eq("tournament_id", tournamentId)
+      .order("phase_order")
+      .limit(1)
   }
 
   // Verify enough players
@@ -798,14 +831,6 @@ export async function startTournament(tournamentId: string) {
   if (!count || count < 2) {
     return { error: "Need at least 2 registered players" }
   }
-
-  // Set first phase as current
-  await supabase
-    .from("tournament_phases")
-    .update({ is_current: true, started_at: new Date().toISOString() })
-    .eq("tournament_id", tournamentId)
-    .order("phase_order")
-    .limit(1)
 
   // Update tournament status
   const { error } = await supabase
