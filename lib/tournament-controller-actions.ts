@@ -3,6 +3,7 @@
 import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
+import { generateSwissPairings, type PairingPlayer } from "@/lib/pairing-algorithms"
 
 // ── Types ──
 
@@ -184,7 +185,7 @@ export async function createSwissRound(tournamentId: string, phaseId: string) {
       .not("player2_id", "is", null)
 
     // Build player data for Swiss pairing
-    const playerMap = new Map<string, SwissPlayer>()
+    const playerMap = new Map<string, PairingPlayer>()
     for (const reg of registrations) {
       const playerStats = stats?.find(s => s.player_id === reg.player_id)
       const opponents: string[] = []
@@ -362,7 +363,7 @@ export async function regeneratePairings(tournamentId: string, roundId: string) 
     .not("player2_id", "is", null)
 
   // Build player data for Swiss pairing
-  const playerMap = new Map<string, SwissPlayer>()
+  const playerMap = new Map<string, PairingPlayer>()
   for (const reg of registrations) {
     const playerStats = stats?.find(s => s.player_id === reg.player_id)
     const opponents: string[] = []
