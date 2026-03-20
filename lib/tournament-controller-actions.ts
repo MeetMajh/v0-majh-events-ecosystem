@@ -80,6 +80,46 @@ export async function createTournamentPhase(
 ) {
   const auth = await requireTournamentOrganizer(tournamentId)
   if ("error" in auth) return auth
+  const { supabase } = auth
+
+  const { data: phase, error } = await supabase
+    .from("tournament_phases")
+    .insert({
+      tournament_id: tournamentId,
+      name: data.name,
+      phase_type: data.phaseType,
+      phase_order: data.phaseOrder,
+      best_of: data.bestOf ?? 1,
+      win_points: data.winPoints ?? 3,
+      draw_points: data.drawPoints ?? 1,
+      loss_points: data.lossPoints ?? 0,
+      rounds_count: data.roundsCount,
+      advancement_count: data.advancementCount,
+    })
+    .select()
+    .single()
+
+  if (error) return { error: error.message }
+
+  revalidatePath(`/dashboard/tournaments/${tournamentId}`)
+  return { success: true, phase }
+}
+
+export async function getTournamentPhases(tournamentId: string) {
+  const supabase = createAdminClient()
+
+  const { data: phases } = await supabase
+    .from("tournament_phases")
+    .select("*")
+    .eq("tournament_id", tournamentId)
+    .order("phase_order", { ascending: true })
+
+  return phases ?? []
+}
+
+export async function createSwissRound(tournamentId: string, phaseId: string) {
+  const auth = await requireTournamentOrganizer(tournamentId)
+  if ("error" in auth) return auth
   const { supabase, userId } = auth
 
   // Get phase settings
