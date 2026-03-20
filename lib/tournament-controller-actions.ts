@@ -1625,7 +1625,7 @@ export async function pauseRound(tournamentId: string, roundId: string) {
   // Get current round to store remaining time
   const { data: round } = await supabase
     .from("tournament_rounds")
-    .select("end_time, status")
+    .select("end_time, status, time_limit_minutes")
     .eq("id", roundId)
     .single()
 
@@ -1635,13 +1635,16 @@ export async function pauseRound(tournamentId: string, roundId: string) {
   const now = new Date()
   const endTime = round.end_time ? new Date(round.end_time) : null
   const remainingMs = endTime ? Math.max(0, endTime.getTime() - now.getTime()) : 0
+  const remainingMinutes = Math.ceil(remainingMs / 60000)
 
-  // Update round to paused status, store remaining time in a metadata field
+  // Store remaining minutes in time_limit_minutes (will be used when resuming)
+  // Set end_time to null to indicate paused state
   const { error } = await supabase
     .from("tournament_rounds")
     .update({
       status: "paused",
-      paused_time_remaining_ms: remainingMs,
+      time_limit_minutes: remainingMinutes,
+      end_time: null,
     })
     .eq("id", roundId)
 
@@ -1651,7 +1654,7 @@ export async function pauseRound(tournamentId: string, roundId: string) {
   await supabase.from("tournament_announcements").insert({
     tournament_id: tournamentId,
     author_id: userId,
-    message: "Round timer has been PAUSED by tournament staff.",
+    message: `Round timer has been PAUSED. ${remainingMinutes} minutes remaining.`,
     priority: "high",
   })
 
@@ -1667,23 +1670,23 @@ export async function resumeRound(tournamentId: string, roundId: string) {
   // Get current round
   const { data: round } = await supabase
     .from("tournament_rounds")
-    .select("paused_time_remaining_ms, status")
+    .select("time_limit_minutes, status")
     .eq("id", roundId)
     .single()
 
   if (!round) return { error: "Round not found" }
   if (round.status !== "paused") return { error: "Round is not paused" }
 
-  // Calculate new end time based on remaining time
+  // Calculate new end time based on stored remaining time
   const now = new Date()
-  const newEndTime = new Date(now.getTime() + (round.paused_time_remaining_ms || 0))
+  const remainingMs = (round.time_limit_minutes || 50) * 60 * 1000
+  const newEndTime = new Date(now.getTime() + remainingMs)
 
   const { error } = await supabase
     .from("tournament_rounds")
     .update({
       status: "active",
       end_time: newEndTime.toISOString(),
-      paused_time_remaining_ms: null,
     })
     .eq("id", roundId)
 
@@ -1709,26 +1712,25 @@ export async function addTimeToRound(tournamentId: string, roundId: string, minu
   // Get current round
   const { data: round } = await supabase
     .from("tournament_rounds")
-    .select("end_time, status, paused_time_remaining_ms")
+    .select("end_time, status, time_limit_minutes")
     .eq("id", roundId)
     .single()
 
   if (!round) return { error: "Round not found" }
-
-  const msToAdd = minutesToAdd * 60 * 1000
 
   if (round.status === "paused") {
     // If paused, add to the stored remaining time
     const { error } = await supabase
       .from("tournament_rounds")
       .update({
-        paused_time_remaining_ms: (round.paused_time_remaining_ms || 0) + msToAdd,
+        time_limit_minutes: (round.time_limit_minutes || 0) + minutesToAdd,
       })
       .eq("id", roundId)
 
     if (error) return { error: error.message }
   } else if (round.status === "active" && round.end_time) {
     // If active, extend the end time
+    const msToAdd = minutesToAdd * 60 * 1000
     const newEndTime = new Date(new Date(round.end_time).getTime() + msToAdd)
     const { error } = await supabase
       .from("tournament_rounds")
@@ -1756,7 +1758,7 @@ export async function addTimeToRound(tournamentId: string, roundId: string, minu
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Manual Match Management
-// ══════════════════════════════════════════════════════════════════════════════
+// ══════════════════��═══════════════════════════════════════════════════════════
 
 export async function swapMatchPlayers(
   tournamentId: string,
@@ -1926,7 +1928,7 @@ export async function updateMatchPlayers(
   return { success: true }
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════��══════════
 // Decklist Management
 // ══════════════════════════════════════════════════════════════════════════════
 

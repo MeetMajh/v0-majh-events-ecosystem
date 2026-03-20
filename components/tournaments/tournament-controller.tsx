@@ -132,7 +132,6 @@ currentRound: {
   started_at: string | null
   end_time: string | null
   time_limit_minutes?: number
-  paused_time_remaining_ms?: number | null
     matches: Array<{
       id: string
       table_number: number
@@ -1049,7 +1048,7 @@ const handleAddPlayer = () => {
                           <Badge variant="outline" className="flex items-center gap-1">
                             <Timer className="h-3 w-3" />
                             {currentRound.status === "paused" 
-                              ? formatTime(Math.floor((currentRound.paused_time_remaining_ms || 0) / 1000))
+                              ? `${currentRound.time_limit_minutes || 0}:00`
                               : timeRemaining !== null ? formatTime(timeRemaining) : "--:--"}
                           </Badge>
                         )}
