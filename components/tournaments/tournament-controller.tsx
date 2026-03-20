@@ -81,6 +81,7 @@ import {
   regeneratePairings,
   type PlayerStanding,
 } from "@/lib/tournament-controller-actions"
+import { resetRoundTimer } from "@/lib/timer-actions"
 import type { TournamentStatus } from "@/lib/tournament-controller-actions"
 
 interface TournamentControllerProps {
@@ -1118,6 +1119,23 @@ const handleAddPlayer = () => {
                                 ))}
                               </DropdownMenuContent>
                             </DropdownMenu>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={async () => {
+                                const result = await resetRoundTimer(tournament.id, currentRound.id)
+                                if ("error" in result) {
+                                  toast.error(result.error)
+                                } else {
+                                  toast.success(`Timer reset to ${result.minutes} minutes`)
+                                  router.refresh()
+                                }
+                              }}
+                              disabled={isPending}
+                            >
+                              <RotateCcw className="h-3 w-3 mr-1" />
+                              Reset
+                            </Button>
                           </div>
                         )}
                       </div>
