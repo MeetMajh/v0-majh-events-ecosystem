@@ -1465,10 +1465,17 @@ export async function checkInPlayer(tournamentId: string) {
   return { success: true }
 }
 
-export async function adminCheckInPlayer(tournamentId: string, playerId: string) {
+export async function adminCheckInPlayer(tournamentId: string, playerId: string, createAnnouncementFlag = false) {
   const auth = await requireTournamentOrganizer(tournamentId)
   if ("error" in auth) return auth
-  const { supabase } = auth
+  const { supabase, userId } = auth
+
+  // Get player name for announcement
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("first_name, last_name")
+    .eq("id", playerId)
+    .single()
 
   const { error } = await supabase
     .from("tournament_registrations")
@@ -1480,6 +1487,158 @@ export async function adminCheckInPlayer(tournamentId: string, playerId: string)
     .eq("player_id", playerId)
 
   if (error) return { error: error.message }
+
+  // Create announcement if requested
+  if (createAnnouncementFlag && profile) {
+    const playerName = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'A player'
+    await supabase.from("tournament_announcements").insert({
+      tournament_id: tournamentId,
+      author_id: userId,
+      message: `${playerName} has been checked in by tournament staff.`,
+      priority: "normal",
+    })
+  }
+
+  revalidatePath(`/dashboard/tournaments/${tournamentId}`)
+  return { success: true }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Round Timer Controls
+// ══════════════════════════════════════════════════════════════════════════════
+
+export async function pauseRound(tournamentId: string, roundId: string) {
+  const auth = await requireTournamentOrganizer(tournamentId)
+  if ("error" in auth) return auth
+  const { supabase, userId } = auth
+
+  // Get current round to store remaining time
+  const { data: round } = await supabase
+    .from("tournament_rounds")
+    .select("end_time, status")
+    .eq("id", roundId)
+    .single()
+
+  if (!round) return { error: "Round not found" }
+  if (round.status !== "active") return { error: "Round is not active" }
+
+  const now = new Date()
+  const endTime = round.end_time ? new Date(round.end_time) : null
+  const remainingMs = endTime ? Math.max(0, endTime.getTime() - now.getTime()) : 0
+
+  // Update round to paused status, store remaining time in a metadata field
+  const { error } = await supabase
+    .from("tournament_rounds")
+    .update({
+      status: "paused",
+      paused_time_remaining_ms: remainingMs,
+    })
+    .eq("id", roundId)
+
+  if (error) return { error: error.message }
+
+  // Create announcement
+  await supabase.from("tournament_announcements").insert({
+    tournament_id: tournamentId,
+    author_id: userId,
+    message: "Round timer has been PAUSED by tournament staff.",
+    priority: "high",
+  })
+
+  revalidatePath(`/dashboard/tournaments/${tournamentId}`)
+  return { success: true, remainingMs }
+}
+
+export async function resumeRound(tournamentId: string, roundId: string) {
+  const auth = await requireTournamentOrganizer(tournamentId)
+  if ("error" in auth) return auth
+  const { supabase, userId } = auth
+
+  // Get current round
+  const { data: round } = await supabase
+    .from("tournament_rounds")
+    .select("paused_time_remaining_ms, status")
+    .eq("id", roundId)
+    .single()
+
+  if (!round) return { error: "Round not found" }
+  if (round.status !== "paused") return { error: "Round is not paused" }
+
+  // Calculate new end time based on remaining time
+  const now = new Date()
+  const newEndTime = new Date(now.getTime() + (round.paused_time_remaining_ms || 0))
+
+  const { error } = await supabase
+    .from("tournament_rounds")
+    .update({
+      status: "active",
+      end_time: newEndTime.toISOString(),
+      paused_time_remaining_ms: null,
+    })
+    .eq("id", roundId)
+
+  if (error) return { error: error.message }
+
+  // Create announcement
+  await supabase.from("tournament_announcements").insert({
+    tournament_id: tournamentId,
+    author_id: userId,
+    message: "Round timer has been RESUMED.",
+    priority: "high",
+  })
+
+  revalidatePath(`/dashboard/tournaments/${tournamentId}`)
+  return { success: true }
+}
+
+export async function addTimeToRound(tournamentId: string, roundId: string, minutesToAdd: number) {
+  const auth = await requireTournamentOrganizer(tournamentId)
+  if ("error" in auth) return auth
+  const { supabase, userId } = auth
+
+  // Get current round
+  const { data: round } = await supabase
+    .from("tournament_rounds")
+    .select("end_time, status, paused_time_remaining_ms")
+    .eq("id", roundId)
+    .single()
+
+  if (!round) return { error: "Round not found" }
+
+  const msToAdd = minutesToAdd * 60 * 1000
+
+  if (round.status === "paused") {
+    // If paused, add to the stored remaining time
+    const { error } = await supabase
+      .from("tournament_rounds")
+      .update({
+        paused_time_remaining_ms: (round.paused_time_remaining_ms || 0) + msToAdd,
+      })
+      .eq("id", roundId)
+
+    if (error) return { error: error.message }
+  } else if (round.status === "active" && round.end_time) {
+    // If active, extend the end time
+    const newEndTime = new Date(new Date(round.end_time).getTime() + msToAdd)
+    const { error } = await supabase
+      .from("tournament_rounds")
+      .update({
+        end_time: newEndTime.toISOString(),
+      })
+      .eq("id", roundId)
+
+    if (error) return { error: error.message }
+  } else {
+    return { error: "Cannot add time to this round" }
+  }
+
+  // Create announcement
+  await supabase.from("tournament_announcements").insert({
+    tournament_id: tournamentId,
+    author_id: userId,
+    message: `${minutesToAdd} minute${minutesToAdd !== 1 ? 's' : ''} have been added to the round timer.`,
+    priority: "high",
+  })
 
   revalidatePath(`/dashboard/tournaments/${tournamentId}`)
   return { success: true }
