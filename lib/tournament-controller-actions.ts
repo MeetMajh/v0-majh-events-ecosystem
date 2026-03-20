@@ -107,13 +107,13 @@ export async function createTournamentPhase(
 
 export async function getTournamentPhases(tournamentId: string) {
   const supabase = createAdminClient()
-
+  
   const { data: phases } = await supabase
     .from("tournament_phases")
     .select("*")
     .eq("tournament_id", tournamentId)
     .order("phase_order", { ascending: true })
-
+  
   return phases ?? []
 }
 
@@ -828,23 +828,23 @@ export async function updateTournamentStatus(tournamentId: string, status: Tourn
 export async function startTournament(tournamentId: string) {
   const auth = await requireTournamentOrganizer(tournamentId)
   if ("error" in auth) return auth
-  const { supabase } = auth
-
+  const { supabase, userId } = auth
+  
   // Get tournament details for format
   const { data: tournament } = await supabase
     .from("tournaments")
     .select("format")
     .eq("id", tournamentId)
     .single()
-
+  
   if (!tournament) return { error: "Tournament not found" }
-
+  
   // Check if tournament has phases, if not create a default one
   const { data: phases } = await supabase
     .from("tournament_phases")
     .select("id")
     .eq("tournament_id", tournamentId)
-
+  
   if (!phases || phases.length === 0) {
     // Auto-create a default phase based on tournament format
     const phaseType = tournament.format || "swiss"
@@ -861,7 +861,7 @@ export async function startTournament(tournamentId: string) {
         draw_points: 1,
         loss_points: 0,
       })
-    
+  
     if (phaseError) return { error: `Failed to create phase: ${phaseError.message}` }
   } else {
     // Set first phase as current
@@ -872,18 +872,18 @@ export async function startTournament(tournamentId: string) {
       .order("phase_order")
       .limit(1)
   }
-
+  
   // Verify enough players
   const { count } = await supabase
     .from("tournament_registrations")
     .select("*", { count: "exact", head: true })
     .eq("tournament_id", tournamentId)
     .eq("status", "registered")
-
+  
   if (!count || count < 2) {
     return { error: "Need at least 2 registered players" }
   }
-
+  
   // Update tournament status
   const { error } = await supabase
     .from("tournaments")
@@ -1997,7 +1997,7 @@ export async function getTournamentDecklists(tournamentId: string) {
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Registration Codes & Preregistrations
-// ══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════��══════���═══════════════════════
 
 export async function createRegistrationCode(
   tournamentId: string,
