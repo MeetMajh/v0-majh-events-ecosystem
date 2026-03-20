@@ -38,9 +38,11 @@ import {
   Plus,
   QrCode,
   RefreshCw,
+  RotateCcw,
   Search,
   Send,
   Settings,
+  Shuffle,
   SquareStack,
   Timer,
   Trophy,
@@ -51,6 +53,7 @@ import {
   ClipboardList,
   TicketCheck,
   Shield,
+  ArrowLeftRight,
 } from "lucide-react"
 import {
   createSwissRound,
@@ -68,6 +71,13 @@ import {
   sendTournamentAnnouncement,
   getTournamentAnnouncements,
   deleteAnnouncement,
+  pauseRound,
+  resumeRound,
+  addTimeToRound,
+  swapMatchPlayers,
+  createManualMatch,
+  deleteMatch,
+  updateMatchPlayers,
   type PlayerStanding,
 } from "@/lib/tournament-controller-actions"
 import type { TournamentStatus } from "@/lib/tournament-controller-actions"
@@ -113,14 +123,15 @@ interface TournamentControllerProps {
       avatar_url: string | null
     }
   }>
-  currentRound: {
-    id: string
-    round_number: number
-    round_type: string
-    status: string
-    started_at: string | null
-    end_time: string | null
-    time_limit_minutes?: number
+currentRound: {
+  id: string
+  round_number: number
+  round_type: string
+  status: string
+  started_at: string | null
+  end_time: string | null
+  time_limit_minutes?: number
+  paused_time_remaining_ms?: number | null
     matches: Array<{
       id: string
       table_number: number
@@ -194,6 +205,8 @@ export function TournamentController({
   const [announcementPriority, setAnnouncementPriority] = useState<"normal" | "high" | "urgent">("normal")
   const [announcements, setAnnouncements] = useState<any[]>([])
   const [loadingAnnouncements, setLoadingAnnouncements] = useState(false)
+  const [showManualPairingDialog, setShowManualPairingDialog] = useState(false)
+  const [selectedMatchForSwap, setSelectedMatchForSwap] = useState<string | null>(null)
 
   const activePhase = phases.find(p => p.is_current) || phases[0]
   const checkedInCount = registrations.filter(r => r.status === "checked_in").length
@@ -541,10 +554,29 @@ const handleAddPlayer = () => {
                     Published / Registration Open
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => startTransition(async () => {
+                    await updateTournamentStatus(tournament.id, "registration")
+                    router.refresh()
+                  })}>
+                    Registration (Re-open)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => startTransition(async () => {
                     await updateTournamentStatus(tournament.id, "registration_closed")
                     router.refresh()
                   })}>
                     Registration Closed
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => startTransition(async () => {
+                    await updateTournamentStatus(tournament.id, "in_progress")
+                    router.refresh()
+                  })}>
+                    In Progress
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => startTransition(async () => {
+                    await updateTournamentStatus(tournament.id, "completed")
+                    router.refresh()
+                  })}>
+                    Completed
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => startTransition(async () => {
@@ -572,6 +604,23 @@ const handleAddPlayer = () => {
                       Start Tournament
                     </DropdownMenuItem>
                   )}
+                  {tournament.status === "in_progress" && (
+                    <>
+                      <DropdownMenuItem onClick={() => startTransition(async () => {
+                        const result = await updateTournamentStatus(tournament.id, "registration")
+                        if ("error" in result) {
+                          toast.error(result.error)
+                        } else {
+                          toast.success("Reverted to registration")
+                          router.refresh()
+                        }
+                      })}>
+                        <RotateCcw className="mr-2 h-4 w-4" />
+                        Revert to Registration
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                    </>
+                  )}
                   {tournament.status === "in_progress" && !currentRound && (
                     <DropdownMenuItem onClick={handleCreateRound}>
                       <Plus className="mr-2 h-4 w-4" />
@@ -579,16 +628,28 @@ const handleAddPlayer = () => {
                     </DropdownMenuItem>
                   )}
                   {currentRound?.status === "pending" && (
-                    <DropdownMenuItem onClick={handleStartRound}>
-                      <Play className="mr-2 h-4 w-4" />
-                      Start Round {currentRound.round_number}
-                    </DropdownMenuItem>
+                    <>
+                      <DropdownMenuItem onClick={handleStartRound}>
+                        <Play className="mr-2 h-4 w-4" />
+                        Start Round {currentRound.round_number}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setShowManualPairingDialog(true)}>
+                        <Shuffle className="mr-2 h-4 w-4" />
+                        Edit Pairings
+                      </DropdownMenuItem>
+                    </>
                   )}
                   {currentRound?.status === "active" && (
-                    <DropdownMenuItem onClick={handleCompleteRound}>
-                      <CheckCircle2 className="mr-2 h-4 w-4" />
-                      Complete Round
-                    </DropdownMenuItem>
+                    <>
+                      <DropdownMenuItem onClick={handleCompleteRound}>
+                        <CheckCircle2 className="mr-2 h-4 w-4" />
+                        Complete Round
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setShowManualPairingDialog(true)}>
+                        <Shuffle className="mr-2 h-4 w-4" />
+                        Repair Pairings
+                      </DropdownMenuItem>
+                    </>
                   )}
                   {currentRound?.status === "complete" && tournament.status === "in_progress" && (
                     <>
@@ -890,12 +951,23 @@ const handleAddPlayer = () => {
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-1">
-                              {!reg.check_in_at && tournament.check_in_required && (
+                              {!reg.check_in_at && reg.status !== "dropped" && (
                                 <Button 
                                   size="sm" 
                                   variant="outline"
-                                  onClick={() => handleCheckIn(reg.player_id)}
+                                  onClick={async () => {
+                                    startTransition(async () => {
+                                      const result = await adminCheckInPlayer(tournament.id, reg.player_id, true)
+                                      if ("error" in result) {
+                                        toast.error(result.error)
+                                      } else {
+                                        toast.success(`${reg.profiles?.display_name || 'Player'} checked in`)
+                                        router.refresh()
+                                      }
+                                    })
+                                  }}
                                   disabled={isPending}
+                                  title="Check in player"
                                 >
                                   <CheckCircle2 className="h-3 w-3" />
                                 </Button>
@@ -907,6 +979,7 @@ const handleAddPlayer = () => {
                                   onClick={() => handleDropPlayer(reg.player_id)}
                                   disabled={isPending}
                                   className="text-destructive hover:text-destructive"
+                                  title="Drop player"
                                 >
                                   <UserMinus className="h-3 w-3" />
                                 </Button>
@@ -940,14 +1013,84 @@ const handleAddPlayer = () => {
                     <div className="flex items-center justify-between">
                       <CardTitle>Round {currentRound.round_number} Pairings</CardTitle>
                       <div className="flex items-center gap-2">
-                        <Badge variant={currentRound.status === "active" ? "default" : "secondary"}>
+                        <Badge variant={currentRound.status === "active" ? "default" : currentRound.status === "paused" ? "destructive" : "secondary"}>
                           {currentRound.status}
                         </Badge>
-                        {currentRound.end_time && currentRound.status === "active" && (
+                        {(currentRound.end_time || currentRound.status === "paused") && (
                           <Badge variant="outline" className="flex items-center gap-1">
                             <Timer className="h-3 w-3" />
-                            {timeRemaining !== null ? formatTime(timeRemaining) : "--:--"}
+                            {currentRound.status === "paused" 
+                              ? formatTime(Math.floor((currentRound.paused_time_remaining_ms || 0) / 1000))
+                              : timeRemaining !== null ? formatTime(timeRemaining) : "--:--"}
                           </Badge>
+                        )}
+                        {/* Timer Controls */}
+                        {(currentRound.status === "active" || currentRound.status === "paused") && (
+                          <div className="flex items-center gap-1 ml-2">
+                            {currentRound.status === "active" ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={async () => {
+                                  const result = await pauseRound(tournament.id, currentRound.id)
+                                  if ("error" in result) {
+                                    toast.error(result.error)
+                                  } else {
+                                    toast.success("Round paused")
+                                    router.refresh()
+                                  }
+                                }}
+                                disabled={isPending}
+                              >
+                                <Pause className="h-3 w-3 mr-1" />
+                                Pause
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={async () => {
+                                  const result = await resumeRound(tournament.id, currentRound.id)
+                                  if ("error" in result) {
+                                    toast.error(result.error)
+                                  } else {
+                                    toast.success("Round resumed")
+                                    router.refresh()
+                                  }
+                                }}
+                                disabled={isPending}
+                              >
+                                <Play className="h-3 w-3 mr-1" />
+                                Resume
+                              </Button>
+                            )}
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="outline" size="sm">
+                                  <Plus className="h-3 w-3 mr-1" />
+                                  Add Time
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent>
+                                {[1, 3, 5, 10, 15].map((mins) => (
+                                  <DropdownMenuItem
+                                    key={mins}
+                                    onClick={async () => {
+                                      const result = await addTimeToRound(tournament.id, currentRound.id, mins)
+                                      if ("error" in result) {
+                                        toast.error(result.error)
+                                      } else {
+                                        toast.success(`Added ${mins} minute${mins !== 1 ? 's' : ''}`)
+                                        router.refresh()
+                                      }
+                                    }}
+                                  >
+                                    +{mins} min
+                                  </DropdownMenuItem>
+                                ))}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -1518,6 +1661,280 @@ const handleAddPlayer = () => {
           )}
         </div>
       </main>
+
+      {/* Manual Pairing Dialog */}
+      <Dialog open={showManualPairingDialog} onOpenChange={setShowManualPairingDialog}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Match Pairings - Round {currentRound?.round_number}</DialogTitle>
+            <DialogDescription>
+              Swap players between matches or manually assign players. Changes will create an announcement for players.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {/* Current Matches */}
+            <div className="space-y-2">
+              <h3 className="font-medium">Current Matches</h3>
+              {currentRound?.matches?.map((match: any, idx: number) => (
+                <div key={match.id} className="flex items-center gap-2 p-3 border rounded-lg bg-muted/50">
+                  <span className="w-12 text-sm text-muted-foreground">Table {match.table_number}</span>
+                  
+                  <Select
+                    value={match.player1_id || ""}
+                    onValueChange={async (newPlayerId) => {
+                      if (newPlayerId !== match.player1_id) {
+                        startTransition(async () => {
+                          const result = await updateMatchPlayers(
+                            tournament.id,
+                            match.id,
+                            newPlayerId || null,
+                            match.player2_id
+                          )
+                          if ("error" in result) {
+                            toast.error(result.error)
+                          } else {
+                            toast.success("Match updated")
+                            router.refresh()
+                          }
+                        })
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="w-48">
+                      <SelectValue placeholder="Select Player 1" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {registrations.filter(r => r.status !== "dropped").map((reg) => (
+                        <SelectItem key={reg.player_id} value={reg.player_id}>
+                          {reg.profiles?.display_name || "Unknown"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  
+                  <span className="text-muted-foreground">vs</span>
+                  
+                  <Select
+                    value={match.player2_id || "bye"}
+                    onValueChange={async (newPlayerId) => {
+                      const actualPlayerId = newPlayerId === "bye" ? null : newPlayerId
+                      if (actualPlayerId !== match.player2_id) {
+                        startTransition(async () => {
+                          const result = await updateMatchPlayers(
+                            tournament.id,
+                            match.id,
+                            match.player1_id,
+                            actualPlayerId
+                          )
+                          if ("error" in result) {
+                            toast.error(result.error)
+                          } else {
+                            toast.success("Match updated")
+                            router.refresh()
+                          }
+                        })
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="w-48">
+                      <SelectValue placeholder="Select Player 2" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="bye">BYE</SelectItem>
+                      {registrations.filter(r => r.status !== "dropped").map((reg) => (
+                        <SelectItem key={reg.player_id} value={reg.player_id}>
+                          {reg.profiles?.display_name || "Unknown"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  
+                  {selectedMatchForSwap === match.id ? (
+                    <div className="flex items-center gap-1 ml-auto">
+                      <span className="text-sm text-muted-foreground">Select another match to swap with</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setSelectedMatchForSwap(null)}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : selectedMatchForSwap ? (
+                    <div className="flex items-center gap-1 ml-auto">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={async () => {
+                          startTransition(async () => {
+                            const result = await swapMatchPlayers(
+                              tournament.id,
+                              selectedMatchForSwap,
+                              match.id,
+                              true // swap player1s
+                            )
+                            if ("error" in result) {
+                              toast.error(result.error)
+                            } else {
+                              toast.success("Players swapped")
+                              setSelectedMatchForSwap(null)
+                              router.refresh()
+                            }
+                          })
+                        }}
+                        disabled={isPending}
+                      >
+                        <ArrowLeftRight className="h-3 w-3 mr-1" />
+                        Swap P1
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={async () => {
+                          startTransition(async () => {
+                            const result = await swapMatchPlayers(
+                              tournament.id,
+                              selectedMatchForSwap,
+                              match.id,
+                              false // swap player2s
+                            )
+                            if ("error" in result) {
+                              toast.error(result.error)
+                            } else {
+                              toast.success("Players swapped")
+                              setSelectedMatchForSwap(null)
+                              router.refresh()
+                            }
+                          })
+                        }}
+                        disabled={isPending}
+                      >
+                        <ArrowLeftRight className="h-3 w-3 mr-1" />
+                        Swap P2
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1 ml-auto">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setSelectedMatchForSwap(match.id)}
+                        title="Swap players with another match"
+                      >
+                        <Shuffle className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive"
+                        onClick={async () => {
+                          if (confirm("Delete this match?")) {
+                            startTransition(async () => {
+                              const result = await deleteMatch(tournament.id, match.id)
+                              if ("error" in result) {
+                                toast.error(result.error)
+                              } else {
+                                toast.success("Match deleted")
+                                router.refresh()
+                              }
+                            })
+                          }
+                        }}
+                        disabled={isPending}
+                        title="Delete match"
+                      >
+                        <UserMinus className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Add New Match */}
+            {currentRound && (
+              <div className="pt-4 border-t">
+                <h3 className="font-medium mb-2">Add New Match</h3>
+                <div className="flex items-center gap-2">
+                  <Select onValueChange={(id) => {
+                    const p1Select = document.getElementById("new-match-p1") as HTMLSelectElement
+                    if (p1Select) p1Select.value = id
+                  }}>
+                    <SelectTrigger id="new-match-p1" className="w-48">
+                      <SelectValue placeholder="Player 1" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {registrations.filter(r => r.status !== "dropped").map((reg) => (
+                        <SelectItem key={reg.player_id} value={reg.player_id}>
+                          {reg.profiles?.display_name || "Unknown"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  
+                  <span className="text-muted-foreground">vs</span>
+                  
+                  <Select onValueChange={(id) => {
+                    const p2Select = document.getElementById("new-match-p2") as HTMLSelectElement
+                    if (p2Select) p2Select.value = id
+                  }}>
+                    <SelectTrigger id="new-match-p2" className="w-48">
+                      <SelectValue placeholder="Player 2 (or BYE)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="bye">BYE</SelectItem>
+                      {registrations.filter(r => r.status !== "dropped").map((reg) => (
+                        <SelectItem key={reg.player_id} value={reg.player_id}>
+                          {reg.profiles?.display_name || "Unknown"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  
+                  <Button
+                    onClick={async () => {
+                      const p1 = (document.getElementById("new-match-p1") as HTMLSelectElement)?.value
+                      const p2Val = (document.getElementById("new-match-p2") as HTMLSelectElement)?.value
+                      const p2 = p2Val === "bye" ? null : p2Val
+                      
+                      if (!p1) {
+                        toast.error("Select Player 1")
+                        return
+                      }
+                      
+                      startTransition(async () => {
+                        const result = await createManualMatch(
+                          tournament.id,
+                          currentRound.id,
+                          p1,
+                          p2
+                        )
+                        if ("error" in result) {
+                          toast.error(result.error)
+                        } else {
+                          toast.success("Match created")
+                          router.refresh()
+                        }
+                      })
+                    }}
+                    disabled={isPending}
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add Match
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowManualPairingDialog(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
