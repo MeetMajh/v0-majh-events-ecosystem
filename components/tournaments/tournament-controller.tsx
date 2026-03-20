@@ -78,6 +78,7 @@ import {
   createManualMatch,
   deleteMatch,
   updateMatchPlayers,
+  regeneratePairings,
   type PlayerStanding,
 } from "@/lib/tournament-controller-actions"
 import type { TournamentStatus } from "@/lib/tournament-controller-actions"
@@ -633,6 +634,20 @@ const handleAddPlayer = () => {
                         <Play className="mr-2 h-4 w-4" />
                         Start Round {currentRound.round_number}
                       </DropdownMenuItem>
+                      <DropdownMenuItem onClick={async () => {
+                        startTransition(async () => {
+                          const result = await regeneratePairings(tournament.id, currentRound.id)
+                          if ("error" in result) {
+                            toast.error(result.error)
+                          } else {
+                            toast.success(`Generated ${result.pairingsCount} pairings`)
+                            router.refresh()
+                          }
+                        })
+                      }}>
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                        Regenerate Pairings
+                      </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => setShowManualPairingDialog(true)}>
                         <Shuffle className="mr-2 h-4 w-4" />
                         Edit Pairings
@@ -644,6 +659,20 @@ const handleAddPlayer = () => {
                       <DropdownMenuItem onClick={handleCompleteRound}>
                         <CheckCircle2 className="mr-2 h-4 w-4" />
                         Complete Round
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={async () => {
+                        startTransition(async () => {
+                          const result = await regeneratePairings(tournament.id, currentRound.id)
+                          if ("error" in result) {
+                            toast.error(result.error)
+                          } else {
+                            toast.success(`Regenerated ${result.pairingsCount} pairings`)
+                            router.refresh()
+                          }
+                        })
+                      }}>
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                        Regenerate Pairings
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => setShowManualPairingDialog(true)}>
                         <Shuffle className="mr-2 h-4 w-4" />
