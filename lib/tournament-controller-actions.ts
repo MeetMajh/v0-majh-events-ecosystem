@@ -837,9 +837,11 @@ export async function dropPlayer(tournamentId: string, playerId: string, roundNu
   // Get player name for announcement
   const { data: player } = await supabase
     .from("profiles")
-    .select("display_name")
+    .select("first_name, last_name")
     .eq("id", playerId)
     .single()
+  
+  const playerName = player ? `${player.first_name || ''} ${player.last_name || ''}`.trim() || 'Unknown' : 'Unknown'
 
   // Update registration status
   const { error: regError } = await supabase
@@ -867,7 +869,7 @@ export async function dropPlayer(tournamentId: string, playerId: string, roundNu
   await supabase.from("tournament_announcements").insert({
     tournament_id: tournamentId,
     author_id: userId,
-    message: `Player ${player?.display_name || 'Unknown'} has dropped from the tournament${roundNumber ? ` after round ${roundNumber}` : ''}.`,
+    message: `Player ${playerName} has dropped from the tournament${roundNumber ? ` after round ${roundNumber}` : ''}.`,
     priority: "normal",
   })
 
@@ -1200,8 +1202,8 @@ export async function getRoundPairings(roundId: string) {
     .from("tournament_matches")
     .select(`
       *,
-      player1:profiles!tournament_matches_player1_id_fkey(id, display_name, avatar_url),
-      player2:profiles!tournament_matches_player2_id_fkey(id, display_name, avatar_url)
+      player1:profiles!tournament_matches_player1_id_fkey(id, first_name, last_name, avatar_url),
+      player2:profiles!tournament_matches_player2_id_fkey(id, first_name, last_name, avatar_url)
     `)
     .eq("round_id", roundId)
     .order("table_number")
@@ -2130,7 +2132,7 @@ export async function getTournamentDecklists(tournamentId: string) {
 
   const { data } = await supabase
     .from("tournament_decklists")
-    .select("*, profiles(id, display_name, avatar_url)")
+    .select("*, profiles(id, first_name, last_name, avatar_url)")
     .eq("tournament_id", tournamentId)
     .order("submitted_at", { ascending: false })
 
@@ -2333,8 +2335,8 @@ export async function getTournamentMatches(tournamentId: string, roundId?: strin
     .from("tournament_matches")
     .select(`
       *,
-      player1:profiles!tournament_matches_player1_id_fkey(id, display_name, avatar_url),
-      player2:profiles!tournament_matches_player2_id_fkey(id, display_name, avatar_url),
+      player1:profiles!tournament_matches_player1_id_fkey(id, first_name, last_name, avatar_url),
+      player2:profiles!tournament_matches_player2_id_fkey(id, first_name, last_name, avatar_url),
       tournament_rounds(round_number, round_type, status)
     `)
     .eq("tournament_id", tournamentId)
@@ -2387,7 +2389,7 @@ export async function awardTournamentResults(tournamentId: string) {
   // Get final standings
   const { data: allStats } = await supabase
     .from("tournament_player_stats")
-    .select("*, profiles(id, display_name)")
+    .select("*, profiles(id, first_name, last_name)")
     .eq("tournament_id", tournamentId)
     .eq("is_dropped", false)
     .order("standing")
@@ -2471,7 +2473,7 @@ export async function getGameLeaderboard(gameId: string, limit = 50) {
 
   const { data } = await supabase
     .from("leaderboard_entries")
-    .select("*, profiles(id, display_name, avatar_url), games(name, slug, icon_url)")
+    .select("*, profiles(id, first_name, last_name, avatar_url), games(name, slug, icon_url)")
     .eq("game_id", gameId)
     .order("ranking_points", { ascending: false })
     .limit(limit)
@@ -2527,7 +2529,7 @@ export async function getGlobalLeaderboard(limit = 100) {
   // Fetch profile data
   const { data: profiles } = await supabase
     .from("profiles")
-    .select("id, display_name, avatar_url")
+    .select("id, first_name, last_name, avatar_url")
     .in("id", sorted.map(s => s.userId))
 
   const profileMap = new Map(profiles?.map(p => [p.id, p]) ?? [])
@@ -2564,18 +2566,14 @@ export async function addPlayerToTournament(tournamentId: string, email: string)
       // Get profile for display name
       const { data: profile } = await supabase
         .from("profiles")
-        .select("display_name, first_name, last_name")
+        .select("first_name, last_name")
         .eq("id", authUser.id)
         .single()
         
       if (profile) {
-        displayName = profile.display_name || 
-          [profile.first_name, profile.last_name].filter(Boolean).join(" ") ||
-          normalizedEmail
+        displayName = [profile.first_name, profile.last_name].filter(Boolean).join(" ") || normalizedEmail
       } else {
-        displayName = authUser.user_metadata?.display_name || 
-          authUser.user_metadata?.full_name ||
-          normalizedEmail
+        displayName = authUser.user_metadata?.full_name || normalizedEmail
       }
     }
   } catch (e) {
@@ -2659,7 +2657,7 @@ export async function getPlayerStats(playerId: string) {
   // Get profile career stats
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, display_name, avatar_url, career_wins, career_losses, career_tournaments")
+    .select("id, first_name, last_name, avatar_url, career_wins, career_losses, career_tournaments")
     .eq("id", playerId)
     .single()
 
