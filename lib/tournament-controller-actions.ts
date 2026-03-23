@@ -3,6 +3,7 @@
 import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
+import { generateSwissPairings, type PairingPlayer } from "@/lib/pairing-algorithms"
 
 // ── Types ──
 
@@ -184,7 +185,7 @@ export async function createSwissRound(tournamentId: string, phaseId: string) {
       .not("player2_id", "is", null)
 
     // Build player data for Swiss pairing
-    const playerMap = new Map<string, SwissPlayer>()
+    const playerMap = new Map<string, PairingPlayer>()
     for (const reg of registrations) {
       const playerStats = stats?.find(s => s.player_id === reg.player_id)
       const opponents: string[] = []
@@ -226,13 +227,13 @@ export async function createSwissRound(tournamentId: string, phaseId: string) {
     if (roundError || !round) return { error: roundError?.message ?? "Failed to create round" }
 
     // Create matches
-    const matchInserts = pairings.map(([p1, p2], idx) => ({
+    const matchInserts = pairings.map((pairing) => ({
       round_id: round.id,
       tournament_id: tournamentId,
-      table_number: idx + 1,
-      player1_id: p1,
-      player2_id: p2,
-      is_bye: p2 === null,
+      table_number: pairing.tableNumber,
+      player1_id: pairing.player1Id,
+      player2_id: pairing.player2Id,
+      is_bye: pairing.player2Id === null,
       status: "pending" as const,
     }))
 
@@ -255,8 +256,9 @@ export async function createSwissRound(tournamentId: string, phaseId: string) {
     }
 
     // Auto-complete bye matches
-    const byeMatches = pairings.filter(([, p2]) => p2 === null)
-    for (const [byePlayer] of byeMatches) {
+    const byeMatches = pairings.filter((p) => p.player2Id === null)
+    for (const byePairing of byeMatches) {
+      const byePlayer = byePairing.player1Id
       const { data: byeMatch } = await supabase
         .from("tournament_matches")
         .select("id")
@@ -362,7 +364,7 @@ export async function regeneratePairings(tournamentId: string, roundId: string) 
     .not("player2_id", "is", null)
 
   // Build player data for Swiss pairing
-  const playerMap = new Map<string, SwissPlayer>()
+  const playerMap = new Map<string, PairingPlayer>()
   for (const reg of registrations) {
     const playerStats = stats?.find(s => s.player_id === reg.player_id)
     const opponents: string[] = []
@@ -387,13 +389,13 @@ export async function regeneratePairings(tournamentId: string, roundId: string) 
   const pairings = generateSwissPairings(players)
 
   // Create matches
-  const matchInserts = pairings.map(([p1, p2], idx) => ({
+  const matchInserts = pairings.map((pairing) => ({
     round_id: roundId,
     tournament_id: tournamentId,
-    table_number: idx + 1,
-    player1_id: p1,
-    player2_id: p2,
-    is_bye: p2 === null,
+    table_number: pairing.tableNumber,
+    player1_id: pairing.player1Id,
+    player2_id: pairing.player2Id,
+    is_bye: pairing.player2Id === null,
     status: "pending" as const,
   }))
 
@@ -903,16 +905,16 @@ export async function startTournament(tournamentId: string) {
       .limit(1)
   }
   
-  // Verify enough players
-  const { count } = await supabase
-    .from("tournament_registrations")
-    .select("*", { count: "exact", head: true })
-    .eq("tournament_id", tournamentId)
-    .eq("status", "registered")
-  
-  if (!count || count < 2) {
-    return { error: "Need at least 2 registered players" }
-  }
+  // Verify enough players - count all who are registered or checked_in
+    const { count } = await supabase
+      .from("tournament_registrations")
+      .select("*", { count: "exact", head: true })
+      .eq("tournament_id", tournamentId)
+      .in("status", ["registered", "checked_in"])
+    
+    if (!count || count < 2) {
+      return { error: "Need at least 2 registered players" }
+    }
   
   // Update tournament status
   const { error } = await supabase

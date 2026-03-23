@@ -13,12 +13,12 @@ async function requireTournamentOrganizer(tournamentId: string) {
   // Use admin client to bypass RLS
   const { data: tournament } = await adminClient
     .from("tournaments")
-    .select("organizer_id")
+    .select("created_by")
     .eq("id", tournamentId)
     .single()
 
   if (!tournament) return { error: "Tournament not found" }
-  if (tournament.organizer_id !== user.id) {
+  if (tournament.created_by !== user.id) {
     const { data: staff } = await adminClient
       .from("tournament_staff")
       .select("role")
