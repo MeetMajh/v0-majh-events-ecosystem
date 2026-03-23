@@ -182,6 +182,15 @@ export function BracketView({
   const [activePool, setActivePool] = useState(pools[0])
 
   if (matches.length === 0) {
+    // Show appropriate message based on format
+    if (format === "swiss") {
+      return (
+        <div className="rounded-xl border border-dashed border-border p-12 text-center">
+          <p className="text-muted-foreground">Swiss tournaments use round-by-round pairings instead of a bracket.</p>
+          <p className="text-sm text-muted-foreground mt-2">Check the Pairings tab to see current round matchups.</p>
+        </div>
+      )
+    }
     return (
       <div className="rounded-xl border border-dashed border-border p-12 text-center">
         <p className="text-muted-foreground">Bracket not yet generated. Check back when the tournament starts.</p>
