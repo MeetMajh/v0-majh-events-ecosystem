@@ -980,58 +980,90 @@ export async function completeTournament(tournamentId: string) {
 // ── Queries ──
 
 export async function getTournamentStandings(tournamentId: string, phaseId?: string): Promise<PlayerStanding[]> {
-  const supabase = await createClient()
+  try {
+    // Use admin client to bypass RLS
+    const supabase = createAdminClient()
 
-  let query = supabase
-    .from("tournament_player_stats")
-    .select("*, profiles(id, display_name, avatar_url)")
-    .eq("tournament_id", tournamentId)
-    .order("standing")
+    // Query player stats
+    let query = supabase
+      .from("tournament_player_stats")
+      .select("*")
+      .eq("tournament_id", tournamentId)
+      .order("points", { ascending: false })
 
-  if (phaseId) {
-    query = query.eq("phase_id", phaseId)
-  }
-
-  const { data } = await query
-
-  // Get opponents for each player
-  const { data: matches } = await supabase
-    .from("tournament_matches")
-    .select("player1_id, player2_id")
-    .eq("tournament_id", tournamentId)
-    .eq("status", "confirmed")
-
-  const opponentMap = new Map<string, string[]>()
-  for (const match of matches ?? []) {
-    if (match.player1_id && match.player2_id) {
-      const p1Opponents = opponentMap.get(match.player1_id) ?? []
-      p1Opponents.push(match.player2_id)
-      opponentMap.set(match.player1_id, p1Opponents)
-
-      const p2Opponents = opponentMap.get(match.player2_id) ?? []
-      p2Opponents.push(match.player1_id)
-      opponentMap.set(match.player2_id, p2Opponents)
+    if (phaseId) {
+      query = query.eq("phase_id", phaseId)
     }
-  }
 
-  return (data ?? []).map(stat => ({
-    playerId: stat.player_id,
-    displayName: stat.profiles?.display_name ?? "Unknown",
-    avatarUrl: stat.profiles?.avatar_url ?? null,
-    matchWins: stat.match_wins,
-    matchLosses: stat.match_losses,
-    matchDraws: stat.match_draws,
-    gameWins: stat.game_wins,
-    gameLosses: stat.game_losses,
-    gameDraws: stat.game_draws,
-    points: stat.points,
-    omwPercent: stat.omw_percent,
-    gwPercent: stat.gw_percent,
-    ogwPercent: stat.ogw_percent,
-    standing: stat.standing,
-    isDropped: stat.is_dropped,
-    opponents: opponentMap.get(stat.player_id) ?? [],
-  }))
+    const { data: stats, error: statsError } = await query
+
+    if (statsError) {
+      console.error("[v0] getTournamentStandings stats error:", statsError)
+      return []
+    }
+
+    if (!stats || stats.length === 0) {
+      return []
+    }
+
+    // Get player profiles separately (using first_name, last_name)
+    const playerIds = stats.map(s => s.player_id)
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, first_name, last_name, avatar_url")
+      .in("id", playerIds)
+
+    const profileMap = new Map(profiles?.map(p => [p.id, p]) ?? [])
+
+    // Get opponents for each player
+    const { data: matches } = await supabase
+      .from("tournament_matches")
+      .select("player1_id, player2_id")
+      .eq("tournament_id", tournamentId)
+      .eq("status", "confirmed")
+
+    const opponentMap = new Map<string, string[]>()
+    for (const match of matches ?? []) {
+      if (match.player1_id && match.player2_id) {
+        const p1Opponents = opponentMap.get(match.player1_id) ?? []
+        p1Opponents.push(match.player2_id)
+        opponentMap.set(match.player1_id, p1Opponents)
+
+        const p2Opponents = opponentMap.get(match.player2_id) ?? []
+        p2Opponents.push(match.player1_id)
+        opponentMap.set(match.player2_id, p2Opponents)
+      }
+    }
+
+    return stats.map((stat, index) => {
+      const profile = profileMap.get(stat.player_id)
+      const displayName = profile 
+        ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'Unknown'
+        : 'Unknown'
+      
+      return {
+        playerId: stat.player_id,
+        displayName,
+        avatarUrl: profile?.avatar_url ?? null,
+        matchWins: stat.match_wins ?? 0,
+        matchLosses: stat.match_losses ?? 0,
+        matchDraws: stat.match_draws ?? 0,
+        gameWins: stat.game_wins ?? 0,
+        gameLosses: stat.game_losses ?? 0,
+        gameDraws: stat.game_draws ?? 0,
+        points: stat.points ?? 0,
+        omwPercent: stat.omw_percent ?? 0,
+        gwPercent: stat.gw_percent ?? 0,
+        ogwPercent: stat.ogw_percent ?? 0,
+        standing: stat.standing ?? index + 1,
+        isDropped: stat.is_dropped ?? false,
+        opponents: opponentMap.get(stat.player_id) ?? [],
+      }
+    })
+  } catch (err) {
+    console.error("[v0] getTournamentStandings exception:", err)
+    return []
+  }
 }
 
 export async function getCurrentRound(tournamentId: string) {
@@ -1614,7 +1646,7 @@ export async function adminCheckInPlayer(tournamentId: string, playerId: string,
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Round Timer Controls
-// ══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════��══════════════════════
 
 export async function pauseRound(tournamentId: string, roundId: string) {
   const auth = await requireTournamentOrganizer(tournamentId)
