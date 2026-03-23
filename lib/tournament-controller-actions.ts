@@ -904,12 +904,12 @@ export async function startTournament(tournamentId: string) {
       .limit(1)
   }
   
-  // Verify enough players - count all who are not dropped/disqualified
+  // Verify enough players - count all who are registered or checked_in
     const { count } = await supabase
       .from("tournament_registrations")
       .select("*", { count: "exact", head: true })
       .eq("tournament_id", tournamentId)
-      .not("status", "in", '("dropped","disqualified","cancelled")')
+      .in("status", ["registered", "checked_in"])
     
     if (!count || count < 2) {
       return { error: "Need at least 2 registered players" }
