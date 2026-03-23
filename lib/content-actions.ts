@@ -28,7 +28,7 @@ export async function getArticles(filters?: { category?: string; limit?: number;
   const supabase = await createClient()
   let query = supabase
     .from("news_articles")
-    .select("*, profiles!news_articles_author_id_fkey(display_name, avatar_url), news_categories(name, slug, color)")
+    .select("*, profiles!news_articles_author_id_fkey(first_name, last_name, avatar_url), news_categories(name, slug, color)")
     .eq("is_published", true)
     .order("published_at", { ascending: false })
 
@@ -44,7 +44,7 @@ export async function getArticleBySlug(slug: string) {
   const supabase = await createClient()
   const { data } = await supabase
     .from("news_articles")
-    .select("*, profiles!news_articles_author_id_fkey(display_name, avatar_url), news_categories(name, slug, color)")
+    .select("*, profiles!news_articles_author_id_fkey(first_name, last_name, avatar_url), news_categories(name, slug, color)")
     .eq("slug", slug)
     .single()
   
@@ -63,7 +63,7 @@ export async function getAllArticlesAdmin() {
   const supabase = await createClient()
   const { data } = await supabase
     .from("news_articles")
-    .select("*, profiles!news_articles_author_id_fkey(display_name), news_categories(name, slug, color)")
+    .select("*, profiles!news_articles_author_id_fkey(first_name, last_name), news_categories(name, slug, color)")
     .order("created_at", { ascending: false })
   return data ?? []
 }
@@ -368,7 +368,7 @@ export async function getForumThreads(category?: string) {
   const supabase = await createClient()
   let query = supabase
     .from("forum_threads")
-    .select("*, profiles!forum_threads_author_id_fkey(id, display_name, avatar_url)")
+    .select("*, profiles!forum_threads_author_id_fkey(id, first_name, last_name, avatar_url)")
     .order("is_pinned", { ascending: false })
     .order("last_reply_at", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false })
@@ -387,12 +387,12 @@ export async function getThread(threadId: string) {
   ] = await Promise.all([
     supabase
       .from("forum_threads")
-      .select("*, profiles!forum_threads_author_id_fkey(id, display_name, avatar_url)")
+      .select("*, profiles!forum_threads_author_id_fkey(id, first_name, last_name, avatar_url)")
       .eq("id", threadId)
       .single(),
     supabase
       .from("forum_replies")
-      .select("*, profiles!forum_replies_author_id_fkey(id, display_name, avatar_url)")
+      .select("*, profiles!forum_replies_author_id_fkey(id, first_name, last_name, avatar_url)")
       .eq("thread_id", threadId)
       .order("created_at"),
   ])
