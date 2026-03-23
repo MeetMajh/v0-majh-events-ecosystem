@@ -904,16 +904,16 @@ export async function startTournament(tournamentId: string) {
       .limit(1)
   }
   
-  // Verify enough players
-  const { count } = await supabase
-    .from("tournament_registrations")
-    .select("*", { count: "exact", head: true })
-    .eq("tournament_id", tournamentId)
-    .eq("status", "registered")
-  
-  if (!count || count < 2) {
-    return { error: "Need at least 2 registered players" }
-  }
+  // Verify enough players - count all who are not dropped/disqualified
+    const { count } = await supabase
+      .from("tournament_registrations")
+      .select("*", { count: "exact", head: true })
+      .eq("tournament_id", tournamentId)
+      .not("status", "in", '("dropped","disqualified","cancelled")')
+    
+    if (!count || count < 2) {
+      return { error: "Need at least 2 registered players" }
+    }
   
   // Update tournament status
   const { error } = await supabase
