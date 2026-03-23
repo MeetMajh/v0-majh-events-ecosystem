@@ -700,13 +700,18 @@ export async function reportMatchResult(
 export async function recalculateStandings(tournamentId: string, phaseId: string) {
   const supabase = await createClient()
 
-  // Get all player stats
-  const { data: allStats } = await supabase
+  // Get all player stats (no join - we don't need profiles for tiebreaker calculation)
+  const { data: allStats, error: statsError } = await supabase
     .from("tournament_player_stats")
-    .select("*, profiles(display_name, avatar_url)")
+    .select("*")
     .eq("tournament_id", tournamentId)
     .eq("phase_id", phaseId)
 
+  if (statsError) {
+    console.error("Error fetching player stats for recalculation:", statsError)
+    return
+  }
+  
   if (!allStats || allStats.length === 0) return
 
   // Get all confirmed matches
@@ -2025,7 +2030,7 @@ export async function updateMatchPlayers(
 
 // ═══��══════���══════════════════════════════════════════════════���═════��══════════
 // Decklist Management
-// ══════════════════════════════�����══════════════════════════════════════════════
+// ══════════════════════════════�����══════════���═══════════════════════════════════
 
 export async function submitDecklist(
   tournamentId: string,
