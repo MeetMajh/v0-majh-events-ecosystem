@@ -3,7 +3,7 @@
 import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
-import { generateSwissPairings, type PairingPlayer } from "@/lib/pairing-algorithms"
+import { generateSwissPairings, calculateSwissRounds, type PairingPlayer } from "@/lib/pairing-algorithms"
 
 // ── Types ──
 
@@ -870,71 +870,78 @@ export async function startTournament(tournamentId: string) {
       .single()
     
     if (!tournament) return { error: "Tournament not found" }
-  
-  // Check if tournament has phases, if not create a default one
-  const { data: phases } = await supabase
-    .from("tournament_phases")
-    .select("id")
-    .eq("tournament_id", tournamentId)
-  
-  if (!phases || phases.length === 0) {
-    // Auto-create a default phase based on tournament format
-    const phaseType = tournament.format || "swiss"
-    const { error: phaseError } = await supabase
-      .from("tournament_phases")
-      .insert({
-        tournament_id: tournamentId,
-        name: phaseType === "swiss" ? "Swiss Rounds" : phaseType === "single_elimination" ? "Bracket" : "Main Phase",
-        phase_type: phaseType,
-        phase_order: 1,
-        is_current: true,
-        started_at: new Date().toISOString(),
-        win_points: 3,
-        draw_points: 1,
-        loss_points: 0,
-      })
-  
-    if (phaseError) return { error: `Failed to create phase: ${phaseError.message}` }
-  } else {
-    // Set first phase as current
-    await supabase
-      .from("tournament_phases")
-      .update({ is_current: true, started_at: new Date().toISOString() })
-      .eq("tournament_id", tournamentId)
-      .order("phase_order")
-      .limit(1)
-  }
-  
-  // Verify enough players - count all who are registered or checked_in
-    const { count } = await supabase
+    
+    // Verify enough players - count all who are registered or checked_in
+    const { count: playerCount } = await supabase
       .from("tournament_registrations")
       .select("*", { count: "exact", head: true })
       .eq("tournament_id", tournamentId)
       .in("status", ["registered", "checked_in"])
     
-    if (!count || count < 2) {
+    if (!playerCount || playerCount < 2) {
       return { error: "Need at least 2 registered players" }
     }
-  
-  // Update tournament status
-  const { error } = await supabase
-    .from("tournaments")
-    .update({ status: "in_progress" })
-    .eq("id", tournamentId)
-
-  if (error) return { error: error.message }
-
-  // Create announcement
+    
+    // Calculate recommended rounds based on player count
+    const recommendedRounds = calculateSwissRounds(playerCount)
+    
+    // Check if tournament has phases, if not create a default one
+    const { data: phases } = await supabase
+      .from("tournament_phases")
+      .select("id, rounds_count")
+      .eq("tournament_id", tournamentId)
+    
+    if (!phases || phases.length === 0) {
+      // Auto-create a default phase based on tournament format with calculated rounds
+      const phaseType = tournament.format || "swiss"
+      const { error: phaseError } = await supabase
+        .from("tournament_phases")
+        .insert({
+          tournament_id: tournamentId,
+          name: phaseType === "swiss" ? "Swiss Rounds" : phaseType === "single_elimination" ? "Bracket" : "Main Phase",
+          phase_type: phaseType,
+          phase_order: 1,
+          is_current: true,
+          started_at: new Date().toISOString(),
+          win_points: 3,
+          draw_points: 1,
+          loss_points: 0,
+          rounds_count: phaseType === "swiss" ? recommendedRounds : null,
+        })
+      
+      if (phaseError) return { error: `Failed to create phase: ${phaseError.message}` }
+    } else {
+      // Update first phase with calculated rounds if not set, and set as current
+      const firstPhase = phases[0]
+      await supabase
+        .from("tournament_phases")
+        .update({ 
+          is_current: true, 
+          started_at: new Date().toISOString(),
+          rounds_count: firstPhase.rounds_count ?? recommendedRounds,
+        })
+        .eq("id", firstPhase.id)
+    }
+    
+    // Update tournament status
+    const { error } = await supabase
+      .from("tournaments")
+      .update({ status: "in_progress" })
+      .eq("id", tournamentId)
+    
+    if (error) return { error: error.message }
+    
+    // Create announcement
     await supabase.from("tournament_announcements").insert({
       tournament_id: tournamentId,
       author_id: userId,
-      message: `The tournament has officially STARTED! Please check the Matches tab for your first round pairing.`,
+      message: `The tournament has officially STARTED! ${recommendedRounds} rounds of Swiss will be played. Please check the Matches tab for your first round pairing.`,
       priority: "high",
     })
-
+    
     revalidatePath(`/dashboard/tournaments/${tournamentId}`)
     revalidatePath(`/esports/tournaments`)
-    return { success: true }
+    return { success: true, recommendedRounds }
   } catch (err) {
     console.error("[v0] startTournament exception:", err)
     return { error: `Unexpected error: ${err instanceof Error ? err.message : String(err)}` }
@@ -1961,7 +1968,7 @@ export async function updateMatchPlayers(
 
 // ═══��══════���══════════════════════════════════════════════════���═════��══════════
 // Decklist Management
-// ══════════════════════════════���═══════════════════════════════════════════════
+// ══════════════════════════════�����══════════════════════════════════════════════
 
 export async function submitDecklist(
   tournamentId: string,
@@ -2070,7 +2077,7 @@ export async function getTournamentDecklists(tournamentId: string) {
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Registration Codes & Preregistrations
-// ══════════════════════════════════════════════�����══════���═══════════════════════
+// ═════════════════════════════════════════════��������══════���═══════════════════════
 
 export async function createRegistrationCode(
   tournamentId: string,
@@ -2640,7 +2647,7 @@ export async function sendTournamentAnnouncement(
       tournament_id: tournamentId,
       message: message.trim(),
       priority,
-      created_by: userId,
+      author_id: userId,
     })
     .select()
     .single()
@@ -2669,8 +2676,8 @@ export async function getTournamentAnnouncements(tournamentId: string) {
       message,
       priority,
       created_at,
-      created_by,
-      profiles:created_by (display_name, avatar_url)
+      author_id,
+      profiles:author_id (first_name, last_name, avatar_url)
     `)
     .eq("tournament_id", tournamentId)
     .order("created_at", { ascending: false })

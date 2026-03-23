@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
+import { calculateSwissRounds } from "@/lib/pairing-algorithms"
 import {
   AlertTriangle,
   ArrowLeft,
@@ -281,12 +282,32 @@ export function TournamentController({
       toast.error("No active phase")
       return
     }
+    
+    // Calculate current round number and recommended rounds
+    const currentRoundNum = currentRound?.round_number ?? 0
+    const recommendedRounds = activePhase.rounds_count ?? calculateSwissRounds(registeredCount)
+    
+    // Warn if exceeding recommended rounds
+    if (currentRoundNum >= recommendedRounds) {
+      const proceed = window.confirm(
+        `You are about to create round ${currentRoundNum + 1}, which exceeds the recommended ${recommendedRounds} rounds for ${registeredCount} players. Continue anyway?`
+      )
+      if (!proceed) return
+    }
+    
     startTransition(async () => {
       const result = await createSwissRound(tournament.id, activePhase.id)
       if ("error" in result) {
         toast.error(result.error)
       } else {
-        toast.success("Round created!")
+        const newRoundNum = currentRoundNum + 1
+        if (newRoundNum === recommendedRounds) {
+          toast.success(`Round ${newRoundNum} created! This is the final recommended round.`)
+        } else if (newRoundNum < recommendedRounds) {
+          toast.success(`Round ${newRoundNum} of ${recommendedRounds} created!`)
+        } else {
+          toast.success(`Round ${newRoundNum} created (extra round).`)
+        }
         router.refresh()
       }
     })
@@ -783,9 +804,11 @@ const handleAddPlayer = () => {
                     </div>
                     <div>
                       <p className="text-2xl font-bold">
-                        {currentRound ? `R${currentRound.round_number}` : "-"}
+                        {currentRound ? `R${currentRound.round_number}` : "-"} / {activePhase?.rounds_count ?? calculateSwissRounds(registeredCount)}
                       </p>
-                      <p className="text-xs text-muted-foreground">Current Round</p>
+                      <p className="text-xs text-muted-foreground">
+                        Round Progress {registeredCount > 0 && `(${calculateSwissRounds(registeredCount)} recommended)`}
+                      </p>
                     </div>
                   </CardContent>
                 </Card>

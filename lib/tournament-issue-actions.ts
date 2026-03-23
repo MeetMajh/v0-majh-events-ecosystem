@@ -42,13 +42,13 @@ export async function getTournamentIssues(tournamentId: string, filters?: {
     .from("tournament_issues")
     .select(`
       *,
-      reporter:profiles!reported_by(id, display_name, avatar_url),
-      assignee:profiles!assigned_to(id, display_name, avatar_url),
-      affected_player:profiles!affected_player_id(id, display_name, avatar_url),
-      resolver:profiles!resolved_by(id, display_name, avatar_url),
+      reporter:profiles!reported_by(id, first_name, last_name, avatar_url),
+      assignee:profiles!assigned_to(id, first_name, last_name, avatar_url),
+      affected_player:profiles!affected_player_id(id, first_name, last_name, avatar_url),
+      resolver:profiles!resolved_by(id, first_name, last_name, avatar_url),
       comments:issue_comments(
         id, comment, is_internal, created_at,
-        user:profiles!user_id(id, display_name, avatar_url)
+        user:profiles!user_id(id, first_name, last_name, avatar_url)
       )
     `)
     .eq("tournament_id", tournamentId)
@@ -90,8 +90,8 @@ export async function getAllIssues(filters?: {
     .select(`
       *,
       tournament:tournaments(id, name, slug),
-      reporter:profiles!reported_by(id, display_name, avatar_url),
-      assignee:profiles!assigned_to(id, display_name, avatar_url)
+      reporter:profiles!reported_by(id, first_name, last_name, avatar_url),
+      assignee:profiles!assigned_to(id, first_name, last_name, avatar_url)
     `)
     .order("created_at", { ascending: false })
   
