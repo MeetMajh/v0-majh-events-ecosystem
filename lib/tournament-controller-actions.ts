@@ -593,49 +593,100 @@ export async function reportMatchResult(
 
   // If confirmed, update player stats
   if (updates.status === "confirmed") {
-    const phaseId = match.tournament_rounds?.phase_id
-    const winPoints = match.tournament_rounds?.tournament_phases?.win_points ?? 3
-    const drawPoints = match.tournament_rounds?.tournament_phases?.draw_points ?? 1
-    const lossPoints = match.tournament_rounds?.tournament_phases?.loss_points ?? 0
+    try {
+      const phaseId = match.tournament_rounds?.phase_id
+      const winPoints = match.tournament_rounds?.tournament_phases?.win_points ?? 3
+      const drawPoints = match.tournament_rounds?.tournament_phases?.draw_points ?? 1
+      const lossPoints = match.tournament_rounds?.tournament_phases?.loss_points ?? 0
 
-    // Update player 1 stats
-    if (match.player1_id) {
-      const p1Won = winnerId === match.player1_id
-      const isDraw = winnerId === null && draws > 0
-      await supabase.from("tournament_player_stats").upsert({
-        tournament_id: match.tournament_id,
-        phase_id: phaseId,
-        player_id: match.player1_id,
-        match_wins: p1Won ? 1 : 0,
-        match_losses: !p1Won && !isDraw ? 1 : 0,
-        match_draws: isDraw ? 1 : 0,
-        game_wins: player1Wins,
-        game_losses: player2Wins,
-        game_draws: draws,
-        points: p1Won ? winPoints : (isDraw ? drawPoints : lossPoints),
-      }, {
-        onConflict: "tournament_id,phase_id,player_id",
-      })
-    }
+      // Update player 1 stats - use RPC or manual check for existing record
+      if (match.player1_id && phaseId) {
+        const p1Won = winnerId === match.player1_id
+        const isDraw = winnerId === null && draws > 0
+        const p1Points = p1Won ? winPoints : (isDraw ? drawPoints : lossPoints)
+        
+        // Check if stats exist
+        const { data: existing1 } = await supabase
+          .from("tournament_player_stats")
+          .select("id, match_wins, match_losses, match_draws, game_wins, game_losses, game_draws, points")
+          .eq("tournament_id", match.tournament_id)
+          .eq("phase_id", phaseId)
+          .eq("player_id", match.player1_id)
+          .single()
+        
+        if (existing1) {
+          // Update existing
+          await supabase.from("tournament_player_stats").update({
+            match_wins: (existing1.match_wins || 0) + (p1Won ? 1 : 0),
+            match_losses: (existing1.match_losses || 0) + (!p1Won && !isDraw ? 1 : 0),
+            match_draws: (existing1.match_draws || 0) + (isDraw ? 1 : 0),
+            game_wins: (existing1.game_wins || 0) + player1Wins,
+            game_losses: (existing1.game_losses || 0) + player2Wins,
+            game_draws: (existing1.game_draws || 0) + draws,
+            points: (existing1.points || 0) + p1Points,
+          }).eq("id", existing1.id)
+        } else {
+          // Insert new
+          await supabase.from("tournament_player_stats").insert({
+            tournament_id: match.tournament_id,
+            phase_id: phaseId,
+            player_id: match.player1_id,
+            match_wins: p1Won ? 1 : 0,
+            match_losses: !p1Won && !isDraw ? 1 : 0,
+            match_draws: isDraw ? 1 : 0,
+            game_wins: player1Wins,
+            game_losses: player2Wins,
+            game_draws: draws,
+            points: p1Points,
+          })
+        }
+      }
 
-    // Update player 2 stats
-    if (match.player2_id) {
-      const p2Won = winnerId === match.player2_id
-      const isDraw = winnerId === null && draws > 0
-      await supabase.from("tournament_player_stats").upsert({
-        tournament_id: match.tournament_id,
-        phase_id: phaseId,
-        player_id: match.player2_id,
-        match_wins: p2Won ? 1 : 0,
-        match_losses: !p2Won && !isDraw ? 1 : 0,
-        match_draws: isDraw ? 1 : 0,
-        game_wins: player2Wins,
-        game_losses: player1Wins,
-        game_draws: draws,
-        points: p2Won ? winPoints : (isDraw ? drawPoints : lossPoints),
-      }, {
-        onConflict: "tournament_id,phase_id,player_id",
-      })
+      // Update player 2 stats
+      if (match.player2_id && phaseId) {
+        const p2Won = winnerId === match.player2_id
+        const isDraw = winnerId === null && draws > 0
+        const p2Points = p2Won ? winPoints : (isDraw ? drawPoints : lossPoints)
+        
+        // Check if stats exist
+        const { data: existing2 } = await supabase
+          .from("tournament_player_stats")
+          .select("id, match_wins, match_losses, match_draws, game_wins, game_losses, game_draws, points")
+          .eq("tournament_id", match.tournament_id)
+          .eq("phase_id", phaseId)
+          .eq("player_id", match.player2_id)
+          .single()
+        
+        if (existing2) {
+          // Update existing
+          await supabase.from("tournament_player_stats").update({
+            match_wins: (existing2.match_wins || 0) + (p2Won ? 1 : 0),
+            match_losses: (existing2.match_losses || 0) + (!p2Won && !isDraw ? 1 : 0),
+            match_draws: (existing2.match_draws || 0) + (isDraw ? 1 : 0),
+            game_wins: (existing2.game_wins || 0) + player2Wins,
+            game_losses: (existing2.game_losses || 0) + player1Wins,
+            game_draws: (existing2.game_draws || 0) + draws,
+            points: (existing2.points || 0) + p2Points,
+          }).eq("id", existing2.id)
+        } else {
+          // Insert new
+          await supabase.from("tournament_player_stats").insert({
+            tournament_id: match.tournament_id,
+            phase_id: phaseId,
+            player_id: match.player2_id,
+            match_wins: p2Won ? 1 : 0,
+            match_losses: !p2Won && !isDraw ? 1 : 0,
+            match_draws: isDraw ? 1 : 0,
+            game_wins: player2Wins,
+            game_losses: player1Wins,
+            game_draws: draws,
+            points: p2Points,
+          })
+        }
+      }
+    } catch (statsErr) {
+      console.error("Error updating player stats:", statsErr)
+      // Don't fail the match report just because stats update failed
     }
   }
 
