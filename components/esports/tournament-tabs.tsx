@@ -77,6 +77,7 @@ export function TournamentTabs({
 
       {activeTab === "bracket" && (
         <BracketView
+          tournamentId={tournament.id}
           matches={matches}
           participants={participants}
           format={tournament.format}

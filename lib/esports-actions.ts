@@ -105,9 +105,10 @@ export async function getTournamentBySlug(slug: string) {
     { data: sponsors },
   ] = await Promise.all([
     supabase
-      .from("tournament_participants")
-      .select("*, profiles(id, display_name, avatar_url)")
-      .eq("tournament_id", tournament.id),
+      .from("tournament_registrations")
+      .select("*, profiles:player_id(id, first_name, last_name, avatar_url)")
+      .eq("tournament_id", tournament.id)
+      .in("status", ["registered", "checked_in"]),
     supabase
       .from("matches")
       .select("*")
@@ -119,10 +120,20 @@ export async function getTournamentBySlug(slug: string) {
       .select("*, sponsors(*)")
       .eq("tournament_id", tournament.id),
   ])
+  
+  // Map participants to include display_name from first_name/last_name
+  const mappedParticipants = (participants ?? []).map((p: any) => ({
+    ...p,
+    user_id: p.player_id,
+    profiles: p.profiles ? {
+      ...p.profiles,
+      display_name: `${p.profiles.first_name || ''} ${p.profiles.last_name || ''}`.trim() || 'Unknown Player'
+    } : null
+  }))
 
   return {
     ...tournament,
-    participants: participants ?? [],
+    participants: mappedParticipants,
     matches: matches ?? [],
     sponsors: sponsors ?? [],
   }

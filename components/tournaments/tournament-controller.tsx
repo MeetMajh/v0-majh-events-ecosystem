@@ -83,6 +83,7 @@ import {
   type PlayerStanding,
 } from "@/lib/tournament-controller-actions"
 import { resetRoundTimer } from "@/lib/timer-actions"
+import { getTournamentIssues, updateIssueStatus, ISSUE_CATEGORIES } from "@/lib/tournament-issue-actions"
 import type { TournamentStatus } from "@/lib/tournament-controller-actions"
 
 interface TournamentControllerProps {
@@ -209,6 +210,8 @@ export function TournamentController({
   const [loadingAnnouncements, setLoadingAnnouncements] = useState(false)
   const [showManualPairingDialog, setShowManualPairingDialog] = useState(false)
   const [selectedMatchForSwap, setSelectedMatchForSwap] = useState<string | null>(null)
+  const [tickets, setTickets] = useState<any[]>([])
+  const [loadingTickets, setLoadingTickets] = useState(false)
 
   const activePhase = phases.find(p => p.is_current) || phases[0]
   const checkedInCount = registrations.filter(r => r.status === "checked_in").length
@@ -254,6 +257,17 @@ export function TournamentController({
           setAnnouncements(result.announcements)
         }
         setLoadingAnnouncements(false)
+      })
+    }
+  }, [activeSection, tournament.id])
+  
+  // Load tickets when section changes to tickets
+  useEffect(() => {
+    if (activeSection === "tickets") {
+      setLoadingTickets(true)
+      getTournamentIssues(tournament.id).then((data) => {
+        setTickets(data)
+        setLoadingTickets(false)
       })
     }
   }, [activeSection, tournament.id])
@@ -1591,14 +1605,105 @@ const handleAddPlayer = () => {
           {/* Support Tickets Section */}
           {activeSection === "tickets" && (
             <div className="space-y-4">
-              <h2 className="text-xl font-semibold">Support Tickets</h2>
-              <Card>
-                <CardContent className="py-8 text-center text-muted-foreground">
-                  <TicketCheck className="mx-auto h-12 w-12 mb-4 opacity-50" />
-                  <p>No support tickets</p>
-                  <p className="text-sm">Player issues and disputes will appear here</p>
-                </CardContent>
-              </Card>
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-semibold">Support Tickets</h2>
+                <Badge variant="outline">
+                  {tickets.filter(t => t.status !== "resolved" && t.status !== "closed").length} open
+                </Badge>
+              </div>
+              
+              {loadingTickets ? (
+                <Card>
+                  <CardContent className="py-8 text-center text-muted-foreground">
+                    <RefreshCw className="mx-auto h-8 w-8 mb-4 animate-spin opacity-50" />
+                    <p>Loading tickets...</p>
+                  </CardContent>
+                </Card>
+              ) : tickets.length === 0 ? (
+                <Card>
+                  <CardContent className="py-8 text-center text-muted-foreground">
+                    <TicketCheck className="mx-auto h-12 w-12 mb-4 opacity-50" />
+                    <p>No support tickets</p>
+                    <p className="text-sm">Player issues and disputes will appear here</p>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="space-y-3">
+                  {tickets.map((ticket) => (
+                    <Card key={ticket.id} className={cn(
+                      "transition-colors",
+                      ticket.severity === "critical" && "border-destructive/50 bg-destructive/5",
+                      ticket.severity === "high" && "border-orange-500/50",
+                      ticket.status === "resolved" && "opacity-60"
+                    )}>
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <Badge variant={
+                                ticket.status === "open" ? "destructive" :
+                                ticket.status === "in_progress" ? "default" :
+                                ticket.status === "escalated" ? "secondary" :
+                                "outline"
+                              } className="text-[10px]">
+                                {ticket.status}
+                              </Badge>
+                              <Badge variant="outline" className="text-[10px]">
+                                {ISSUE_CATEGORIES[ticket.category as keyof typeof ISSUE_CATEGORIES]?.label || ticket.category}
+                              </Badge>
+                              {ticket.severity === "critical" && (
+                                <Badge className="bg-destructive text-destructive-foreground text-[10px]">
+                                  CRITICAL
+                                </Badge>
+                              )}
+                            </div>
+                            <h4 className="font-medium text-sm truncate">{ticket.title}</h4>
+                            <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
+                              {ticket.description}
+                            </p>
+                            <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+                              <span>
+                                Reported by {ticket.reporter?.first_name} {ticket.reporter?.last_name}
+                              </span>
+                              <span>
+                                {formatDistanceToNow(new Date(ticket.created_at), { addSuffix: true })}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {ticket.status !== "resolved" && ticket.status !== "closed" && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  const fd = new FormData()
+                                  fd.set("issue_id", ticket.id)
+                                  fd.set("status", "resolved")
+                                  startTransition(async () => {
+                                    const result = await updateIssueStatus(fd)
+                                    if ("error" in result) {
+                                      toast.error(result.error)
+                                    } else {
+                                      toast.success("Ticket resolved")
+                                      setTickets(prev => prev.map(t => 
+                                        t.id === ticket.id ? { ...t, status: "resolved" } : t
+                                      ))
+                                    }
+                                  })
+                                }}
+                                disabled={isPending}
+                              >
+                                <CheckCircle2 className="h-3 w-3 mr-1" />
+                                Resolve
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

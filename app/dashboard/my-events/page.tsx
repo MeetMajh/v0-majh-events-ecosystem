@@ -19,8 +19,8 @@ export const metadata = {
 async function getMyEvents(userId: string) {
   const supabase = await createClient()
 
-  // Get user's tournament registrations
-  const { data: registrations } = await supabase
+  // Get user's tournament registrations - query all statuses except dropped
+  const { data: registrations, error: regError } = await supabase
     .from("tournament_registrations")
     .select(`
       *,
@@ -31,6 +31,10 @@ async function getMyEvents(userId: string) {
     `)
     .eq("player_id", userId)
     .order("created_at", { ascending: false })
+  
+  if (regError) {
+    console.error("[v0] Error fetching registrations:", regError)
+  }
 
   // Get user's match history
   const { data: matches } = await supabase
@@ -84,12 +88,16 @@ export default async function MyEventsPage() {
 
   const { registrations, matches, leaderboardEntries, results } = await getMyEvents(user.id)
 
-  // Categorize registrations
+  // Categorize registrations - be more lenient with status matching
   const activeEvents = registrations.filter(
-    r => r.tournaments && ["registration", "in_progress"].includes(r.tournaments.status) && r.status !== "dropped"
+    r => r.tournaments && r.tournaments.status === "in_progress" && !["dropped", "disqualified"].includes(r.status)
   )
   const upcomingEvents = registrations.filter(
-    r => r.tournaments && r.tournaments.start_date && isFuture(new Date(r.tournaments.start_date)) && r.status !== "dropped"
+    r => r.tournaments && (r.tournaments.status === "registration" || 
+         (r.tournaments.start_date && isFuture(new Date(r.tournaments.start_date)))) && 
+         !["dropped", "disqualified"].includes(r.status) &&
+         r.tournaments.status !== "in_progress" &&
+         r.tournaments.status !== "completed"
   )
   const pastEvents = registrations.filter(
     r => r.tournaments && r.tournaments.status === "completed"
