@@ -1961,7 +1961,7 @@ export async function updateMatchPlayers(
 
 // ═══��══════���══════════════════════════════════════════════════���═════��══════════
 // Decklist Management
-// ══════════════════════════════���═══════════════════════════════════════════════
+// ══════════════════════════════�����══════════════════════════════════════════════
 
 export async function submitDecklist(
   tournamentId: string,
@@ -2070,7 +2070,7 @@ export async function getTournamentDecklists(tournamentId: string) {
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Registration Codes & Preregistrations
-// ══════════════════════════════════════════════�����══════���═══════════════════════
+// ══════════════════════════════════════════════������══════���═══════════════════════
 
 export async function createRegistrationCode(
   tournamentId: string,
@@ -2640,7 +2640,7 @@ export async function sendTournamentAnnouncement(
       tournament_id: tournamentId,
       message: message.trim(),
       priority,
-      created_by: userId,
+      author_id: userId,
     })
     .select()
     .single()
@@ -2669,8 +2669,8 @@ export async function getTournamentAnnouncements(tournamentId: string) {
       message,
       priority,
       created_at,
-      created_by,
-      profiles:created_by (display_name, avatar_url)
+      author_id,
+      profiles:author_id (first_name, last_name, avatar_url)
     `)
     .eq("tournament_id", tournamentId)
     .order("created_at", { ascending: false })
