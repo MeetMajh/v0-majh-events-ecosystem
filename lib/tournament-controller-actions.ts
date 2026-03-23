@@ -1015,13 +1015,10 @@ export async function getTournamentStandings(tournamentId: string, phaseId?: str
 
     // Get player profiles separately (using first_name, last_name)
     const playerIds = stats.map(s => s.player_id)
-    const { data: profiles, error: profileError } = await supabase
+    const { data: profiles } = await supabase
       .from("profiles")
       .select("id, first_name, last_name, avatar_url")
       .in("id", playerIds)
-    
-    console.log("[v0] getTournamentStandings - stats count:", stats.length, "playerIds:", playerIds)
-    console.log("[v0] getTournamentStandings - profiles:", profiles?.length ?? 0, "error:", profileError?.message)
 
     const profileMap = new Map(profiles?.map(p => [p.id, p]) ?? [])
 
@@ -1769,10 +1766,14 @@ export async function addTimeToRound(tournamentId: string, roundId: string, minu
       .eq("id", roundId)
 
     if (error) return { error: error.message }
-  } else if (round.status === "active" && round.end_time) {
-    // If active, extend the end time
+  } else if (round.status === "active") {
+    // If active (including expired timer), extend the end time from current time or end_time
     const msToAdd = minutesToAdd * 60 * 1000
-    const newEndTime = new Date(new Date(round.end_time).getTime() + msToAdd)
+    const baseTime = round.end_time ? new Date(round.end_time) : new Date()
+    // If timer already expired, start from now instead
+    const startTime = baseTime.getTime() < Date.now() ? new Date() : baseTime
+    const newEndTime = new Date(startTime.getTime() + msToAdd)
+    
     const { error } = await supabase
       .from("tournament_rounds")
       .update({
@@ -1781,6 +1782,8 @@ export async function addTimeToRound(tournamentId: string, roundId: string, minu
       .eq("id", roundId)
 
     if (error) return { error: error.message }
+  } else if (round.status === "complete") {
+    return { error: "Cannot add time to a completed round" }
   } else {
     return { error: "Cannot add time to this round" }
   }
