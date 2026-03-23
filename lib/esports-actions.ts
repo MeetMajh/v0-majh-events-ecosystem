@@ -140,17 +140,12 @@ export async function getTournamentBySlug(slug: string) {
 }
 
 export async function createTournament(formData: FormData) {
-  console.log("[v0] createTournament called")
-  
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   
   if (!user) {
-    console.log("[v0] No user logged in")
     return { error: "You must be logged in to create a tournament" }
   }
-  
-  console.log("[v0] User:", user.id)
   
   // Check staff role or organizer permissions
   const { data: staffRole } = await supabase
@@ -159,11 +154,8 @@ export async function createTournament(formData: FormData) {
     .eq("user_id", user.id)
     .single()
   
-  console.log("[v0] Staff role:", staffRole)
-  
   const allowedRoles = ["owner", "manager", "organizer"]
   if (!staffRole || !allowedRoles.includes(staffRole.role)) {
-    console.log("[v0] User doesn't have permission, role:", staffRole?.role)
     return { error: "You don't have permission to create tournaments. Required role: owner, manager, or organizer" }
   }
   
@@ -171,8 +163,6 @@ export async function createTournament(formData: FormData) {
 
   const name = formData.get("name") as string
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
-
-  console.log("[v0] Creating tournament:", { name, slug })
 
   const tournament = {
     game_id: formData.get("game_id") as string,
@@ -191,25 +181,19 @@ export async function createTournament(formData: FormData) {
     status: "registration" as const,
   }
 
-  console.log("[v0] Tournament data:", tournament)
-
-  const { data: insertedTournament, error } = await supabase
+const { data: insertedTournament, error } = await supabase
     .from("tournaments")
     .insert(tournament)
     .select()
     .single()
     
-  if (error) {
-    console.log("[v0] Tournament creation error:", error)
+if (error) {
     return { error: error.message }
   }
-
-  console.log("[v0] Tournament created successfully:", insertedTournament)
-
+  
   // Create the default phase based on format
   const format = formData.get("format") as string
   if (insertedTournament && format) {
-    console.log("[v0] Creating default phase for format:", format)
     
     const { error: phaseError } = await supabase
       .from("tournament_phases")
@@ -222,12 +206,7 @@ export async function createTournament(formData: FormData) {
         is_complete: false,
       })
     
-    if (phaseError) {
-      console.log("[v0] Phase creation error:", phaseError)
-    } else {
-      console.log("[v0] Phase created successfully")
     }
-  }
 
   revalidatePath("/esports")
   revalidatePath("/dashboard/admin/esports")
