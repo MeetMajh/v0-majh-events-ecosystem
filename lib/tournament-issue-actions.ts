@@ -36,35 +36,35 @@ export async function getTournamentIssues(tournamentId: string, filters?: {
   category?: string
   escalationLevel?: number
 }) {
-  const supabase = await createClient()
-  
-  let query = supabase
-    .from("tournament_issues")
-    .select(`
-      *,
-      reporter:profiles!reported_by(id, first_name, last_name, avatar_url),
-      assignee:profiles!assigned_to(id, first_name, last_name, avatar_url),
-      affected_player:profiles!affected_player_id(id, first_name, last_name, avatar_url),
-      resolver:profiles!resolved_by(id, first_name, last_name, avatar_url),
-      comments:issue_comments(
-        id, comment, is_internal, created_at,
-        user:profiles!user_id(id, first_name, last_name, avatar_url)
-      )
-    `)
-    .eq("tournament_id", tournamentId)
-    .order("created_at", { ascending: false })
-  
-  if (filters?.status) query = query.eq("status", filters.status)
-  if (filters?.severity) query = query.eq("severity", filters.severity)
-  if (filters?.category) query = query.eq("category", filters.category)
-  if (filters?.escalationLevel) query = query.eq("escalation_level", filters.escalationLevel)
-  
-  const { data, error } = await query
-  if (error) {
-    console.error("Error fetching issues:", error)
+  try {
+    const supabase = await createClient()
+    
+    // Simple query without comments join in case issue_comments table doesn't exist
+    let query = supabase
+      .from("tournament_issues")
+      .select(`
+        *,
+        reporter:profiles!reported_by(id, first_name, last_name, avatar_url),
+        assignee:profiles!assigned_to(id, first_name, last_name, avatar_url)
+      `)
+      .eq("tournament_id", tournamentId)
+      .order("created_at", { ascending: false })
+    
+    if (filters?.status) query = query.eq("status", filters.status)
+    if (filters?.severity) query = query.eq("severity", filters.severity)
+    if (filters?.category) query = query.eq("category", filters.category)
+    if (filters?.escalationLevel) query = query.eq("escalation_level", filters.escalationLevel)
+    
+    const { data, error } = await query
+    if (error) {
+      console.error("Error fetching issues:", error)
+      return []
+    }
+    return data ?? []
+  } catch (err) {
+    console.error("Exception fetching issues:", err)
     return []
   }
-  return data ?? []
 }
 
 // ── Get All Issues for Staff Dashboard ──

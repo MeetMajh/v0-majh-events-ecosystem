@@ -1015,13 +1015,10 @@ export async function getTournamentStandings(tournamentId: string, phaseId?: str
 
     // Get player profiles separately (using first_name, last_name)
     const playerIds = stats.map(s => s.player_id)
-    const { data: profiles, error: profileError } = await supabase
+    const { data: profiles } = await supabase
       .from("profiles")
       .select("id, first_name, last_name, avatar_url")
       .in("id", playerIds)
-    
-    console.log("[v0] getTournamentStandings - stats count:", stats.length, "playerIds:", playerIds)
-    console.log("[v0] getTournamentStandings - profiles:", profiles?.length ?? 0, "error:", profileError?.message)
 
     const profileMap = new Map(profiles?.map(p => [p.id, p]) ?? [])
 
