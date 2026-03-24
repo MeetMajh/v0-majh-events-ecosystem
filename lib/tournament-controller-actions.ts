@@ -698,133 +698,137 @@ export async function reportMatchResult(
 // ── Tiebreaker Calculations ──
 
 export async function recalculateStandings(tournamentId: string, phaseId: string) {
-  const supabase = await createClient()
+  try {
+    const supabase = await createClient()
 
-  // Get all player stats (no join - we don't need profiles for tiebreaker calculation)
-  const { data: allStats, error: statsError } = await supabase
-    .from("tournament_player_stats")
-    .select("*")
-    .eq("tournament_id", tournamentId)
-    .eq("phase_id", phaseId)
-
-  if (statsError) {
-    console.error("Error fetching player stats for recalculation:", statsError)
-    return
-  }
-  
-  if (!allStats || allStats.length === 0) return
-
-  // Get all confirmed matches
-  const { data: matches } = await supabase
-    .from("tournament_matches")
-    .select("*")
-    .eq("tournament_id", tournamentId)
-    .eq("status", "confirmed")
-
-  // Build opponent map
-  const opponentMap = new Map<string, string[]>()
-  for (const match of matches ?? []) {
-    if (match.player1_id && match.player2_id) {
-      const p1Opponents = opponentMap.get(match.player1_id) ?? []
-      p1Opponents.push(match.player2_id)
-      opponentMap.set(match.player1_id, p1Opponents)
-
-      const p2Opponents = opponentMap.get(match.player2_id) ?? []
-      p2Opponents.push(match.player1_id)
-      opponentMap.set(match.player2_id, p2Opponents)
-    }
-  }
-
-  // Calculate tiebreakers for each player
-  const playerStatsMap = new Map<string, typeof allStats[0]>()
-  for (const stat of allStats) {
-    playerStatsMap.set(stat.player_id, stat)
-  }
-
-  const standings: Array<{
-    playerId: string
-    points: number
-    omw: number
-    gw: number
-    ogw: number
-  }> = []
-
-  for (const stat of allStats) {
-    const opponents = opponentMap.get(stat.player_id) ?? []
-    
-    // OMW% - Opponent Match Win Percentage (min 33%)
-    let omwSum = 0
-    let omwCount = 0
-    for (const oppId of opponents) {
-      const oppStats = playerStatsMap.get(oppId)
-      if (oppStats) {
-        const oppMatches = oppStats.match_wins + oppStats.match_losses + oppStats.match_draws
-        if (oppMatches > 0) {
-          const oppMwp = oppStats.match_wins / oppMatches
-          omwSum += Math.max(0.33, oppMwp)
-          omwCount++
-        }
-      }
-    }
-    const omw = omwCount > 0 ? (omwSum / omwCount) * 100 : 33
-
-    // GW% - Game Win Percentage (min 33%)
-    const totalGames = stat.game_wins + stat.game_losses + stat.game_draws
-    const gw = totalGames > 0 
-      ? Math.max(33, (stat.game_wins / totalGames) * 100)
-      : 33
-
-    // OGW% - Opponent Game Win Percentage (min 33%)
-    let ogwSum = 0
-    let ogwCount = 0
-    for (const oppId of opponents) {
-      const oppStats = playerStatsMap.get(oppId)
-      if (oppStats) {
-        const oppGames = oppStats.game_wins + oppStats.game_losses + oppStats.game_draws
-        if (oppGames > 0) {
-          const oppGwp = oppStats.game_wins / oppGames
-          ogwSum += Math.max(0.33, oppGwp)
-          ogwCount++
-        }
-      }
-    }
-    const ogw = ogwCount > 0 ? (ogwSum / ogwCount) * 100 : 33
-
-    standings.push({
-      playerId: stat.player_id,
-      points: stat.points,
-      omw: Math.round(omw * 100) / 100,
-      gw: Math.round(gw * 100) / 100,
-      ogw: Math.round(ogw * 100) / 100,
-    })
-  }
-
-  // Sort by points, then OMW%, then GW%, then OGW%
-  standings.sort((a, b) => {
-    if (b.points !== a.points) return b.points - a.points
-    if (b.omw !== a.omw) return b.omw - a.omw
-    if (b.gw !== a.gw) return b.gw - a.gw
-    return b.ogw - a.ogw
-  })
-
-  // Update standings in database
-  for (let i = 0; i < standings.length; i++) {
-    const s = standings[i]
-    await supabase
+    // Get all player stats (no join - we don't need profiles for tiebreaker calculation)
+    const { data: allStats, error: statsError } = await supabase
       .from("tournament_player_stats")
-      .update({
-        omw_percent: s.omw,
-        gw_percent: s.gw,
-        ogw_percent: s.ogw,
-        standing: i + 1,
-        updated_at: new Date().toISOString(),
-      })
+      .select("*")
       .eq("tournament_id", tournamentId)
       .eq("phase_id", phaseId)
-      .eq("player_id", s.playerId)
-  }
 
-  revalidatePath(`/dashboard/tournaments/${tournamentId}`)
+    if (statsError) {
+      console.error("Error fetching player stats for recalculation:", statsError)
+      return
+    }
+    
+    if (!allStats || allStats.length === 0) return
+
+    // Get all confirmed matches
+    const { data: matches } = await supabase
+      .from("tournament_matches")
+      .select("*")
+      .eq("tournament_id", tournamentId)
+      .eq("status", "confirmed")
+
+    // Build opponent map
+    const opponentMap = new Map<string, string[]>()
+    for (const match of matches ?? []) {
+      if (match.player1_id && match.player2_id) {
+        const p1Opponents = opponentMap.get(match.player1_id) ?? []
+        p1Opponents.push(match.player2_id)
+        opponentMap.set(match.player1_id, p1Opponents)
+
+        const p2Opponents = opponentMap.get(match.player2_id) ?? []
+        p2Opponents.push(match.player1_id)
+        opponentMap.set(match.player2_id, p2Opponents)
+      }
+    }
+
+    // Calculate tiebreakers for each player
+    const playerStatsMap = new Map<string, typeof allStats[0]>()
+    for (const stat of allStats) {
+      playerStatsMap.set(stat.player_id, stat)
+    }
+
+    const standings: Array<{
+      playerId: string
+      points: number
+      omw: number
+      gw: number
+      ogw: number
+    }> = []
+
+    for (const stat of allStats) {
+      const opponents = opponentMap.get(stat.player_id) ?? []
+      
+      // OMW% - Opponent Match Win Percentage (min 33%)
+      let omwSum = 0
+      let omwCount = 0
+      for (const oppId of opponents) {
+        const oppStats = playerStatsMap.get(oppId)
+        if (oppStats) {
+          const oppMatches = oppStats.match_wins + oppStats.match_losses + oppStats.match_draws
+          if (oppMatches > 0) {
+            const oppMwp = oppStats.match_wins / oppMatches
+            omwSum += Math.max(0.33, oppMwp)
+            omwCount++
+          }
+        }
+      }
+      const omw = omwCount > 0 ? (omwSum / omwCount) * 100 : 33
+
+      // GW% - Game Win Percentage (min 33%)
+      const totalGames = stat.game_wins + stat.game_losses + stat.game_draws
+      const gw = totalGames > 0 
+        ? Math.max(33, (stat.game_wins / totalGames) * 100)
+        : 33
+
+      // OGW% - Opponent Game Win Percentage (min 33%)
+      let ogwSum = 0
+      let ogwCount = 0
+      for (const oppId of opponents) {
+        const oppStats = playerStatsMap.get(oppId)
+        if (oppStats) {
+          const oppGames = oppStats.game_wins + oppStats.game_losses + oppStats.game_draws
+          if (oppGames > 0) {
+            const oppGwp = oppStats.game_wins / oppGames
+            ogwSum += Math.max(0.33, oppGwp)
+            ogwCount++
+          }
+        }
+      }
+      const ogw = ogwCount > 0 ? (ogwSum / ogwCount) * 100 : 33
+
+      standings.push({
+        playerId: stat.player_id,
+        points: stat.points,
+        omw: Math.round(omw * 100) / 100,
+        gw: Math.round(gw * 100) / 100,
+        ogw: Math.round(ogw * 100) / 100,
+      })
+    }
+
+    // Sort by points, then OMW%, then GW%, then OGW%
+    standings.sort((a, b) => {
+      if (b.points !== a.points) return b.points - a.points
+      if (b.omw !== a.omw) return b.omw - a.omw
+      if (b.gw !== a.gw) return b.gw - a.gw
+      return b.ogw - a.ogw
+    })
+
+    // Update standings in database
+    for (let i = 0; i < standings.length; i++) {
+      const s = standings[i]
+      await supabase
+        .from("tournament_player_stats")
+        .update({
+          omw_percent: s.omw,
+          gw_percent: s.gw,
+          ogw_percent: s.ogw,
+          standing: i + 1,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("tournament_id", tournamentId)
+        .eq("phase_id", phaseId)
+        .eq("player_id", s.playerId)
+    }
+
+    revalidatePath(`/dashboard/tournaments/${tournamentId}`)
+  } catch (err) {
+    console.error("Error recalculating standings:", err)
+  }
 }
 
 // ── Player Management ──
@@ -843,7 +847,7 @@ export async function dropPlayer(tournamentId: string, playerId: string, roundNu
   
   const playerName = player ? `${player.first_name || ''} ${player.last_name || ''}`.trim() || 'Unknown' : 'Unknown'
 
-  // Update registration status
+  // Update registration status with unenrolled timestamp
   const { error: regError } = await supabase
     .from("tournament_registrations")
     .update({
@@ -855,12 +859,12 @@ export async function dropPlayer(tournamentId: string, playerId: string, roundNu
 
   if (regError) return { error: regError.message }
 
-  // Update player stats
+  // Mark player as dropped in stats (preserve stats for historical record)
   await supabase
     .from("tournament_player_stats")
     .update({
       is_dropped: true,
-      dropped_at_round: roundNumber,
+      dropped_at_round: roundNumber ?? null,
     })
     .eq("tournament_id", tournamentId)
     .eq("player_id", playerId)
@@ -2030,7 +2034,7 @@ export async function updateMatchPlayers(
   return { success: true }
 }
 
-// ═══��══════���══════════════════════════════════════════════════���═════��══════════
+// ═══��══════���════════════════════════════��═════════════════════���═════��══════════
 // Decklist Management
 // ══════════════════════════════�����══════════���═══════════════════════════════════
 
@@ -2386,13 +2390,17 @@ export async function awardTournamentResults(tournamentId: string) {
 
   if (!tournament) return { error: "Tournament not found" }
 
-  // Get final standings
-  const { data: allStats } = await supabase
+  // Get final standings (exclude dropped players)
+  const { data: allStats, error: statsError } = await supabase
     .from("tournament_player_stats")
     .select("*, profiles(id, first_name, last_name)")
     .eq("tournament_id", tournamentId)
     .eq("is_dropped", false)
     .order("standing")
+
+  if (statsError) {
+    return { error: `Failed to get standings: ${statsError.message}` }
+  }
 
   if (!allStats || allStats.length === 0) return { error: "No standings found" }
 
@@ -2400,7 +2408,7 @@ export async function awardTournamentResults(tournamentId: string) {
 
   // Award points to each player
   for (const stat of allStats) {
-    const placement = stat.standing
+    const placement = stat.standing ?? 999
     const points = getPlacementPoints(placement, totalPlayers)
 
     // Create tournament result record
@@ -2409,13 +2417,13 @@ export async function awardTournamentResults(tournamentId: string) {
       user_id: stat.player_id,
       placement,
       ranking_points_awarded: points,
-      match_wins: stat.match_wins,
-      match_losses: stat.match_losses,
-      game_wins: stat.game_wins,
-      game_losses: stat.game_losses,
-    }, {
-      onConflict: "tournament_id,user_id",
-    })
+      match_wins: stat.match_wins ?? 0,
+      match_losses: stat.match_losses ?? 0,
+      match_draws: stat.match_draws ?? 0,
+      game_wins: stat.game_wins ?? 0,
+      game_losses: stat.game_losses ?? 0,
+      game_draws: stat.game_draws ?? 0,
+    }, { onConflict: "tournament_id,user_id" })
 
     // Update or create leaderboard entry
     const { data: existing } = await supabase
@@ -2427,11 +2435,13 @@ export async function awardTournamentResults(tournamentId: string) {
 
     if (existing) {
       await supabase.from("leaderboard_entries").update({
-        ranking_points: existing.ranking_points + points,
-        total_wins: existing.total_wins + stat.match_wins,
-        total_losses: existing.total_losses + stat.match_losses,
-        tournaments_played: existing.tournaments_played + 1,
-        tournaments_won: placement === 1 ? existing.tournaments_won + 1 : existing.tournaments_won,
+        ranking_points: (existing.ranking_points ?? 0) + points,
+        total_wins: (existing.total_wins ?? 0) + (stat.match_wins ?? 0),
+        total_losses: (existing.total_losses ?? 0) + (stat.match_losses ?? 0),
+        total_draws: (existing.total_draws ?? 0) + (stat.match_draws ?? 0),
+        tournaments_played: (existing.tournaments_played ?? 0) + 1,
+        tournaments_won: placement === 1 ? (existing.tournaments_won ?? 0) + 1 : (existing.tournaments_won ?? 0),
+        best_placement: existing.best_placement ? Math.min(existing.best_placement, placement) : placement,
         updated_at: new Date().toISOString(),
       }).eq("id", existing.id)
     } else {
@@ -2439,16 +2449,16 @@ export async function awardTournamentResults(tournamentId: string) {
         user_id: stat.player_id,
         game_id: tournament.game_id,
         ranking_points: points,
-        total_wins: stat.match_wins,
-        total_losses: stat.match_losses,
+        total_wins: stat.match_wins ?? 0,
+        total_losses: stat.match_losses ?? 0,
+        total_draws: stat.match_draws ?? 0,
         tournaments_played: 1,
         tournaments_won: placement === 1 ? 1 : 0,
+        best_placement: placement,
       })
     }
-  }
 
-  // Update profile career stats
-  for (const stat of allStats) {
+    // Update profile career stats
     const { data: profile } = await supabase
       .from("profiles")
       .select("career_wins, career_losses, career_tournaments")
@@ -2457,8 +2467,8 @@ export async function awardTournamentResults(tournamentId: string) {
 
     if (profile) {
       await supabase.from("profiles").update({
-        career_wins: (profile.career_wins ?? 0) + stat.match_wins,
-        career_losses: (profile.career_losses ?? 0) + stat.match_losses,
+        career_wins: (profile.career_wins ?? 0) + (stat.match_wins ?? 0),
+        career_losses: (profile.career_losses ?? 0) + (stat.match_losses ?? 0),
         career_tournaments: (profile.career_tournaments ?? 0) + 1,
       }).eq("id", stat.player_id)
     }
@@ -2489,7 +2499,7 @@ export async function getGlobalLeaderboard(limit = 100) {
     .from("leaderboard_entries")
     .select("user_id, ranking_points, total_wins, total_losses, tournaments_played, tournaments_won")
 
-  if (!entries) return []
+  if (!entries || entries.length === 0) return []
 
   // Aggregate by user
   const userStats = new Map<string, {
@@ -2576,8 +2586,7 @@ export async function addPlayerToTournament(tournamentId: string, email: string)
         displayName = authUser.user_metadata?.full_name || normalizedEmail
       }
     }
-  } catch (e) {
-    console.log("[v0] Admin client error:", e)
+  } catch {
     return { 
       error: "Unable to look up users. Please ensure SUPABASE_SERVICE_ROLE_KEY is configured.",
     }
@@ -2639,6 +2648,13 @@ export async function addPlayerToTournament(tournamentId: string, email: string)
 export async function getPlayerStats(playerId: string) {
   const supabase = await createClient()
 
+  // Get profile with career stats
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("id, first_name, last_name, avatar_url, career_wins, career_losses, career_tournaments")
+    .eq("id", playerId)
+    .single()
+
   // Get leaderboard entries (per-game stats)
   const { data: leaderboardEntries } = await supabase
     .from("leaderboard_entries")
@@ -2654,23 +2670,17 @@ export async function getPlayerStats(playerId: string) {
     .order("created_at", { ascending: false })
     .limit(10)
 
-  // Get profile career stats
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("id, first_name, last_name, avatar_url, career_wins, career_losses, career_tournaments")
-    .eq("id", playerId)
-    .single()
-
-  // Calculate aggregates
-  const totalPoints = leaderboardEntries?.reduce((sum, e) => sum + e.ranking_points, 0) ?? 0
-  const totalWins = leaderboardEntries?.reduce((sum, e) => sum + e.total_wins, 0) ?? 0
-  const totalLosses = leaderboardEntries?.reduce((sum, e) => sum + e.total_losses, 0) ?? 0
-  const totalTournaments = leaderboardEntries?.reduce((sum, e) => sum + e.tournaments_played, 0) ?? 0
-  const tournamentsWon = leaderboardEntries?.reduce((sum, e) => sum + e.tournaments_won, 0) ?? 0
+  // Calculate aggregates from leaderboard entries
+  const entries = leaderboardEntries ?? []
+  const totalPoints = entries.reduce((sum, e) => sum + (e.ranking_points ?? 0), 0)
+  const totalWins = profile?.career_wins ?? entries.reduce((sum, e) => sum + (e.total_wins ?? 0), 0)
+  const totalLosses = profile?.career_losses ?? entries.reduce((sum, e) => sum + (e.total_losses ?? 0), 0)
+  const totalTournaments = profile?.career_tournaments ?? entries.reduce((sum, e) => sum + (e.tournaments_played ?? 0), 0)
+  const tournamentsWon = entries.reduce((sum, e) => sum + (e.tournaments_won ?? 0), 0)
 
   return {
     profile,
-    leaderboardEntries: leaderboardEntries ?? [],
+    leaderboardEntries: entries,
     recentResults: recentResults ?? [],
     stats: {
       totalPoints,
