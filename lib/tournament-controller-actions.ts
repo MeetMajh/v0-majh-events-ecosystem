@@ -2557,38 +2557,65 @@ export async function addPlayerToTournament(tournamentId: string, email: string)
 
   const normalizedEmail = email.toLowerCase().trim()
   
-  // Find user by email via admin client (auth.users has the email)
+  // Find user by email - first try via profiles table (works without admin)
   let userId: string | null = null
   let displayName: string | null = null
   
-  try {
-    const { createAdminClient } = await import("@/lib/supabase/server")
-    const adminClient = createAdminClient()
-    const { data: usersData } = await adminClient.auth.admin.listUsers()
-    
-    const authUser = usersData?.users?.find(
-      u => u.email?.toLowerCase() === normalizedEmail
-    )
-    
-    if (authUser) {
-      userId = authUser.id
+  // Try to find user by email in profiles table first
+  const { data: profileByEmail } = await supabase
+    .from("profiles")
+    .select("id, first_name, last_name, email")
+    .eq("email", normalizedEmail)
+    .single()
+  
+  if (profileByEmail) {
+    userId = profileByEmail.id
+    displayName = [profileByEmail.first_name, profileByEmail.last_name].filter(Boolean).join(" ") || normalizedEmail
+  } else {
+    // Fallback: try admin API if service role key is available
+    try {
+      const { createAdminClient } = await import("@/lib/supabase/server")
+      const adminClient = createAdminClient()
       
-      // Get profile for display name
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("first_name, last_name")
-        .eq("id", authUser.id)
-        .single()
-        
-      if (profile) {
-        displayName = [profile.first_name, profile.last_name].filter(Boolean).join(" ") || normalizedEmail
-      } else {
-        displayName = authUser.user_metadata?.full_name || normalizedEmail
+      // Check if we actually have admin access
+      if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        return { 
+          error: `No account found for ${normalizedEmail}. They need to sign up first, or ensure SUPABASE_SERVICE_ROLE_KEY is configured for user lookup.`,
+        }
       }
-    }
-  } catch {
-    return { 
-      error: "Unable to look up users. Please ensure SUPABASE_SERVICE_ROLE_KEY is configured.",
+      
+      const { data: usersData, error: listError } = await adminClient.auth.admin.listUsers()
+      
+      if (listError) {
+        console.error("[v0] Error listing users:", listError)
+        return { error: `User lookup failed: ${listError.message}` }
+      }
+      
+      const authUser = usersData?.users?.find(
+        u => u.email?.toLowerCase() === normalizedEmail
+      )
+      
+      if (authUser) {
+        userId = authUser.id
+        
+        // Get profile for display name
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("first_name, last_name")
+          .eq("id", authUser.id)
+          .single()
+          
+        if (profile) {
+          displayName = [profile.first_name, profile.last_name].filter(Boolean).join(" ") || normalizedEmail
+        } else {
+          displayName = authUser.user_metadata?.full_name || normalizedEmail
+        }
+      }
+    } catch (err) {
+      console.error("[v0] Admin client error:", err)
+      return { 
+        error: "Unable to look up users. Please ensure SUPABASE_SERVICE_ROLE_KEY is configured.",
+      }
     }
   }
 
