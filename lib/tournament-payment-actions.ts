@@ -65,7 +65,7 @@ export async function createTournamentCheckoutSession(
   // Get user profile for prefilling
   const { data: profile } = await supabase
     .from("profiles")
-    .select("display_name, email")
+    .select("first_name, last_name, email")
     .eq("id", user.id)
     .single()
 
@@ -422,7 +422,7 @@ export async function getPendingRefundRequests(tournamentId?: string) {
     .from("tournament_refund_requests")
     .select(`
       *,
-      profiles(id, display_name, avatar_url),
+      profiles(id, first_name, last_name, avatar_url),
       tournaments(id, name, slug),
       tournament_registrations(payment_amount_cents)
     `)

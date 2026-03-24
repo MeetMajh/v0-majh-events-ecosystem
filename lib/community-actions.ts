@@ -34,7 +34,7 @@ export async function getTeams() {
   const supabase = await createClient()
   const { data } = await supabase
     .from("teams")
-    .select("*, team_members(count), profiles:captain_id(display_name)")
+    .select("*, team_members(count), profiles:captain_id(first_name, last_name)")
     .eq("is_active", true)
     .order("name")
   return data ?? []
@@ -46,12 +46,12 @@ export async function getTeamBySlug(slug: string) {
     .from("teams")
     .select(`
       *,
-      profiles:captain_id(display_name, avatar_url),
+      profiles:captain_id(first_name, last_name, avatar_url),
       team_members(
         id,
         role,
         joined_at,
-        profiles:user_id(id, display_name, avatar_url)
+        profiles:user_id(id, first_name, last_name, avatar_url)
       )
     `)
     .eq("slug", slug)
@@ -140,7 +140,7 @@ export async function getForumThreads(category?: string) {
   const supabase = await createClient()
   let query = supabase
     .from("forum_threads")
-    .select("*, profiles:author_id(display_name, avatar_url)")
+    .select("*, profiles:author_id(first_name, last_name, avatar_url)")
     .order("is_pinned", { ascending: false })
     .order("last_reply_at", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false })
@@ -154,7 +154,7 @@ export async function getForumThread(threadId: string) {
   const supabase = await createClient()
   const { data: thread } = await supabase
     .from("forum_threads")
-    .select("*, profiles:author_id(id, display_name, avatar_url)")
+    .select("*, profiles:author_id(id, first_name, last_name, avatar_url)")
     .eq("id", threadId)
     .single()
 
@@ -162,7 +162,7 @@ export async function getForumThread(threadId: string) {
 
   const { data: replies } = await supabase
     .from("forum_replies")
-    .select("*, profiles:author_id(id, display_name, avatar_url)")
+    .select("*, profiles:author_id(id, first_name, last_name, avatar_url)")
     .eq("thread_id", threadId)
     .order("created_at")
 
@@ -346,7 +346,7 @@ export async function getRoomMessages(roomId: string, limit = 50, before?: strin
     .from("community_messages")
     .select(`
       *,
-      profiles:user_id(id, display_name, avatar_url)
+      profiles:user_id(id, first_name, last_name, avatar_url)
     `)
     .eq("room_id", roomId)
     .eq("is_deleted", false)
@@ -385,7 +385,7 @@ export async function sendMessage(roomId: string, content: string, replyToId?: s
     })
     .select(`
       *,
-      profiles:user_id(id, display_name, avatar_url)
+      profiles:user_id(id, first_name, last_name, avatar_url)
     `)
     .single()
   

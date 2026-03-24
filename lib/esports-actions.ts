@@ -476,7 +476,7 @@ export async function getLeaderboard(gameSlug?: string) {
 
     const { data } = await supabase
       .from("leaderboard_entries")
-      .select("*, profiles(id, display_name, avatar_url), games(name, slug)")
+      .select("*, profiles(id, first_name, last_name, avatar_url), games(name, slug)")
       .eq("game_id", game.id)
       .order("ranking_points", { ascending: false })
       .limit(100)
@@ -487,7 +487,7 @@ export async function getLeaderboard(gameSlug?: string) {
   // Global leaderboard: aggregate across games
   const { data } = await supabase
     .from("leaderboard_entries")
-    .select("*, profiles(id, display_name, avatar_url), games(name, slug)")
+    .select("*, profiles(id, first_name, last_name, avatar_url), games(name, slug)")
     .order("ranking_points", { ascending: false })
     .limit(100)
 
@@ -540,7 +540,7 @@ export async function getTeams() {
   const supabase = await createClient()
   const { data } = await supabase
     .from("teams")
-    .select("*, team_members(count), profiles!teams_captain_id_fkey(display_name)")
+    .select("*, team_members(count), profiles!teams_captain_id_fkey(first_name, last_name)")
     .eq("is_active", true)
     .order("created_at", { ascending: false })
   return data ?? []
@@ -558,7 +558,7 @@ export async function getTeamBySlug(slug: string) {
 
   const { data: members } = await supabase
     .from("team_members")
-    .select("*, profiles(id, display_name, avatar_url)")
+    .select("*, profiles(id, first_name, last_name, avatar_url)")
     .eq("team_id", team.id)
 
   return { ...team, members: members ?? [] }

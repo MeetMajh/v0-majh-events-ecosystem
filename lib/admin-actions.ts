@@ -336,7 +336,6 @@ export async function createUserManually(formData: FormData) {
       id: newUser.user.id,
       first_name: firstName,
       last_name: lastName,
-      display_name: `${firstName} ${lastName}`.trim(),
     })
     
     // Assign role if specified
@@ -444,7 +443,7 @@ export async function getOrganizerRequests(status?: string) {
     .from("organizer_requests")
     .select(`
       *,
-      user:profiles!user_id(id, first_name, last_name, display_name, avatar_url),
+      user:profiles!user_id(id, first_name, last_name, avatar_url),
       reviewer:profiles!reviewed_by(first_name, last_name)
     `)
     .order("created_at", { ascending: false })
