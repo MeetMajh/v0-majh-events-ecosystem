@@ -2266,7 +2266,7 @@ export async function bulkAddPreregistrations(
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Tournament Data Queries
-// ═════════════════════════════════════════════════════════════════════���════════
+// ═════════════════════════════════════════════════════════════════════����════════
 
 export async function getTournamentRegistrations(tournamentId: string) {
   try {
@@ -2505,48 +2505,48 @@ export async function getGlobalLeaderboard(limit = 100) {
 
     if (error || !entries || entries.length === 0) return []
 
-  // Aggregate by user
-  const userStats = new Map<string, {
-    userId: string
-    totalPoints: number
-    totalWins: number
-    totalLosses: number
-    totalTournaments: number
-    totalWon: number
-  }>()
+    // Aggregate by user
+    const userStats = new Map<string, {
+      userId: string
+      totalPoints: number
+      totalWins: number
+      totalLosses: number
+      totalTournaments: number
+      totalWon: number
+    }>()
 
-  for (const entry of entries) {
-    const existing = userStats.get(entry.user_id)
-    if (existing) {
-      existing.totalPoints += entry.ranking_points
-      existing.totalWins += entry.total_wins
-      existing.totalLosses += entry.total_losses
-      existing.totalTournaments += entry.tournaments_played
-      existing.totalWon += entry.tournaments_won
-    } else {
-      userStats.set(entry.user_id, {
-        userId: entry.user_id,
-        totalPoints: entry.ranking_points,
-        totalWins: entry.total_wins,
-        totalLosses: entry.total_losses,
-        totalTournaments: entry.tournaments_played,
-        totalWon: entry.tournaments_won,
-      })
+    for (const entry of entries) {
+      const existing = userStats.get(entry.user_id)
+      if (existing) {
+        existing.totalPoints += entry.ranking_points
+        existing.totalWins += entry.total_wins
+        existing.totalLosses += entry.total_losses
+        existing.totalTournaments += entry.tournaments_played
+        existing.totalWon += entry.tournaments_won
+      } else {
+        userStats.set(entry.user_id, {
+          userId: entry.user_id,
+          totalPoints: entry.ranking_points,
+          totalWins: entry.total_wins,
+          totalLosses: entry.total_losses,
+          totalTournaments: entry.tournaments_played,
+          totalWon: entry.tournaments_won,
+        })
+      }
     }
-  }
 
-  // Sort by total points
-  const sorted = Array.from(userStats.values())
-    .sort((a, b) => b.totalPoints - a.totalPoints)
-    .slice(0, limit)
+    // Sort by total points
+    const sorted = Array.from(userStats.values())
+      .sort((a, b) => b.totalPoints - a.totalPoints)
+      .slice(0, limit)
 
-  // Fetch profile data
-  const { data: profiles } = await supabase
-    .from("profiles")
-    .select("id, first_name, last_name, avatar_url")
-    .in("id", sorted.map(s => s.userId))
+    // Fetch profile data
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, first_name, last_name, avatar_url")
+      .in("id", sorted.map(s => s.userId))
 
-  const profileMap = new Map(profiles?.map(p => [p.id, p]) ?? [])
+    const profileMap = new Map(profiles?.map(p => [p.id, p]) ?? [])
 
     return sorted.map(s => ({
       ...s,
