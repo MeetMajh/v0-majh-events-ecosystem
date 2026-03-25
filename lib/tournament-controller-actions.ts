@@ -2266,7 +2266,7 @@ export async function bulkAddPreregistrations(
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Tournament Data Queries
-// ═════════════════════════════════════════════════════════════════════��════════
+// ═════════════════════════════════════════════════════════════════════���════════
 
 export async function getTournamentRegistrations(tournamentId: string) {
   try {
@@ -2468,20 +2468,8 @@ export async function awardTournamentResults(tournamentId: string) {
       })
     }
 
-    // Update profile career stats
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("career_wins, career_losses, career_tournaments")
-      .eq("id", stat.player_id)
-      .single()
-
-    if (profile) {
-      await supabase.from("profiles").update({
-        career_wins: (profile.career_wins ?? 0) + (stat.match_wins ?? 0),
-        career_losses: (profile.career_losses ?? 0) + (stat.match_losses ?? 0),
-        career_tournaments: (profile.career_tournaments ?? 0) + 1,
-      }).eq("id", stat.player_id)
-    }
+    // Note: career_wins/losses/tournaments columns don't exist in profiles table yet
+    // Skip career stats update until migration is applied
   }
 
   revalidatePath("/esports/leaderboards")
@@ -2489,27 +2477,33 @@ export async function awardTournamentResults(tournamentId: string) {
 }
 
 export async function getGameLeaderboard(gameId: string, limit = 50) {
-  const supabase = await createClient()
+  try {
+    const supabase = await createClient()
 
-  const { data } = await supabase
-    .from("leaderboard_entries")
-    .select("*, profiles(id, first_name, last_name, avatar_url), games(name, slug, icon_url)")
-    .eq("game_id", gameId)
-    .order("ranking_points", { ascending: false })
-    .limit(limit)
+    const { data, error } = await supabase
+      .from("leaderboard_entries")
+      .select("*, profiles(id, first_name, last_name, avatar_url), games(name, slug, icon_url)")
+      .eq("game_id", gameId)
+      .order("ranking_points", { ascending: false })
+      .limit(limit)
 
-  return data ?? []
+    if (error) return []
+    return data ?? []
+  } catch {
+    return []
+  }
 }
 
 export async function getGlobalLeaderboard(limit = 100) {
-  const supabase = await createClient()
+  try {
+    const supabase = await createClient()
 
-  // Aggregate points across all games for each player
-  const { data: entries } = await supabase
-    .from("leaderboard_entries")
-    .select("user_id, ranking_points, total_wins, total_losses, tournaments_played, tournaments_won")
+    // Aggregate points across all games for each player
+    const { data: entries, error } = await supabase
+      .from("leaderboard_entries")
+      .select("user_id, ranking_points, total_wins, total_losses, tournaments_played, tournaments_won")
 
-  if (!entries || entries.length === 0) return []
+    if (error || !entries || entries.length === 0) return []
 
   // Aggregate by user
   const userStats = new Map<string, {
@@ -2554,10 +2548,13 @@ export async function getGlobalLeaderboard(limit = 100) {
 
   const profileMap = new Map(profiles?.map(p => [p.id, p]) ?? [])
 
-  return sorted.map(s => ({
-    ...s,
-    profile: profileMap.get(s.userId) ?? null,
-  }))
+    return sorted.map(s => ({
+      ...s,
+      profile: profileMap.get(s.userId) ?? null,
+    }))
+  } catch {
+    return []
+  }
 }
 
 export async function addPlayerToTournament(tournamentId: string, email: string) {
@@ -2671,34 +2668,46 @@ export async function addPlayerToTournament(tournamentId: string, email: string)
 export async function getPlayerStats(playerId: string) {
   const supabase = await createClient()
 
-  // Get profile with career stats
+  // Get profile (without career stats - columns don't exist yet)
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, first_name, last_name, avatar_url, career_wins, career_losses, career_tournaments")
+    .select("id, first_name, last_name, avatar_url")
     .eq("id", playerId)
     .single()
 
-  // Get leaderboard entries (per-game stats)
-  const { data: leaderboardEntries } = await supabase
-    .from("leaderboard_entries")
-    .select("*, games(id, name, slug, icon_url)")
-    .eq("user_id", playerId)
-    .order("ranking_points", { ascending: false })
+  // Try to get leaderboard entries (table may not exist)
+  let leaderboardEntries: any[] = []
+  try {
+    const { data } = await supabase
+      .from("leaderboard_entries")
+      .select("*, games(id, name, slug, icon_url)")
+      .eq("user_id", playerId)
+      .order("ranking_points", { ascending: false })
+    leaderboardEntries = data ?? []
+  } catch {
+    // Table doesn't exist yet
+  }
 
-  // Get recent tournament results
-  const { data: recentResults } = await supabase
-    .from("tournament_results")
-    .select("*, tournaments(id, name, slug, start_date, games(name, slug))")
-    .eq("user_id", playerId)
-    .order("created_at", { ascending: false })
-    .limit(10)
+  // Try to get recent tournament results (table may not exist)
+  let recentResults: any[] = []
+  try {
+    const { data } = await supabase
+      .from("tournament_results")
+      .select("*, tournaments(id, name, slug, start_date, games(name, slug))")
+      .eq("user_id", playerId)
+      .order("created_at", { ascending: false })
+      .limit(10)
+    recentResults = data ?? []
+  } catch {
+    // Table doesn't exist yet
+  }
 
   // Calculate aggregates from leaderboard entries
-  const entries = leaderboardEntries ?? []
+  const entries = leaderboardEntries
   const totalPoints = entries.reduce((sum, e) => sum + (e.ranking_points ?? 0), 0)
-  const totalWins = profile?.career_wins ?? entries.reduce((sum, e) => sum + (e.total_wins ?? 0), 0)
-  const totalLosses = profile?.career_losses ?? entries.reduce((sum, e) => sum + (e.total_losses ?? 0), 0)
-  const totalTournaments = profile?.career_tournaments ?? entries.reduce((sum, e) => sum + (e.tournaments_played ?? 0), 0)
+  const totalWins = entries.reduce((sum, e) => sum + (e.total_wins ?? 0), 0)
+  const totalLosses = entries.reduce((sum, e) => sum + (e.total_losses ?? 0), 0)
+  const totalTournaments = entries.reduce((sum, e) => sum + (e.tournaments_played ?? 0), 0)
   const tournamentsWon = entries.reduce((sum, e) => sum + (e.tournaments_won ?? 0), 0)
 
   return {
