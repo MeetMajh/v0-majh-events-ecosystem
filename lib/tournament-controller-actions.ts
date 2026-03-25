@@ -2637,16 +2637,15 @@ export async function addPlayerToTournament(tournamentId: string, email: string)
   const insertData = {
     tournament_id: tournamentId,
     player_id: userId,
+    registration_type: "admin", // Required NOT NULL field
     status: "registered",
     payment_status: "paid", // Admin adds are considered paid
+    registered_at: new Date().toISOString(),
   }
-  
-  console.log("[v0] Inserting registration:", JSON.stringify(insertData))
   
   const { error } = await supabase.from("tournament_registrations").insert(insertData)
 
   if (error) {
-    console.error("[v0] Registration insert error:", error)
     return { error: `Failed to register player: ${error.message}` }
   }
 
