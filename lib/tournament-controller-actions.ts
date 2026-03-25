@@ -2269,44 +2269,54 @@ export async function bulkAddPreregistrations(
 // ═════════════════════════════════════════════════════════════════════��════════
 
 export async function getTournamentRegistrations(tournamentId: string) {
-  // Use admin client to bypass RLS - tournament organizers need to see all registrations
-  const supabase = createAdminClient()
+  try {
+    // Use admin client to bypass RLS - tournament organizers need to see all registrations
+    const supabase = createAdminClient()
 
-  // Step 1: Get registrations WITHOUT profile join
-  const { data: registrations, error: regError } = await supabase
-    .from("tournament_registrations")
-    .select("*")
-    .eq("tournament_id", tournamentId)
-    .order("registered_at", { ascending: false })
+    // Step 1: Get registrations WITHOUT profile join
+    const { data: registrations, error: regError } = await supabase
+      .from("tournament_registrations")
+      .select("*")
+      .eq("tournament_id", tournamentId)
+      .order("registered_at", { ascending: false })
 
-  if (regError || !registrations?.length) {
+    if (regError) {
+      console.error("[v0] Error fetching registrations:", regError)
+      return []
+    }
+    
+    if (!registrations?.length) {
+      return []
+    }
+
+    // Step 2: Get profiles for all player IDs
+    const playerIds = registrations.map(r => r.player_id).filter(Boolean)
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, first_name, last_name")
+      .in("id", playerIds)
+
+    // Create a lookup map
+    const profileMap = new Map(profiles?.map(p => [p.id, p]) || [])
+
+    // Step 3: Combine the data
+    const transformed = registrations.map(reg => {
+      const profile = profileMap.get(reg.player_id)
+      return {
+        ...reg,
+        profiles: profile ? {
+          id: profile.id,
+          display_name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'Unknown Player',
+          avatar_url: null
+        } : null
+      }
+    })
+
+    return transformed
+  } catch (err) {
+    console.error("[v0] getTournamentRegistrations error:", err)
     return []
   }
-
-  // Step 2: Get profiles for all player IDs
-  const playerIds = registrations.map(r => r.player_id).filter(Boolean)
-  const { data: profiles } = await supabase
-    .from("profiles")
-    .select("id, first_name, last_name")
-    .in("id", playerIds)
-
-  // Create a lookup map
-  const profileMap = new Map(profiles?.map(p => [p.id, p]) || [])
-
-  // Step 3: Combine the data
-  const transformed = registrations.map(reg => {
-    const profile = profileMap.get(reg.player_id)
-    return {
-      ...reg,
-      profiles: profile ? {
-        id: profile.id,
-        display_name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'Unknown Player',
-        avatar_url: null
-      } : null
-    }
-  })
-
-  return transformed
 }
 
 export async function getPlayerTournamentHistory(playerId: string) {
@@ -2551,106 +2561,111 @@ export async function getGlobalLeaderboard(limit = 100) {
 }
 
 export async function addPlayerToTournament(tournamentId: string, email: string) {
-  const auth = await requireTournamentOrganizer(tournamentId)
-  if ("error" in auth) return auth
-  const { supabase } = auth
+  try {
+    const auth = await requireTournamentOrganizer(tournamentId)
+    if ("error" in auth) return auth
+    const { supabase } = auth
 
-  const normalizedEmail = email.toLowerCase().trim()
-  
-  // Find user by email via admin API (email is stored in auth.users, not profiles)
-  let userId: string | null = null
-  let displayName: string | null = null
-  
-  const { createAdminClient } = await import("@/lib/supabase/server")
-  const adminClient = createAdminClient()
-  
-  // Use admin API to find user by email
-  const { data: usersData, error: listError } = await adminClient.auth.admin.listUsers()
-  
-  if (listError) {
-    return { error: `User lookup failed: ${listError.message}` }
-  }
-  
-  const authUser = usersData?.users?.find(
-    u => u.email?.toLowerCase() === normalizedEmail
-  )
-  
-  if (authUser) {
-    userId = authUser.id
+    const normalizedEmail = email.toLowerCase().trim()
     
-    // Get profile for display name
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("first_name, last_name, display_name")
-      .eq("id", authUser.id)
-      .single()
+    // Find user by email via admin API (email is stored in auth.users, not profiles)
+    let userId: string | null = null
+    let displayName: string | null = null
+    
+    const { createAdminClient } = await import("@/lib/supabase/server")
+    const adminClient = createAdminClient()
+    
+    // Use admin API to find user by email
+    const { data: usersData, error: listError } = await adminClient.auth.admin.listUsers()
+    
+    if (listError) {
+      return { error: `User lookup failed: ${listError.message}` }
+    }
+    
+    const authUser = usersData?.users?.find(
+      u => u.email?.toLowerCase() === normalizedEmail
+    )
+    
+    if (authUser) {
+      userId = authUser.id
       
-    if (profile) {
-      displayName = profile.display_name || 
-        [profile.first_name, profile.last_name].filter(Boolean).join(" ") || 
-        normalizedEmail
-    } else {
-      displayName = authUser.user_metadata?.full_name || normalizedEmail
+      // Get profile for display name
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("first_name, last_name, display_name")
+        .eq("id", authUser.id)
+        .single()
+        
+      if (profile) {
+        displayName = profile.display_name || 
+          [profile.first_name, profile.last_name].filter(Boolean).join(" ") || 
+          normalizedEmail
+      } else {
+        displayName = authUser.user_metadata?.full_name || normalizedEmail
+      }
     }
-  }
 
-  // If user not found, return helpful message
-  if (!userId) {
-    return { 
-      error: `No account found for ${normalizedEmail}. They need to sign up at majhevents.com/auth/sign-up first.`,
+    // If user not found, return helpful message
+    if (!userId) {
+      return { 
+        error: `No account found for ${normalizedEmail}. They need to sign up at majhevents.com/auth/sign-up first.`,
+      }
     }
-  }
 
-  // Check if already registered
-  const { data: existing } = await supabase
-    .from("tournament_registrations")
-    .select("id")
-    .eq("tournament_id", tournamentId)
-    .eq("player_id", userId)
-    .single()
-
-  if (existing) {
-    return { error: "Player is already registered for this tournament" }
-  }
-
-  // Check max participants
-  const { data: tournament } = await supabase
-    .from("tournaments")
-    .select("max_participants")
-    .eq("id", tournamentId)
-    .single()
-
-  if (tournament?.max_participants) {
-    const { count } = await supabase
+    // Check if already registered
+    const { data: existing } = await supabase
       .from("tournament_registrations")
-      .select("*", { count: "exact", head: true })
+      .select("id")
       .eq("tournament_id", tournamentId)
-      .neq("status", "dropped")
-      .neq("status", "disqualified")
+      .eq("player_id", userId)
+      .single()
 
-    if (count && count >= tournament.max_participants) {
-      return { error: "Tournament is full" }
+    if (existing) {
+      return { error: "Player is already registered for this tournament" }
     }
-  }
 
-  // Add player to registrations
-  const insertData = {
-    tournament_id: tournamentId,
-    player_id: userId,
-    registration_type: "admin", // Required NOT NULL field
-    status: "registered",
-    payment_status: "paid", // Admin adds are considered paid
-    registered_at: new Date().toISOString(),
-  }
-  
-  const { error } = await supabase.from("tournament_registrations").insert(insertData)
+    // Check max participants
+    const { data: tournament } = await supabase
+      .from("tournaments")
+      .select("max_participants")
+      .eq("id", tournamentId)
+      .single()
 
-  if (error) {
-    return { error: `Failed to register player: ${error.message}` }
-  }
+    if (tournament?.max_participants) {
+      const { count } = await supabase
+        .from("tournament_registrations")
+        .select("*", { count: "exact", head: true })
+        .eq("tournament_id", tournamentId)
+        .neq("status", "dropped")
+        .neq("status", "disqualified")
 
-  revalidatePath(`/dashboard/tournaments/${tournamentId}`)
-  return { success: true, playerName: displayName || normalizedEmail }
+      if (count && count >= tournament.max_participants) {
+        return { error: "Tournament is full" }
+      }
+    }
+
+    // Add player to registrations
+    const insertData = {
+      tournament_id: tournamentId,
+      player_id: userId,
+      registration_type: "admin", // Required NOT NULL field
+      status: "registered",
+      payment_status: "paid", // Admin adds are considered paid
+      registered_at: new Date().toISOString(),
+    }
+    
+    const { error } = await supabase.from("tournament_registrations").insert(insertData)
+
+    if (error) {
+      return { error: `Failed to register player: ${error.message}` }
+    }
+
+    revalidatePath(`/dashboard/tournaments/${tournamentId}`)
+    return { success: true, playerName: displayName || normalizedEmail }
+  } catch (err) {
+    console.error("[v0] addPlayerToTournament error:", err)
+    return { error: `Unexpected error: ${err instanceof Error ? err.message : String(err)}` }
+  }
 }
 
 export async function getPlayerStats(playerId: string) {
