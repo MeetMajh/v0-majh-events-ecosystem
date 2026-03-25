@@ -65,7 +65,7 @@ export async function createTournamentCheckoutSession(
   // Get user profile for prefilling
   const { data: profile } = await supabase
     .from("profiles")
-    .select("first_name, last_name, email")
+    .select("first_name, last_name")
     .eq("id", user.id)
     .single()
 
@@ -77,7 +77,7 @@ export async function createTournamentCheckoutSession(
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
     payment_method_types: ["card"],
-    customer_email: profile?.email || user.email,
+    customer_email: user.email,
     line_items: [
       {
         price_data: {
@@ -138,7 +138,7 @@ export async function createTournamentPaymentIntent(
   // Get or create Stripe customer
   const { data: profile } = await supabase
     .from("profiles")
-    .select("stripe_customer_id, email")
+    .select("stripe_customer_id")
     .eq("id", user.id)
     .single()
 
@@ -146,7 +146,7 @@ export async function createTournamentPaymentIntent(
 
   if (!customerId) {
     const customer = await stripe.customers.create({
-      email: profile?.email || user.email,
+      email: user.email,
       metadata: { supabase_user_id: user.id },
     })
     customerId = customer.id
@@ -382,7 +382,17 @@ export async function getPaymentSummary(tournamentId: string) {
     .select("payment_status, payment_amount_cents, refund_amount_cents")
     .eq("tournament_id", tournamentId)
 
-  if (!registrations) return null
+  if (!registrations) {
+    return {
+      totalRegistrations: 0,
+      paidCount: 0,
+      pendingCount: 0,
+      refundedCount: 0,
+      totalCollected: 0,
+      totalRefunded: 0,
+      netRevenue: 0,
+    }
+  }
 
   const summary = {
     totalRegistrations: registrations.length,
