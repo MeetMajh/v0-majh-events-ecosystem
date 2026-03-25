@@ -2266,7 +2266,7 @@ export async function bulkAddPreregistrations(
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Tournament Data Queries
-// ══════════════════════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════════��════════
 
 export async function getTournamentRegistrations(tournamentId: string) {
   // Use admin client to bypass RLS - tournament organizers need to see all registrations
@@ -2557,38 +2557,40 @@ export async function addPlayerToTournament(tournamentId: string, email: string)
 
   const normalizedEmail = email.toLowerCase().trim()
   
-  // Find user by email via admin client (auth.users has the email)
+  // Find user by email via admin API (email is stored in auth.users, not profiles)
   let userId: string | null = null
   let displayName: string | null = null
   
-  try {
-    const { createAdminClient } = await import("@/lib/supabase/server")
-    const adminClient = createAdminClient()
-    const { data: usersData } = await adminClient.auth.admin.listUsers()
+  const { createAdminClient } = await import("@/lib/supabase/server")
+  const adminClient = createAdminClient()
+  
+  // Use admin API to find user by email
+  const { data: usersData, error: listError } = await adminClient.auth.admin.listUsers()
+  
+  if (listError) {
+    return { error: `User lookup failed: ${listError.message}` }
+  }
+  
+  const authUser = usersData?.users?.find(
+    u => u.email?.toLowerCase() === normalizedEmail
+  )
+  
+  if (authUser) {
+    userId = authUser.id
     
-    const authUser = usersData?.users?.find(
-      u => u.email?.toLowerCase() === normalizedEmail
-    )
-    
-    if (authUser) {
-      userId = authUser.id
+    // Get profile for display name
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("first_name, last_name, display_name")
+      .eq("id", authUser.id)
+      .single()
       
-      // Get profile for display name
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("first_name, last_name")
-        .eq("id", authUser.id)
-        .single()
-        
-      if (profile) {
-        displayName = [profile.first_name, profile.last_name].filter(Boolean).join(" ") || normalizedEmail
-      } else {
-        displayName = authUser.user_metadata?.full_name || normalizedEmail
-      }
-    }
-  } catch {
-    return { 
-      error: "Unable to look up users. Please ensure SUPABASE_SERVICE_ROLE_KEY is configured.",
+    if (profile) {
+      displayName = profile.display_name || 
+        [profile.first_name, profile.last_name].filter(Boolean).join(" ") || 
+        normalizedEmail
+    } else {
+      displayName = authUser.user_metadata?.full_name || normalizedEmail
     }
   }
 
@@ -2631,15 +2633,21 @@ export async function addPlayerToTournament(tournamentId: string, email: string)
     }
   }
 
-  // Add player
-  const { error } = await supabase.from("tournament_registrations").insert({
+  // Add player to registrations
+  const insertData = {
     tournament_id: tournamentId,
     player_id: userId,
+    registration_type: "admin", // Required NOT NULL field
     status: "registered",
     payment_status: "paid", // Admin adds are considered paid
-  })
+    registered_at: new Date().toISOString(),
+  }
+  
+  const { error } = await supabase.from("tournament_registrations").insert(insertData)
 
-  if (error) return { error: error.message }
+  if (error) {
+    return { error: `Failed to register player: ${error.message}` }
+  }
 
   revalidatePath(`/dashboard/tournaments/${tournamentId}`)
   return { success: true, playerName: displayName || normalizedEmail }
