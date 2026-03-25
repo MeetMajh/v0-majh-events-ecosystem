@@ -2266,7 +2266,7 @@ export async function bulkAddPreregistrations(
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Tournament Data Queries
-// ══════════════════════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════════��════════
 
 export async function getTournamentRegistrations(tournamentId: string) {
   // Use admin client to bypass RLS - tournament organizers need to see all registrations
@@ -2633,15 +2633,22 @@ export async function addPlayerToTournament(tournamentId: string, email: string)
     }
   }
 
-  // Add player
-  const { error } = await supabase.from("tournament_registrations").insert({
+  // Add player to registrations
+  const insertData = {
     tournament_id: tournamentId,
     player_id: userId,
     status: "registered",
     payment_status: "paid", // Admin adds are considered paid
-  })
+  }
+  
+  console.log("[v0] Inserting registration:", JSON.stringify(insertData))
+  
+  const { error } = await supabase.from("tournament_registrations").insert(insertData)
 
-  if (error) return { error: error.message }
+  if (error) {
+    console.error("[v0] Registration insert error:", error)
+    return { error: `Failed to register player: ${error.message}` }
+  }
 
   revalidatePath(`/dashboard/tournaments/${tournamentId}`)
   return { success: true, playerName: displayName || normalizedEmail }
