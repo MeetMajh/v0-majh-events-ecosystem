@@ -382,7 +382,17 @@ export async function getPaymentSummary(tournamentId: string) {
     .select("payment_status, payment_amount_cents, refund_amount_cents")
     .eq("tournament_id", tournamentId)
 
-  if (!registrations) return null
+  if (!registrations) {
+    return {
+      totalRegistrations: 0,
+      paidCount: 0,
+      pendingCount: 0,
+      refundedCount: 0,
+      totalCollected: 0,
+      totalRefunded: 0,
+      netRevenue: 0,
+    }
+  }
 
   const summary = {
     totalRegistrations: registrations.length,

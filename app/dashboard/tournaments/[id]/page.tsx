@@ -48,7 +48,15 @@ export default async function TournamentControllerPage({
   let phases: Awaited<ReturnType<typeof getTournamentPhases>> = []
   let registrations: Awaited<ReturnType<typeof getTournamentRegistrations>> = []
   let currentRound: Awaited<ReturnType<typeof getCurrentRound>> = null
-  let paymentSummary: Awaited<ReturnType<typeof getPaymentSummary>> = { total: 0, paid: 0, pending: 0, refunded: 0 }
+  let paymentSummary: Awaited<ReturnType<typeof getPaymentSummary>> = {
+    totalRegistrations: 0,
+    paidCount: 0,
+    pendingCount: 0,
+    refundedCount: 0,
+    totalCollected: 0,
+    totalRefunded: 0,
+    netRevenue: 0,
+  }
   let standings: Awaited<ReturnType<typeof getTournamentStandings>> = []
 
   try {
