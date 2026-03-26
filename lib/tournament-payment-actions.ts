@@ -375,40 +375,46 @@ export async function markPaymentManually(
 }
 
 export async function getPaymentSummary(tournamentId: string) {
-  const supabase = await createClient()
+  const defaultSummary = {
+    totalRegistrations: 0,
+    paidCount: 0,
+    pendingCount: 0,
+    refundedCount: 0,
+    totalCollected: 0,
+    totalRefunded: 0,
+    netRevenue: 0,
+  }
+  
+  try {
+    const supabase = await createClient()
 
-  const { data: registrations } = await supabase
-    .from("tournament_registrations")
-    .select("payment_status, payment_amount_cents, refund_amount_cents")
-    .eq("tournament_id", tournamentId)
+    const { data: registrations, error } = await supabase
+      .from("tournament_registrations")
+      .select("payment_status, payment_amount_cents, refund_amount_cents")
+      .eq("tournament_id", tournamentId)
 
-  if (!registrations) {
-    return {
-      totalRegistrations: 0,
-      paidCount: 0,
-      pendingCount: 0,
-      refundedCount: 0,
-      totalCollected: 0,
-      totalRefunded: 0,
-      netRevenue: 0,
+    if (error || !registrations) {
+      return defaultSummary
     }
-  }
 
-  const summary = {
-    totalRegistrations: registrations.length,
-    paidCount: registrations.filter(r => r.payment_status === "paid").length,
-    pendingCount: registrations.filter(r => r.payment_status === "pending").length,
-    refundedCount: registrations.filter(r => r.payment_status === "refunded").length,
-    totalCollected: registrations
-      .filter(r => r.payment_status === "paid")
-      .reduce((sum, r) => sum + (r.payment_amount_cents ?? 0), 0),
-    totalRefunded: registrations
-      .reduce((sum, r) => sum + (r.refund_amount_cents ?? 0), 0),
-  }
+    const summary = {
+      totalRegistrations: registrations.length,
+      paidCount: registrations.filter(r => r.payment_status === "paid").length,
+      pendingCount: registrations.filter(r => r.payment_status === "pending").length,
+      refundedCount: registrations.filter(r => r.payment_status === "refunded").length,
+      totalCollected: registrations
+        .filter(r => r.payment_status === "paid")
+        .reduce((sum, r) => sum + (r.payment_amount_cents ?? 0), 0),
+      totalRefunded: registrations
+        .reduce((sum, r) => sum + (r.refund_amount_cents ?? 0), 0),
+    }
 
-  return {
-    ...summary,
-    netRevenue: summary.totalCollected - summary.totalRefunded,
+    return {
+      ...summary,
+      netRevenue: summary.totalCollected - summary.totalRefunded,
+    }
+  } catch {
+    return defaultSummary
   }
 }
 

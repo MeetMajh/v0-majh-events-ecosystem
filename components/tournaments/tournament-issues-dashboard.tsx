@@ -37,9 +37,8 @@ import {
   updateIssueStatus,
   escalateIssue,
   addIssueComment,
-  ISSUE_CATEGORIES,
-  ESCALATION_LEVELS,
 } from "@/lib/tournament-issue-actions"
+import { ISSUE_CATEGORIES, ESCALATION_LEVELS } from "@/lib/tournament-issue-constants"
 import { cn } from "@/lib/utils"
 
 type Issue = {
