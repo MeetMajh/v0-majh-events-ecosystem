@@ -32,9 +32,46 @@ export default async function PlayerPortalPage() {
     redirect("/login")
   }
 
-  // Get all tournament registrations for this user using admin client to bypass RLS
+  // APPROACH 1: Get tournaments from match history (this works because player1_id/player2_id = user.id)
+  const { data: matches } = await supabase
+    .from("tournament_matches")
+    .select(`
+      id,
+      tournament_rounds (
+        tournament_id,
+        tournaments (
+          id,
+          name,
+          slug,
+          status,
+          format,
+          start_date,
+          venue_name,
+          location,
+          max_participants,
+          games (name, icon_url)
+        )
+      )
+    `)
+    .or(`player1_id.eq.${user.id},player2_id.eq.${user.id}`)
+
+  // Extract unique tournaments from matches
+  const tournamentsFromMatches = new Map()
+  matches?.forEach((match) => {
+    const tournament = match.tournament_rounds?.tournaments
+    if (tournament && !tournamentsFromMatches.has(tournament.id)) {
+      tournamentsFromMatches.set(tournament.id, {
+        id: tournament.id,
+        tournaments: tournament,
+        status: "participated", // They played in matches
+        source: "matches"
+      })
+    }
+  })
+
+  // APPROACH 2: Also try registrations with admin client (in case some registrations DO match)
   const adminClient = createAdminClient()
-  const { data: registrations, error: regError } = await adminClient
+  const { data: registrations } = await adminClient
     .from("tournament_registrations")
     .select(`
       *,
@@ -52,9 +89,18 @@ export default async function PlayerPortalPage() {
       )
     `)
     .eq("player_id", user.id)
-    .order("registered_at", { ascending: false })
 
-  const tournaments = registrations ?? []
+  // Merge both sources - registrations take priority
+  registrations?.forEach((reg) => {
+    if (reg.tournaments) {
+      tournamentsFromMatches.set(reg.tournaments.id, {
+        ...reg,
+        source: "registration"
+      })
+    }
+  })
+
+  const tournaments = Array.from(tournamentsFromMatches.values())
 
   // Group by status
   const activeTournaments = tournaments.filter(
