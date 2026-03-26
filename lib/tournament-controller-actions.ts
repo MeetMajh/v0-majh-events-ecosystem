@@ -2644,7 +2644,7 @@ export async function addPlayerToTournament(tournamentId: string, email: string)
     const insertData = {
       tournament_id: tournamentId,
       player_id: userId,
-      registration_type: "admin", // Required NOT NULL field
+      registration_type: "direct", // Valid values: direct, paid, code, preregistered
       status: "registered",
       payment_status: "paid", // Admin adds are considered paid
       registered_at: new Date().toISOString(),
