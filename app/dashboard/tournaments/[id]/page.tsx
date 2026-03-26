@@ -60,14 +60,12 @@ export default async function TournamentControllerPage({
   let standings: Awaited<ReturnType<typeof getTournamentStandings>> = []
 
   try {
-    console.log("[v0] Fetching tournament data for:", tournament.id)
     const [phasesResult, registrationsResult, currentRoundResult, paymentSummaryResult] = await Promise.all([
-      getTournamentPhases(tournament.id).catch((e) => { console.error("[v0] getTournamentPhases error:", e); return [] }),
-      getTournamentRegistrations(tournament.id).catch((e) => { console.error("[v0] getTournamentRegistrations error:", e); return [] }),
-      getCurrentRound(tournament.id).catch((e) => { console.error("[v0] getCurrentRound error:", e); return null }),
-      getPaymentSummary(tournament.id).catch((e) => { console.error("[v0] getPaymentSummary error:", e); return null }),
+      getTournamentPhases(tournament.id).catch(() => []),
+      getTournamentRegistrations(tournament.id).catch(() => []),
+      getCurrentRound(tournament.id).catch(() => null),
+      getPaymentSummary(tournament.id).catch(() => null),
     ])
-    console.log("[v0] Data fetched - phases:", phasesResult?.length, "registrations:", registrationsResult?.length)
     
     phases = phasesResult ?? []
     registrations = registrationsResult ?? []

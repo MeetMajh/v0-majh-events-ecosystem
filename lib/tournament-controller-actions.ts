@@ -2400,12 +2400,11 @@ export async function awardTournamentResults(tournamentId: string) {
 
   if (!tournament) return { error: "Tournament not found" }
 
-  // Get final standings (exclude dropped players)
+  // Get final standings
   const { data: allStats, error: statsError } = await supabase
     .from("tournament_player_stats")
     .select("*, profiles(id, first_name, last_name)")
     .eq("tournament_id", tournamentId)
-    .eq("is_dropped", false)
     .order("standing")
 
   if (statsError) {
