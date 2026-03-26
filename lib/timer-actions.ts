@@ -60,7 +60,9 @@ export async function resetRoundTimer(tournamentId: string, roundId: string) {
 
   if (error) return { error: error.message }
 
-  await supabase.from("tournament_announcements").insert({
+  // Use admin client to bypass RLS
+  const { createAdminClient } = await import("@/lib/supabase/server")
+  await createAdminClient().from("tournament_announcements").insert({
     tournament_id: tournamentId,
     author_id: userId,
     message: `Round timer has been RESET to ${round.time_limit_minutes} minutes.`,
