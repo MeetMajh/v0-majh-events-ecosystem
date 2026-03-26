@@ -33,7 +33,7 @@ export default async function PlayerPortalPage() {
   }
 
   // Get all tournament registrations for this user
-  const { data: registrations, error: regError } = await supabase
+  const { data: registrations } = await supabase
     .from("tournament_registrations")
     .select(`
       id,
