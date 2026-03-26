@@ -32,6 +32,7 @@ import {
   Newspaper,
   Trophy,
   MessageSquare,
+  Joystick,
 } from "lucide-react"
 import { signOut } from "@/lib/actions"
 import { Button } from "@/components/ui/button"
@@ -43,6 +44,7 @@ const NAV_ITEMS = [
   { label: "My Orders", href: "/dashboard/orders", icon: UtensilsCrossed },
   { label: "Esports", href: "/esports", icon: Gamepad2 },
   { label: "My Events", href: "/dashboard/my-events", icon: CalendarCheck },
+  { label: "Player Portal", href: "/dashboard/player-portal", icon: Joystick },
   { label: "My Rentals", href: "/dashboard/rentals", icon: Monitor },
 ]
 
