@@ -39,14 +39,10 @@ export async function getTournamentIssues(tournamentId: string, filters?: {
   try {
     const supabase = await createClient()
     
-    // Simple query without comments join in case issue_comments table doesn't exist
+    // Simple query - use basic select to avoid foreign key issues
     let query = supabase
       .from("tournament_issues")
-      .select(`
-        *,
-        reporter:profiles!reported_by(id, first_name, last_name, avatar_url),
-        assignee:profiles!assigned_to(id, first_name, last_name, avatar_url)
-      `)
+      .select("*")
       .eq("tournament_id", tournamentId)
       .order("created_at", { ascending: false })
     
@@ -72,28 +68,24 @@ export async function getAllIssues(filters?: {
   status?: string
   escalationLevel?: number
 }) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return []
-  
-  // Check staff role
-  const { data: staffRole } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .single()
-  
-  if (!staffRole) return []
-  
-  let query = supabase
-    .from("tournament_issues")
-    .select(`
-      *,
-      tournament:tournaments(id, name, slug),
-      reporter:profiles!reported_by(id, first_name, last_name, avatar_url),
-      assignee:profiles!assigned_to(id, first_name, last_name, avatar_url)
-    `)
-    .order("created_at", { ascending: false })
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return []
+    
+    // Check staff role
+    const { data: staffRole } = await supabase
+      .from("staff_roles")
+      .select("role")
+      .eq("user_id", user.id)
+      .single()
+    
+    if (!staffRole) return []
+    
+    let query = supabase
+      .from("tournament_issues")
+      .select("*, tournament:tournaments(id, name, slug)")
+      .order("created_at", { ascending: false })
   
   // Filter by escalation level based on role
   if (staffRole.role === "staff") {
@@ -107,11 +99,15 @@ export async function getAllIssues(filters?: {
   if (filters?.escalationLevel) query = query.eq("escalation_level", filters.escalationLevel)
   
   const { data, error } = await query
-  if (error) {
-    console.error("Error fetching all issues:", error)
+    if (error) {
+      console.error("Error fetching all issues:", error)
+      return []
+    }
+    return data ?? []
+  } catch (err) {
+    console.error("Exception fetching all issues:", err)
     return []
   }
-  return data ?? []
 }
 
 // ── Create Issue ──
