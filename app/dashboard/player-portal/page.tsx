@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -32,8 +32,9 @@ export default async function PlayerPortalPage() {
     redirect("/login")
   }
 
-  // Get all tournament registrations for this user
-  const { data: registrations, error: regError } = await supabase
+  // Get all tournament registrations for this user using admin client to bypass RLS
+  const adminClient = createAdminClient()
+  const { data: registrations, error: regError } = await adminClient
     .from("tournament_registrations")
     .select(`
       *,
@@ -51,11 +52,7 @@ export default async function PlayerPortalPage() {
       )
     `)
     .eq("player_id", user.id)
-    .order("created_at", { ascending: false })
-  
-  console.log("[v0] Player Portal - user.id:", user.id)
-  console.log("[v0] Player Portal - registrations count:", registrations?.length ?? 0)
-  if (regError) console.error("[v0] Player Portal - error:", regError)
+    .order("registered_at", { ascending: false })
 
   const tournaments = registrations ?? []
 
