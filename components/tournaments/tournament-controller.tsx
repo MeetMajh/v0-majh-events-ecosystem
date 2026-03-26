@@ -80,10 +80,11 @@ import {
   deleteMatch,
   updateMatchPlayers,
   regeneratePairings,
+  getTournamentDecklists,
   type PlayerStanding,
 } from "@/lib/tournament-controller-actions"
 import { resetRoundTimer } from "@/lib/timer-actions"
-import { getTournamentIssues, updateIssueStatus } from "@/lib/tournament-issue-actions"
+import { getTournamentIssues, updateIssueStatus, createIssue } from "@/lib/tournament-issue-actions"
 import { ISSUE_CATEGORIES } from "@/lib/tournament-issue-constants"
 import type { TournamentStatus } from "@/lib/tournament-controller-actions"
 
@@ -213,6 +214,8 @@ export function TournamentController({
   const [selectedMatchForSwap, setSelectedMatchForSwap] = useState<string | null>(null)
   const [tickets, setTickets] = useState<any[]>([])
   const [loadingTickets, setLoadingTickets] = useState(false)
+  const [decklists, setDecklists] = useState<any[]>([])
+  const [loadingDecklists, setLoadingDecklists] = useState(false)
 
   const activePhase = phases.find(p => p.is_current) || phases[0]
   const checkedInCount = registrations.filter(r => r.status === "checked_in").length
@@ -269,6 +272,17 @@ export function TournamentController({
       getTournamentIssues(tournament.id).then((data) => {
         setTickets(data)
         setLoadingTickets(false)
+      })
+    }
+  }, [activeSection, tournament.id])
+  
+  // Load decklists when section changes to decklists
+  useEffect(() => {
+    if (activeSection === "decklists") {
+      setLoadingDecklists(true)
+      getTournamentDecklists(tournament.id).then((data) => {
+        setDecklists(data)
+        setLoadingDecklists(false)
       })
     }
   }, [activeSection, tournament.id])
@@ -1461,14 +1475,117 @@ const handleAddPlayer = () => {
           {/* Decklists Section */}
           {activeSection === "decklists" && (
             <div className="space-y-4">
-              <h2 className="text-xl font-semibold">Decklists</h2>
-              <Card>
-                <CardContent className="py-8 text-center text-muted-foreground">
-                  <FileText className="mx-auto h-12 w-12 mb-4 opacity-50" />
-                  <p>Decklist management coming soon</p>
-                  <p className="text-sm">View and validate player decklists</p>
-                </CardContent>
-              </Card>
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-semibold">Decklists</h2>
+                <Badge variant="outline">
+                  {decklists.filter(d => d.is_valid).length}/{decklists.length} validated
+                </Badge>
+              </div>
+              
+              {decklists.length === 0 ? (
+                <Card>
+                  <CardContent className="py-8 text-center text-muted-foreground">
+                    <FileText className="mx-auto h-12 w-12 mb-4 opacity-50" />
+                    <p>No decklists submitted yet</p>
+                    <p className="text-sm">Player decklists will appear here when submitted</p>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="space-y-3">
+                  {decklists.map((deck) => (
+                    <Card key={deck.id} className={cn(
+                      "transition-colors",
+                      !deck.is_valid && deck.validation_errors && "border-destructive/50 bg-destructive/5"
+                    )}>
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <Badge variant={deck.is_valid ? "default" : "destructive"} className="text-[10px]">
+                                {deck.is_valid ? "Valid" : "Invalid"}
+                              </Badge>
+                              {deck.format && (
+                                <Badge variant="outline" className="text-[10px]">
+                                  {deck.format}
+                                </Badge>
+                              )}
+                            </div>
+                            <h4 className="font-medium text-sm truncate">
+                              {deck.decklist_name || "Unnamed Deck"}
+                            </h4>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Submitted by {deck.profiles?.first_name} {deck.profiles?.last_name}
+                            </p>
+                            {deck.validation_errors && (
+                              <p className="text-xs text-destructive mt-1 line-clamp-2">
+                                {deck.validation_errors}
+                              </p>
+                            )}
+                            <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+                              <span>
+                                {formatDistanceToNow(new Date(deck.submitted_at), { addSuffix: true })}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Dialog>
+                              <DialogTrigger asChild>
+                                <Button size="sm" variant="outline">
+                                  <FileText className="h-3 w-3 mr-1" />
+                                  View
+                                </Button>
+                              </DialogTrigger>
+                              <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                                <DialogHeader>
+                                  <DialogTitle>{deck.decklist_name || "Decklist"}</DialogTitle>
+                                  <DialogDescription>
+                                    Submitted by {deck.profiles?.first_name} {deck.profiles?.last_name}
+                                  </DialogDescription>
+                                </DialogHeader>
+                                <div className="space-y-4">
+                                  <div className="flex gap-2">
+                                    <Badge variant={deck.is_valid ? "default" : "destructive"}>
+                                      {deck.is_valid ? "Valid" : "Invalid"}
+                                    </Badge>
+                                    {deck.format && <Badge variant="outline">{deck.format}</Badge>}
+                                  </div>
+                                  {deck.decklist_url && (
+                                    <div>
+                                      <Label className="text-sm">External Link</Label>
+                                      <a 
+                                        href={deck.decklist_url} 
+                                        target="_blank" 
+                                        rel="noopener noreferrer"
+                                        className="text-sm text-primary hover:underline block truncate"
+                                      >
+                                        {deck.decklist_url}
+                                      </a>
+                                    </div>
+                                  )}
+                                  {deck.decklist_text && (
+                                    <div>
+                                      <Label className="text-sm">Decklist</Label>
+                                      <pre className="mt-2 p-4 bg-muted rounded-lg text-sm font-mono whitespace-pre-wrap max-h-96 overflow-y-auto">
+                                        {deck.decklist_text}
+                                      </pre>
+                                    </div>
+                                  )}
+                                  {deck.validation_errors && (
+                                    <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                                      <p className="text-sm text-destructive font-medium">Validation Errors:</p>
+                                      <p className="text-sm text-destructive mt-1">{deck.validation_errors}</p>
+                                    </div>
+                                  )}
+                                </div>
+                              </DialogContent>
+                            </Dialog>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -1561,7 +1678,7 @@ const handleAddPlayer = () => {
                               <p className="whitespace-pre-wrap">{ann.message}</p>
                               {ann.profiles && (
                                 <p className="text-xs text-muted-foreground mt-2">
-                                  Sent by {ann.profiles.display_name}
+                                  Sent by {ann.profiles.first_name} {ann.profiles.last_name}
                                 </p>
                               )}
                             </div>
@@ -1608,9 +1725,95 @@ const handleAddPlayer = () => {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-semibold">Support Tickets</h2>
-                <Badge variant="outline">
-                  {tickets.filter(t => t.status !== "resolved" && t.status !== "closed").length} open
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline">
+                    {tickets.filter(t => t.status !== "resolved" && t.status !== "closed").length} open
+                  </Badge>
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button size="sm">
+                        <Plus className="h-4 w-4 mr-1" />
+                        Create Ticket
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Create Support Ticket</DialogTitle>
+                        <DialogDescription>
+                          Report an issue or request assistance for this tournament.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <form
+                        action={async (formData: FormData) => {
+                          formData.set("tournament_id", tournament.id)
+                          startTransition(async () => {
+                            const result = await createIssue(formData)
+                            if ("error" in result) {
+                              toast.error(result.error)
+                            } else {
+                              toast.success("Ticket created successfully")
+                              // Refresh tickets
+                              const newTickets = await getTournamentIssues(tournament.id)
+                              setTickets(newTickets)
+                            }
+                          })
+                        }}
+                        className="space-y-4"
+                      >
+                        <div className="space-y-2">
+                          <Label htmlFor="ticket-category">Category</Label>
+                          <Select name="category" defaultValue="technical">
+                            <SelectTrigger id="ticket-category">
+                              <SelectValue placeholder="Select category" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {Object.entries(ISSUE_CATEGORIES).map(([key, { label }]) => (
+                                <SelectItem key={key} value={key}>{label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="ticket-severity">Severity</Label>
+                          <Select name="severity" defaultValue="medium">
+                            <SelectTrigger id="ticket-severity">
+                              <SelectValue placeholder="Select severity" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="low">Low</SelectItem>
+                              <SelectItem value="medium">Medium</SelectItem>
+                              <SelectItem value="high">High</SelectItem>
+                              <SelectItem value="critical">Critical</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="ticket-title">Title</Label>
+                          <Input id="ticket-title" name="title" placeholder="Brief description of the issue" required />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="ticket-description">Description</Label>
+                          <Textarea 
+                            id="ticket-description" 
+                            name="description" 
+                            placeholder="Detailed description of the issue..."
+                            rows={4}
+                            required
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="ticket-round">Affected Round (optional)</Label>
+                          <Input id="ticket-round" name="affected_round" type="number" min="1" placeholder="Round number" />
+                        </div>
+                        <DialogFooter>
+                          <Button type="submit" disabled={isPending}>
+                            {isPending ? "Creating..." : "Create Ticket"}
+                          </Button>
+                        </DialogFooter>
+                      </form>
+                    </DialogContent>
+                  </Dialog>
+                </div>
               </div>
               
               {loadingTickets ? (
