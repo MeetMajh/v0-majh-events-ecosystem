@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { redirect, notFound } from "next/navigation"
 import { PlayerController } from "@/components/player/player-controller"
 import { getPlayerTournamentData } from "@/lib/player-actions"
@@ -22,14 +22,15 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 export default async function PlayerControllerPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: tournamentId } = await params
   const supabase = await createClient()
+  const adminClient = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
 
   if (!user) {
     redirect("/login")
   }
 
-  // Get tournament details
-  const { data: tournament } = await supabase
+  // Get tournament details using admin client to bypass RLS
+  const { data: tournament } = await adminClient
     .from("tournaments")
     .select(`
       *,
@@ -42,8 +43,8 @@ export default async function PlayerControllerPage({ params }: { params: Promise
     notFound()
   }
 
-  // Check if user is registered for this tournament
-  const { data: registration } = await supabase
+  // Check if user is registered for this tournament using admin client
+  const { data: registration } = await adminClient
     .from("tournament_registrations")
     .select("*")
     .eq("tournament_id", tournamentId)
