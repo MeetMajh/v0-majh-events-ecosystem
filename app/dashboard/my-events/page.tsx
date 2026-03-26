@@ -199,7 +199,7 @@ export default async function MyEventsPage() {
                 {activeEvents.map((reg) => (
                   <Link 
                     key={reg.id} 
-                    href={`/esports/tournaments/${reg.tournaments?.slug}`}
+                    href={`/dashboard/my-events/${reg.tournaments?.id}`}
                     className="flex items-center justify-between p-4 rounded-lg border border-border hover:border-primary/30 hover:bg-muted/30 transition-colors"
                   >
                     <div className="flex items-center gap-4">
@@ -223,6 +223,9 @@ export default async function MyEventsPage() {
                       <Badge className="bg-green-500/20 text-green-600 border-green-500/30">
                         {reg.status === "checked_in" ? "Checked In" : "Registered"}
                       </Badge>
+                      <Button size="sm" variant="secondary">
+                        Player Controller
+                      </Button>
                       <ChevronRight className="h-4 w-4 text-muted-foreground" />
                     </div>
                   </Link>
@@ -245,7 +248,7 @@ export default async function MyEventsPage() {
                 {upcomingEvents.map((reg) => (
                   <Link 
                     key={reg.id} 
-                    href={`/esports/tournaments/${reg.tournaments?.slug}`}
+                    href={`/dashboard/my-events/${reg.tournaments?.id}`}
                     className="flex items-center justify-between p-4 rounded-lg border border-border hover:border-primary/30 hover:bg-muted/30 transition-colors"
                   >
                     <div className="flex items-center gap-4">
@@ -269,6 +272,9 @@ export default async function MyEventsPage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge variant="outline">{reg.status}</Badge>
+                      <Button size="sm" variant="outline">
+                        Player Controller
+                      </Button>
                       <ChevronRight className="h-4 w-4 text-muted-foreground" />
                     </div>
                   </Link>
