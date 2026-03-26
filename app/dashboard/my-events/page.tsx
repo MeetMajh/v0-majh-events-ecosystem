@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
+import { cn } from "@/lib/utils"
 import { redirect } from "next/navigation"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -273,6 +274,79 @@ export default async function MyEventsPage() {
                     <div className="flex items-center gap-2">
                       <Badge variant="outline">{reg.status}</Badge>
                       <Button size="sm" variant="outline">
+                        Player Controller
+                      </Button>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  </Link>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* All Registered Tournaments - Always show this section */}
+          {registrations.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Gamepad2 className="h-5 w-5 text-primary" />
+                  Registered Tournaments
+                </CardTitle>
+                <CardDescription>All tournaments you&apos;re registered for - click to open Player Controller</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {registrations.map((reg) => (
+                  <Link 
+                    key={reg.id} 
+                    href={`/dashboard/my-events/${reg.tournaments?.id}`}
+                    className="flex items-center justify-between p-4 rounded-lg border border-border hover:border-primary/30 hover:bg-muted/30 transition-colors"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className={cn(
+                        "flex h-12 w-12 items-center justify-center rounded-lg",
+                        reg.tournaments?.status === "in_progress" ? "bg-green-500/10" :
+                        reg.tournaments?.status === "completed" ? "bg-muted" :
+                        "bg-primary/10"
+                      )}>
+                        <Gamepad2 className={cn(
+                          "h-6 w-6",
+                          reg.tournaments?.status === "in_progress" ? "text-green-500" :
+                          reg.tournaments?.status === "completed" ? "text-muted-foreground" :
+                          "text-primary"
+                        )} />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-foreground">{reg.tournaments?.name}</p>
+                        <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                          <Badge variant="outline" className="text-[10px]">
+                            {reg.tournaments?.games?.name}
+                          </Badge>
+                          <Badge variant={
+                            reg.tournaments?.status === "in_progress" ? "default" :
+                            reg.tournaments?.status === "completed" ? "secondary" :
+                            "outline"
+                          } className={cn(
+                            "text-[10px]",
+                            reg.tournaments?.status === "in_progress" && "bg-green-500/20 text-green-600 border-green-500/30"
+                          )}>
+                            {reg.tournaments?.status?.replace("_", " ")}
+                          </Badge>
+                          {reg.tournaments?.start_date && (
+                            <span className="flex items-center gap-1">
+                              <Calendar className="h-3 w-3" />
+                              {format(new Date(reg.tournaments.start_date), "MMM d, yyyy")}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant={reg.status === "checked_in" ? "default" : "outline"} className={cn(
+                        reg.status === "checked_in" && "bg-green-500/20 text-green-600 border-green-500/30"
+                      )}>
+                        {reg.status?.replace("_", " ")}
+                      </Badge>
+                      <Button size="sm" variant="secondary">
                         Player Controller
                       </Button>
                       <ChevronRight className="h-4 w-4 text-muted-foreground" />
