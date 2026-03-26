@@ -60,17 +60,32 @@ export default async function TournamentControllerPage({
   let standings: Awaited<ReturnType<typeof getTournamentStandings>> = []
 
   try {
-    [phases, registrations, currentRound, paymentSummary] = await Promise.all([
-      getTournamentPhases(tournament.id),
-      getTournamentRegistrations(tournament.id),
-      getCurrentRound(tournament.id),
-      getPaymentSummary(tournament.id),
+    console.log("[v0] Fetching tournament data for:", tournament.id)
+    const [phasesResult, registrationsResult, currentRoundResult, paymentSummaryResult] = await Promise.all([
+      getTournamentPhases(tournament.id).catch((e) => { console.error("[v0] getTournamentPhases error:", e); return [] }),
+      getTournamentRegistrations(tournament.id).catch((e) => { console.error("[v0] getTournamentRegistrations error:", e); return [] }),
+      getCurrentRound(tournament.id).catch((e) => { console.error("[v0] getCurrentRound error:", e); return null }),
+      getPaymentSummary(tournament.id).catch((e) => { console.error("[v0] getPaymentSummary error:", e); return null }),
     ])
+    console.log("[v0] Data fetched - phases:", phasesResult?.length, "registrations:", registrationsResult?.length)
+    
+    phases = phasesResult ?? []
+    registrations = registrationsResult ?? []
+    currentRound = currentRoundResult
+    paymentSummary = paymentSummaryResult ?? {
+      totalRegistrations: 0,
+      paidCount: 0,
+      pendingCount: 0,
+      refundedCount: 0,
+      totalCollected: 0,
+      totalRefunded: 0,
+      netRevenue: 0,
+    }
 
     // Get standings for current phase if exists
     const currentPhase = phases.find(p => p.is_current) || phases[0]
     if (currentPhase) {
-      standings = await getTournamentStandings(tournament.id, currentPhase.id)
+      standings = await getTournamentStandings(tournament.id, currentPhase.id).catch(() => [])
     }
   } catch (error) {
     console.error("[v0] Error fetching tournament data:", error)
