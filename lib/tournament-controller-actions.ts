@@ -293,13 +293,15 @@ export async function createSwissRound(tournamentId: string, phaseId: string) {
       }
     }
 
-    // Create announcement
-    await supabase.from("tournament_announcements").insert({
+    // Create announcement using admin client to bypass RLS
+    const adminClient = createAdminClient()
+    const { error: annError } = await adminClient.from("tournament_announcements").insert({
       tournament_id: tournamentId,
       author_id: userId,
       message: `Round ${round.round_number} pairings are now posted! Check the Matches tab to find your opponent and table number.`,
       priority: "high",
     })
+    if (annError) console.error("[v0] Announcement insert error:", annError)
 
     revalidatePath(`/dashboard/tournaments/${tournamentId}`)
     return { success: true, roundId: round.id }
@@ -405,8 +407,9 @@ export async function regeneratePairings(tournamentId: string, roundId: string) 
 
   if (matchError) return { error: matchError.message }
 
-  // Create announcement
-  await supabase.from("tournament_announcements").insert({
+  // Create announcement using admin client
+  const adminClient = createAdminClient()
+  await adminClient.from("tournament_announcements").insert({
     tournament_id: tournamentId,
     author_id: userId,
     message: `Round ${round.round_number} pairings have been regenerated. Please check your new pairing.`,
@@ -453,8 +456,9 @@ export async function startRound(roundId: string) {
     .eq("round_id", roundId)
     .eq("status", "pending")
 
-  // Create announcement
-  await supabase.from("tournament_announcements").insert({
+  // Create announcement using admin client
+  const adminClient = createAdminClient()
+  await adminClient.from("tournament_announcements").insert({
     tournament_id: round.tournament_id,
     author_id: userId,
     message: `Round ${round.round_number} has STARTED! You have ${round.time_limit_minutes ?? 50} minutes. Find your table and begin your match.`,
@@ -504,8 +508,9 @@ export async function completeRound(roundId: string) {
   // Recalculate standings
   await recalculateStandings(round.tournament_id, round.phase_id)
 
-  // Create announcement
-  await supabase.from("tournament_announcements").insert({
+  // Create announcement using admin client
+  const adminClient = createAdminClient()
+  await adminClient.from("tournament_announcements").insert({
     tournament_id: round.tournament_id,
     author_id: userId,
     message: `Round ${round.round_number} is now COMPLETE. Standings have been updated. Please wait for the next round to begin.`,
@@ -870,7 +875,7 @@ export async function dropPlayer(tournamentId: string, playerId: string, roundNu
     .eq("player_id", playerId)
 
   // Create announcement
-  await supabase.from("tournament_announcements").insert({
+  await createAdminClient().from("tournament_announcements").insert({
     tournament_id: tournamentId,
     author_id: userId,
     message: `Player ${playerName} has dropped from the tournament${roundNumber ? ` after round ${roundNumber}` : ''}.`,
@@ -905,7 +910,7 @@ export async function updateTournamentStatus(tournamentId: string, status: Tourn
   }
   
   if (statusMessages[status]) {
-    await supabase.from("tournament_announcements").insert({
+    await createAdminClient().from("tournament_announcements").insert({
       tournament_id: tournamentId,
       author_id: userId,
       message: statusMessages[status],
@@ -994,7 +999,7 @@ export async function startTournament(tournamentId: string) {
     if (error) return { error: error.message }
     
     // Create announcement
-    await supabase.from("tournament_announcements").insert({
+    await createAdminClient().from("tournament_announcements").insert({
       tournament_id: tournamentId,
       author_id: userId,
       message: `The tournament has officially STARTED! ${recommendedRounds} rounds of Swiss will be played. Please check the Matches tab for your first round pairing.`,
@@ -1033,7 +1038,7 @@ export async function completeTournament(tournamentId: string) {
   await awardTournamentResults(tournamentId)
 
   // Create announcement
-  await supabase.from("tournament_announcements").insert({
+  await createAdminClient().from("tournament_announcements").insert({
     tournament_id: tournamentId,
     author_id: userId,
     message: `The tournament is now COMPLETE! Thank you for participating. Check the Standings tab for final results.`,
@@ -1701,7 +1706,7 @@ export async function adminCheckInPlayer(tournamentId: string, playerId: string,
   // Create announcement if requested
   if (createAnnouncementFlag && profile) {
     const playerName = `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'A player'
-    await supabase.from("tournament_announcements").insert({
+    await createAdminClient().from("tournament_announcements").insert({
       tournament_id: tournamentId,
       author_id: userId,
       message: `${playerName} has been checked in by tournament staff.`,
@@ -1751,7 +1756,7 @@ export async function pauseRound(tournamentId: string, roundId: string) {
   if (error) return { error: error.message }
 
   // Create announcement
-  await supabase.from("tournament_announcements").insert({
+  await createAdminClient().from("tournament_announcements").insert({
     tournament_id: tournamentId,
     author_id: userId,
     message: `Round timer has been PAUSED. ${remainingMinutes} minutes remaining.`,
@@ -1793,7 +1798,7 @@ export async function resumeRound(tournamentId: string, roundId: string) {
   if (error) return { error: error.message }
 
   // Create announcement
-  await supabase.from("tournament_announcements").insert({
+  await createAdminClient().from("tournament_announcements").insert({
     tournament_id: tournamentId,
     author_id: userId,
     message: "Round timer has been RESUMED.",
@@ -1851,7 +1856,7 @@ export async function addTimeToRound(tournamentId: string, roundId: string, minu
   }
 
   // Create announcement
-  await supabase.from("tournament_announcements").insert({
+  await createAdminClient().from("tournament_announcements").insert({
     tournament_id: tournamentId,
     author_id: userId,
     message: `${minutesToAdd} minute${minutesToAdd !== 1 ? 's' : ''} have been added to the round timer.`,
@@ -1898,7 +1903,7 @@ export async function swapMatchPlayers(
   }
 
   // Create announcement
-  await supabase.from("tournament_announcements").insert({
+  await createAdminClient().from("tournament_announcements").insert({
     tournament_id: tournamentId,
     author_id: userId,
     message: "Match pairings have been updated. Please check your current pairing.",
@@ -1960,7 +1965,7 @@ export async function createManualMatch(
   if (error) return { error: error.message }
 
   // Create announcement
-  await supabase.from("tournament_announcements").insert({
+  await createAdminClient().from("tournament_announcements").insert({
     tournament_id: tournamentId,
     author_id: userId,
     message: "A new match has been manually added to the round.",
@@ -1984,7 +1989,7 @@ export async function deleteMatch(tournamentId: string, matchId: string) {
   if (error) return { error: error.message }
 
   // Create announcement
-  await supabase.from("tournament_announcements").insert({
+  await createAdminClient().from("tournament_announcements").insert({
     tournament_id: tournamentId,
     author_id: userId,
     message: "A match has been removed from the round. Please check your pairings.",
@@ -2023,7 +2028,7 @@ export async function updateMatchPlayers(
   if (error) return { error: error.message }
 
   // Create announcement
-  await supabase.from("tournament_announcements").insert({
+  await createAdminClient().from("tournament_announcements").insert({
     tournament_id: tournamentId,
     author_id: userId,
     message: "Match pairings have been updated. Please check your current pairing.",
@@ -2741,8 +2746,9 @@ export async function sendTournamentAnnouncement(
     return { error: "Announcement message cannot be empty" }
   }
 
-  // Insert announcement into tournament_announcements table
-  const { data, error } = await supabase
+  // Insert announcement using admin client to bypass RLS
+  const adminClient = createAdminClient()
+  const { data, error } = await adminClient
     .from("tournament_announcements")
     .insert({
       tournament_id: tournamentId,
@@ -2758,6 +2764,7 @@ export async function sendTournamentAnnouncement(
     if (error.code === "42P01") {
       return { error: "Announcements table not set up. Please contact support." }
     }
+    console.error("[v0] sendTournamentAnnouncement error:", error)
     return { error: error.message }
   }
 
@@ -2770,16 +2777,10 @@ export async function sendTournamentAnnouncement(
 export async function getTournamentAnnouncements(tournamentId: string) {
   const supabase = await createClient()
 
-  const { data, error } = await supabase
+  // Fetch announcements first
+  const { data: announcements, error } = await supabase
     .from("tournament_announcements")
-    .select(`
-      id,
-      message,
-      priority,
-      created_at,
-      author_id,
-      profiles:author_id (first_name, last_name, avatar_url)
-    `)
+    .select("id, message, priority, created_at, author_id")
     .eq("tournament_id", tournamentId)
     .order("created_at", { ascending: false })
 
@@ -2788,10 +2789,30 @@ export async function getTournamentAnnouncements(tournamentId: string) {
     if (error.code === "42P01") {
       return { announcements: [] }
     }
-    return { error: error.message }
+    console.error("[v0] getTournamentAnnouncements error:", error)
+    return { announcements: [] }
   }
 
-  return { announcements: data ?? [] }
+  if (!announcements || announcements.length === 0) {
+    return { announcements: [] }
+  }
+
+  // Fetch profiles for all authors
+  const authorIds = [...new Set(announcements.map(a => a.author_id).filter(Boolean))]
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("id, first_name, last_name, avatar_url")
+    .in("id", authorIds)
+
+  const profileMap = new Map(profiles?.map(p => [p.id, p]) ?? [])
+
+  // Combine data
+  const announcementsWithProfiles = announcements.map(a => ({
+    ...a,
+    profiles: profileMap.get(a.author_id) ?? null,
+  }))
+
+  return { announcements: announcementsWithProfiles }
 }
 
 export async function deleteAnnouncement(announcementId: string) {
