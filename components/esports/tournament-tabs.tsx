@@ -12,13 +12,14 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Shield, Users, Trophy, ScrollText, ListOrdered, Swords, Send, Timer, CheckCircle2 } from "lucide-react"
+import { Shield, Users, Trophy, ScrollText, ListOrdered, Swords, Send, Timer, CheckCircle2, LayoutList } from "lucide-react"
 import { format } from "date-fns"
 
-type TabKey = "bracket" | "standings" | "pairings" | "participants" | "rules" | "results"
+type TabKey = "bracket" | "rounds" | "standings" | "pairings" | "participants" | "rules" | "results"
 
 const TABS: { key: TabKey; label: string; icon: any }[] = [
   { key: "bracket", label: "Bracket", icon: Trophy },
+  { key: "rounds", label: "Rounds", icon: LayoutList },
   { key: "standings", label: "Standings", icon: ListOrdered },
   { key: "pairings", label: "Pairings", icon: Swords },
   { key: "participants", label: "Participants", icon: Users },
@@ -32,6 +33,7 @@ export function TournamentTabs({
   participants,
   standings,
   currentRound,
+  allRounds,
   currentUserId,
 }: {
   tournament: any
@@ -39,6 +41,7 @@ export function TournamentTabs({
   participants: any[]
   standings?: any[]
   currentRound?: any
+  allRounds?: any[]
   currentUserId?: string
 }) {
   const [activeTab, setActiveTab] = useState<TabKey>(
@@ -47,11 +50,13 @@ export function TournamentTabs({
 
   const showResults = tournament.status === "completed"
   const showPairings = tournament.status === "in_progress" && currentRound
+  const showRounds = (allRounds?.length ?? 0) > 0
 
   const filteredTabs = TABS.filter((t) => {
     if (t.key === "results" && !showResults) return false
     if (t.key === "pairings" && !showPairings) return false
     if (t.key === "standings" && tournament.status === "registration") return false
+    if (t.key === "rounds" && !showRounds) return false
     return true
   })
 
@@ -82,6 +87,10 @@ export function TournamentTabs({
           participants={participants}
           format={tournament.format}
         />
+      )}
+
+      {activeTab === "rounds" && (
+        <RoundsView rounds={allRounds ?? []} tournamentStatus={tournament.status} />
       )}
 
       {activeTab === "standings" && (
@@ -574,6 +583,181 @@ function PairingsView({
             ))}
           </tbody>
         </table>
+      </div>
+    </div>
+  )
+}
+
+// ── Rounds View ──
+
+function RoundsView({ rounds, tournamentStatus }: { rounds: any[]; tournamentStatus: string }) {
+  const [expandedRound, setExpandedRound] = useState<string | null>(
+    rounds.length > 0 ? rounds[rounds.length - 1].id : null
+  )
+
+  if (rounds.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-border p-12 text-center">
+        <LayoutList className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
+        <p className="text-muted-foreground">No rounds have been played yet.</p>
+        <p className="text-sm text-muted-foreground mt-2">Round history will appear here once the tournament begins.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Summary Header */}
+      <div className="flex items-center justify-between rounded-lg border border-border bg-card p-4">
+        <div>
+          <h3 className="font-semibold">Tournament Rounds</h3>
+          <p className="text-sm text-muted-foreground">
+            {rounds.length} round{rounds.length !== 1 ? "s" : ""} {tournamentStatus === "completed" ? "completed" : "played"}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {tournamentStatus === "completed" && (
+            <Badge className="bg-primary/10 text-primary">Tournament Complete</Badge>
+          )}
+          {tournamentStatus === "in_progress" && (
+            <Badge className="bg-destructive/10 text-destructive">In Progress</Badge>
+          )}
+        </div>
+      </div>
+
+      {/* Rounds List */}
+      <div className="space-y-3">
+        {rounds.map((round) => {
+          const isExpanded = expandedRound === round.id
+          const completedMatches = round.matches?.filter((m: any) => m.status === "confirmed").length ?? 0
+          const totalMatches = round.matches?.length ?? 0
+          const isComplete = round.status === "complete"
+          const isActive = round.status === "active"
+
+          return (
+            <div key={round.id} className="overflow-hidden rounded-xl border border-border">
+              {/* Round Header - Clickable */}
+              <button
+                onClick={() => setExpandedRound(isExpanded ? null : round.id)}
+                className="w-full flex items-center justify-between p-4 bg-card hover:bg-muted/30 transition-colors text-left"
+              >
+                <div className="flex items-center gap-3">
+                  <div className={cn(
+                    "flex items-center justify-center w-10 h-10 rounded-full text-sm font-bold",
+                    isComplete ? "bg-primary/10 text-primary" : 
+                    isActive ? "bg-destructive/10 text-destructive" : 
+                    "bg-muted text-muted-foreground"
+                  )}>
+                    {round.round_number}
+                  </div>
+                  <div>
+                    <h4 className="font-semibold">Round {round.round_number}</h4>
+                    <p className="text-xs text-muted-foreground capitalize">
+                      {round.round_type} • {completedMatches}/{totalMatches} matches complete
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant={isComplete ? "default" : isActive ? "destructive" : "secondary"}>
+                    {round.status === "complete" ? "Complete" : round.status === "active" ? "Active" : "Pending"}
+                  </Badge>
+                  <svg
+                    className={cn(
+                      "h-5 w-5 text-muted-foreground transition-transform",
+                      isExpanded && "rotate-180"
+                    )}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </button>
+
+              {/* Expanded Match List */}
+              {isExpanded && round.matches && round.matches.length > 0 && (
+                <div className="border-t border-border">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/30">
+                        <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground w-16">Table</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Player 1</th>
+                        <th className="px-4 py-2 text-center text-xs font-medium uppercase tracking-wider text-muted-foreground w-20">Result</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Player 2</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {round.matches.map((match: any) => (
+                        <tr key={match.id} className="border-b border-border/50 last:border-0">
+                          <td className="px-4 py-2 text-sm text-muted-foreground">
+                            {match.table_number ?? "-"}
+                          </td>
+                          <td className="px-4 py-2">
+                            <div className="flex items-center gap-2">
+                              <Avatar className="h-6 w-6">
+                                <AvatarImage src={match.player1?.avatar_url} />
+                                <AvatarFallback>{match.player1?.display_name?.charAt(0) ?? "?"}</AvatarFallback>
+                              </Avatar>
+                              <span className={cn(
+                                "text-sm",
+                                match.winner_id === match.player1_id && "font-semibold text-primary"
+                              )}>
+                                {match.player1?.display_name ?? "TBD"}
+                              </span>
+                              {match.winner_id === match.player1_id && (
+                                <Trophy className="h-3 w-3 text-yellow-500" />
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-2 text-center">
+                            {match.status === "confirmed" ? (
+                              <span className="font-mono text-sm font-bold">
+                                {match.player1_wins ?? 0} - {match.player2_wins ?? 0}
+                              </span>
+                            ) : match.is_bye ? (
+                              <span className="text-xs text-muted-foreground">BYE</span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">vs</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2">
+                            {match.is_bye ? (
+                              <span className="text-sm text-muted-foreground">---</span>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                <Avatar className="h-6 w-6">
+                                  <AvatarImage src={match.player2?.avatar_url} />
+                                  <AvatarFallback>{match.player2?.display_name?.charAt(0) ?? "?"}</AvatarFallback>
+                                </Avatar>
+                                <span className={cn(
+                                  "text-sm",
+                                  match.winner_id === match.player2_id && "font-semibold text-primary"
+                                )}>
+                                  {match.player2?.display_name ?? "TBD"}
+                                </span>
+                                {match.winner_id === match.player2_id && (
+                                  <Trophy className="h-3 w-3 text-yellow-500" />
+                                )}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Empty matches state */}
+              {isExpanded && (!round.matches || round.matches.length === 0) && (
+                <div className="border-t border-border p-6 text-center text-sm text-muted-foreground">
+                  No matches in this round yet.
+                </div>
+              )}
+            </div>
+          )
+        })}
       </div>
     </div>
   )

@@ -1204,6 +1204,73 @@ export async function getCurrentRound(tournamentId: string) {
   }
 }
 
+// ── Get All Tournament Rounds ──
+export async function getAllTournamentRounds(tournamentId: string) {
+  try {
+    const supabase = createAdminClient()
+    
+    // Get all rounds for the tournament
+    const { data: rounds, error: roundsError } = await supabase
+      .from("tournament_rounds")
+      .select("*, tournament_phases(name)")
+      .eq("tournament_id", tournamentId)
+      .order("round_number", { ascending: true })
+    
+    if (roundsError || !rounds?.length) return []
+    
+    // Get all matches for all rounds
+    const roundIds = rounds.map(r => r.id)
+    const { data: allMatches } = await supabase
+      .from("tournament_matches")
+      .select("*")
+      .in("round_id", roundIds)
+      .order("table_number")
+    
+    if (!allMatches?.length) {
+      return rounds.map(r => ({ ...r, matches: [] }))
+    }
+    
+    // Get all unique player IDs
+    const playerIds = new Set<string>()
+    allMatches.forEach(m => {
+      if (m.player1_id) playerIds.add(m.player1_id)
+      if (m.player2_id) playerIds.add(m.player2_id)
+    })
+    
+    // Fetch profiles
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, first_name, last_name")
+      .in("id", Array.from(playerIds))
+    
+    const profileMap = new Map(profiles?.map(p => [p.id, {
+      id: p.id,
+      display_name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unknown',
+    }]) || [])
+    
+    // Group matches by round and add player info
+    const matchesByRound = new Map<string, any[]>()
+    allMatches.forEach(match => {
+      const roundMatches = matchesByRound.get(match.round_id) || []
+      roundMatches.push({
+        ...match,
+        player1: match.player1_id ? profileMap.get(match.player1_id) || null : null,
+        player2: match.player2_id ? profileMap.get(match.player2_id) || null : null,
+      })
+      matchesByRound.set(match.round_id, roundMatches)
+    })
+    
+    // Combine rounds with their matches
+    return rounds.map(round => ({
+      ...round,
+      matches: matchesByRound.get(round.id) || [],
+    }))
+  } catch (err) {
+    console.error("[v0] getAllTournamentRounds exception:", err)
+    return []
+  }
+}
+
 export async function getRoundPairings(roundId: string) {
   const supabase = await createClient()
 
@@ -2148,7 +2215,7 @@ export async function getTournamentDecklists(tournamentId: string) {
   return data ?? []
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════���══════
 // Registration Codes & Preregistrations
 // ═════════════════════════════════════════════��������══════���═══════════════════════
 
@@ -2813,6 +2880,61 @@ export async function getTournamentAnnouncements(tournamentId: string) {
   }))
 
   return { announcements: announcementsWithProfiles }
+}
+
+export async function getAllTournamentRounds(tournamentId: string) {
+  const supabase = createAdminClient()
+
+  // Get all rounds for this tournament
+  const { data: rounds, error: roundsError } = await supabase
+    .from("tournament_rounds")
+    .select("*")
+    .eq("tournament_id", tournamentId)
+    .order("round_number", { ascending: true })
+
+  if (roundsError || !rounds) {
+    return []
+  }
+
+  // Get all matches for all rounds
+  const roundIds = rounds.map(r => r.id)
+  const { data: matches } = await supabase
+    .from("tournament_matches")
+    .select("*")
+    .in("round_id", roundIds)
+    .order("table_number", { ascending: true })
+
+  // Get player profiles
+  const playerIds = new Set<string>()
+  for (const match of matches ?? []) {
+    if (match.player1_id) playerIds.add(match.player1_id)
+    if (match.player2_id) playerIds.add(match.player2_id)
+  }
+
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("id, first_name, last_name, avatar_url")
+    .in("id", Array.from(playerIds))
+
+  const profileMap = new Map(profiles?.map(p => [p.id, {
+    id: p.id,
+    display_name: `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim() || "Unknown",
+    avatar_url: p.avatar_url,
+  }]) ?? [])
+
+  // Attach matches to rounds with player info
+  const roundsWithMatches = rounds.map(round => ({
+    ...round,
+    matches: (matches ?? [])
+      .filter(m => m.round_id === round.id)
+      .map(m => ({
+        ...m,
+        player1: m.player1_id ? profileMap.get(m.player1_id) : null,
+        player2: m.player2_id ? profileMap.get(m.player2_id) : null,
+      })),
+  }))
+
+  return roundsWithMatches
 }
 
 export async function deleteAnnouncement(announcementId: string) {
