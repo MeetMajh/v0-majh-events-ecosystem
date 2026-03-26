@@ -38,8 +38,8 @@ export default async function PlayerPortalPage() {
     .select(`
       id,
       status,
-      checked_in,
-      created_at,
+      check_in_at,
+      registered_at,
       tournaments (
         id,
         name,
@@ -49,12 +49,12 @@ export default async function PlayerPortalPage() {
         start_date,
         venue_name,
         location,
-        max_players,
+        max_participants,
         games (name, icon_url)
       )
     `)
     .eq("player_id", user.id)
-    .order("created_at", { ascending: false })
+    .order("registered_at", { ascending: false })
 
   const tournaments = registrations ?? []
 
@@ -221,11 +221,11 @@ function TournamentCard({
           <Badge className={cn(
             "mb-1",
             variant === "active" && "bg-green-500/20 text-green-600 border-green-500/30",
-            variant === "upcoming" && registration.checked_in && "bg-blue-500/20 text-blue-600 border-blue-500/30",
+            variant === "upcoming" && registration.check_in_at && "bg-blue-500/20 text-blue-600 border-blue-500/30",
             variant === "past" && tournament.status === "completed" && "bg-muted text-muted-foreground"
           )}>
             {variant === "active" && "Live Now"}
-            {variant === "upcoming" && (registration.checked_in ? "Checked In" : "Registered")}
+            {variant === "upcoming" && (registration.check_in_at ? "Checked In" : "Registered")}
             {variant === "past" && (tournament.status === "completed" ? "Completed" : "Cancelled")}
           </Badge>
           <p className="text-xs text-muted-foreground capitalize">{registration.status}</p>

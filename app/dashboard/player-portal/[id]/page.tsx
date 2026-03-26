@@ -55,14 +55,26 @@ export default async function PlayerControllerPage({ params }: { params: Promise
   }
 
   // Get all player-specific tournament data
-  const playerData = await getPlayerTournamentData(tournamentId, user.id)
+  const playerData = await getPlayerTournamentData(tournamentId)
+
+  if ("error" in playerData) {
+    redirect("/dashboard/player-portal?error=data_fetch_failed")
+  }
 
   return (
     <PlayerController
       tournament={tournament}
       registration={registration}
       userId={user.id}
-      playerData={playerData}
+      currentPhase={playerData.currentPhase}
+      currentRound={playerData.currentRound}
+      currentMatch={playerData.currentMatch}
+      myMatches={playerData.myMatches}
+      decklist={playerData.decklist}
+      standings={playerData.standings}
+      announcements={playerData.announcements}
+      myTickets={playerData.myTickets}
+      allRounds={playerData.allRounds ?? []}
     />
   )
 }
