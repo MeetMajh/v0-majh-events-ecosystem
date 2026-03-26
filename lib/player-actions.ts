@@ -14,9 +14,9 @@ export async function getMyTournaments() {
     .select(`
       id,
       status,
-      checked_in_at,
+      check_in_at,
       registration_type,
-      created_at,
+      registered_at,
       tournaments (
         id,
         name,
@@ -31,7 +31,7 @@ export async function getMyTournaments() {
       )
     `)
     .eq("player_id", user.id)
-    .order("created_at", { ascending: false })
+    .order("registered_at", { ascending: false })
 
   if (error) {
     console.error("[v0] getMyTournaments error:", error)
@@ -158,6 +158,53 @@ export async function getPlayerTournamentData(tournamentId: string) {
     .eq("reported_by", user.id)
     .order("created_at", { ascending: false })
 
+  // Get all rounds with matches
+  const { data: allRoundsData } = await adminClient
+    .from("tournament_rounds")
+    .select("*")
+    .eq("tournament_id", tournamentId)
+    .order("round_number", { ascending: true })
+
+  let allRounds: any[] = []
+  if (allRoundsData?.length) {
+    const roundIds = allRoundsData.map(r => r.id)
+    const { data: allMatches } = await adminClient
+      .from("tournament_matches")
+      .select("*")
+      .in("round_id", roundIds)
+      .order("table_number")
+
+    // Get profiles for all matches
+    const playerIds = new Set<string>()
+    allMatches?.forEach(m => {
+      if (m.player1_id) playerIds.add(m.player1_id)
+      if (m.player2_id) playerIds.add(m.player2_id)
+    })
+
+    const { data: profiles } = await adminClient
+      .from("profiles")
+      .select("id, first_name, last_name, avatar_url")
+      .in("id", Array.from(playerIds))
+
+    const profileMap = new Map(profiles?.map(p => [p.id, {
+      id: p.id,
+      display_name: `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unknown',
+      avatar_url: p.avatar_url,
+    }]) || [])
+
+    allRounds = allRoundsData.map(round => ({
+      ...round,
+      matches: (allMatches ?? [])
+        .filter(m => m.round_id === round.id)
+        .map(m => ({
+          ...m,
+          player1: m.player1_id ? profileMap.get(m.player1_id) : null,
+          player2: m.player2_id ? profileMap.get(m.player2_id) : null,
+          isMyMatch: m.player1_id === user.id || m.player2_id === user.id,
+        })),
+    }))
+  }
+
   return {
     tournament,
     registration,
@@ -169,6 +216,7 @@ export async function getPlayerTournamentData(tournamentId: string) {
     standings: standings ?? [],
     announcements: announcements ?? [],
     myTickets: myTickets ?? [],
+    allRounds,
     userId: user.id,
   }
 }
@@ -207,7 +255,7 @@ export async function checkInToTournament(tournamentId: string) {
     .from("tournament_registrations")
     .update({
       status: "checked_in",
-      checked_in_at: new Date().toISOString(),
+      check_in_at: new Date().toISOString(),
     })
     .eq("id", registration.id)
 

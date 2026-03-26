@@ -113,6 +113,8 @@ export function PlayerController({
     : "Unknown"
 
   const isLive = tournament.status === "in_progress"
+  const isCompleted = tournament.status === "completed" || tournament.status === "cancelled"
+  const isReadOnly = isCompleted // Read-only mode for completed tournaments
   const isCheckedIn = registration.status === "checked_in"
   const hasDropped = registration.status === "dropped"
 
@@ -123,12 +125,22 @@ export function PlayerController({
     <div className="container max-w-4xl py-6">
       {/* Back Link */}
       <Link
-        href="/dashboard/my-events"
+        href="/dashboard/player-portal"
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"
       >
         <ArrowLeft className="h-4 w-4" />
-        Back to My Events
+        Back to Player Portal
       </Link>
+
+      {/* Read-Only Banner for Completed Tournaments */}
+      {isReadOnly && (
+        <div className="mb-4 rounded-lg border border-muted bg-muted/30 p-3">
+          <p className="text-sm text-muted-foreground font-medium flex items-center gap-2">
+            <Trophy className="h-4 w-4" />
+            This tournament has ended. You can view your results but cannot make changes.
+          </p>
+        </div>
+      )}
 
       {/* Header */}
       <div className="mb-6">
@@ -142,7 +154,7 @@ export function PlayerController({
       </div>
 
       {/* Decklist Required Banner */}
-      {tournament.decklist_required && !decklist && (
+      {tournament.decklist_required && !decklist && !isReadOnly && (
         <div className="mb-4 rounded-lg border border-yellow-500/50 bg-yellow-500/10 p-3">
           <p className="text-sm text-yellow-500 font-medium">
             Decklists are required for this tournament! Submit your decklist in the section below.
@@ -228,7 +240,7 @@ export function PlayerController({
                   <span className="font-bold">#{myRank}</span>
                 </div>
               )}
-              {!hasDropped && (
+              {!hasDropped && !isReadOnly && (
                 <div className="flex gap-2">
                   {!isCheckedIn && tournament.status === "registration" && (
                     <Button
@@ -272,6 +284,7 @@ export function PlayerController({
               tournamentId={tournament.id}
               decklist={decklist}
               deadline={tournament.decklist_deadline}
+              isReadOnly={isReadOnly}
             />
           </CollapsibleSection>
         )}
@@ -341,10 +354,11 @@ export function PlayerController({
           isOpen={expandedSections.tickets}
           onToggle={() => toggleSection("tickets")}
         >
-          <TicketsSection
-            tournamentId={tournament.id}
-            tickets={myTickets}
-          />
+<TicketsSection
+              tournamentId={tournament.id}
+              tickets={myTickets}
+              isReadOnly={isReadOnly}
+            />
         </CollapsibleSection>
 
         {/* Stream Section */}
@@ -439,10 +453,12 @@ function DecklistSection({
   tournamentId,
   decklist,
   deadline,
+  isReadOnly = false,
 }: {
   tournamentId: string
   decklist: any
   deadline: string | null
+  isReadOnly?: boolean
 }) {
   const [isPending, startTransition] = useTransition()
   const [deckName, setDeckName] = useState(decklist?.decklist_name ?? "")
@@ -520,9 +536,11 @@ function DecklistSection({
               placeholder="https://..."
             />
           </div>
-          <Button onClick={handleSubmit} disabled={isPending}>
-            {isPending ? "Submitting..." : "Submit Decklist"}
-          </Button>
+          {!isReadOnly && (
+            <Button onClick={handleSubmit} disabled={isPending}>
+              {isPending ? "Submitting..." : "Submit Decklist"}
+            </Button>
+          )}
         </div>
       )}
     </div>
@@ -777,9 +795,11 @@ function StandingsSection({ standings, userId }: { standings: any[]; userId: str
 function TicketsSection({
   tournamentId,
   tickets,
+  isReadOnly = false,
 }: {
   tournamentId: string
   tickets: any[]
+  isReadOnly?: boolean
 }) {
   const [isPending, startTransition] = useTransition()
   const [isOpen, setIsOpen] = useState(false)
@@ -806,13 +826,14 @@ function TicketsSection({
 
   return (
     <div className="space-y-4">
-      <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogTrigger asChild>
-          <Button size="sm">
-            <TicketCheck className="h-4 w-4 mr-1" />
-            Submit Ticket
-          </Button>
-        </DialogTrigger>
+      {!isReadOnly && (
+        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+          <DialogTrigger asChild>
+            <Button size="sm">
+              <TicketCheck className="h-4 w-4 mr-1" />
+              Submit Ticket
+            </Button>
+          </DialogTrigger>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Submit Support Ticket</DialogTitle>
@@ -862,7 +883,8 @@ function TicketsSection({
             </DialogFooter>
           </form>
         </DialogContent>
-      </Dialog>
+        </Dialog>
+      )}
 
       {tickets.length === 0 ? (
         <p className="text-sm text-muted-foreground">No tickets submitted.</p>
