@@ -83,7 +83,8 @@ import {
   type PlayerStanding,
 } from "@/lib/tournament-controller-actions"
 import { resetRoundTimer } from "@/lib/timer-actions"
-import { getTournamentIssues, updateIssueStatus, ISSUE_CATEGORIES } from "@/lib/tournament-issue-actions"
+import { getTournamentIssues, updateIssueStatus } from "@/lib/tournament-issue-actions"
+import { ISSUE_CATEGORIES } from "@/lib/tournament-issue-constants"
 import type { TournamentStatus } from "@/lib/tournament-controller-actions"
 
 interface TournamentControllerProps {
