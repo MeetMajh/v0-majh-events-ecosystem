@@ -33,13 +33,10 @@ export default async function PlayerPortalPage() {
   }
 
   // Get all tournament registrations for this user
-  const { data: registrations } = await supabase
+  const { data: registrations, error: regError } = await supabase
     .from("tournament_registrations")
     .select(`
-      id,
-      status,
-      check_in_at,
-      registered_at,
+      *,
       tournaments (
         id,
         name,
@@ -54,7 +51,11 @@ export default async function PlayerPortalPage() {
       )
     `)
     .eq("player_id", user.id)
-    .order("registered_at", { ascending: false })
+    .order("created_at", { ascending: false })
+  
+  console.log("[v0] Player Portal - user.id:", user.id)
+  console.log("[v0] Player Portal - registrations count:", registrations?.length ?? 0)
+  if (regError) console.error("[v0] Player Portal - error:", regError)
 
   const tournaments = registrations ?? []
 
@@ -221,11 +222,11 @@ function TournamentCard({
           <Badge className={cn(
             "mb-1",
             variant === "active" && "bg-green-500/20 text-green-600 border-green-500/30",
-            variant === "upcoming" && registration.check_in_at && "bg-blue-500/20 text-blue-600 border-blue-500/30",
+            variant === "upcoming" && registration.status === "checked_in" && "bg-blue-500/20 text-blue-600 border-blue-500/30",
             variant === "past" && tournament.status === "completed" && "bg-muted text-muted-foreground"
           )}>
             {variant === "active" && "Live Now"}
-            {variant === "upcoming" && (registration.check_in_at ? "Checked In" : "Registered")}
+            {variant === "upcoming" && (registration.status === "checked_in" ? "Checked In" : "Registered")}
             {variant === "past" && (tournament.status === "completed" ? "Completed" : "Cancelled")}
           </Badge>
           <p className="text-xs text-muted-foreground capitalize">{registration.status}</p>
