@@ -2770,16 +2770,10 @@ export async function sendTournamentAnnouncement(
 export async function getTournamentAnnouncements(tournamentId: string) {
   const supabase = await createClient()
 
-  const { data, error } = await supabase
+  // Fetch announcements first
+  const { data: announcements, error } = await supabase
     .from("tournament_announcements")
-    .select(`
-      id,
-      message,
-      priority,
-      created_at,
-      author_id,
-      profiles:author_id (first_name, last_name, avatar_url)
-    `)
+    .select("id, message, priority, created_at, author_id")
     .eq("tournament_id", tournamentId)
     .order("created_at", { ascending: false })
 
@@ -2788,10 +2782,30 @@ export async function getTournamentAnnouncements(tournamentId: string) {
     if (error.code === "42P01") {
       return { announcements: [] }
     }
-    return { error: error.message }
+    console.error("[v0] getTournamentAnnouncements error:", error)
+    return { announcements: [] }
   }
 
-  return { announcements: data ?? [] }
+  if (!announcements || announcements.length === 0) {
+    return { announcements: [] }
+  }
+
+  // Fetch profiles for all authors
+  const authorIds = [...new Set(announcements.map(a => a.author_id).filter(Boolean))]
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("id, first_name, last_name, avatar_url")
+    .in("id", authorIds)
+
+  const profileMap = new Map(profiles?.map(p => [p.id, p]) ?? [])
+
+  // Combine data
+  const announcementsWithProfiles = announcements.map(a => ({
+    ...a,
+    profiles: profileMap.get(a.author_id) ?? null,
+  }))
+
+  return { announcements: announcementsWithProfiles }
 }
 
 export async function deleteAnnouncement(announcementId: string) {
