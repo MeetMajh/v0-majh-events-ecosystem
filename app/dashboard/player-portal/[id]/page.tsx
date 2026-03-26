@@ -43,7 +43,15 @@ export default async function PlayerControllerPage({ params }: { params: Promise
     notFound()
   }
 
-  // Check if user is registered for this tournament using admin client
+  // Check if user has participated via matches (player1_id or player2_id)
+  const { data: userMatches } = await supabase
+    .from("tournament_matches")
+    .select("id, tournament_rounds!inner(tournament_id)")
+    .or(`player1_id.eq.${user.id},player2_id.eq.${user.id}`)
+    .eq("tournament_rounds.tournament_id", tournamentId)
+    .limit(1)
+
+  // Also check registration (may not match but worth trying)
   const { data: registration } = await adminClient
     .from("tournament_registrations")
     .select("*")
@@ -51,8 +59,18 @@ export default async function PlayerControllerPage({ params }: { params: Promise
     .eq("player_id", user.id)
     .single()
 
-  if (!registration) {
+  // User must have either matches OR registration
+  if (!userMatches?.length && !registration) {
     redirect("/dashboard/player-portal?error=not_registered")
+  }
+
+  // Create a virtual registration if none exists but user has matches
+  const effectiveRegistration = registration || {
+    id: `match-based-${user.id}-${tournamentId}`,
+    tournament_id: tournamentId,
+    player_id: user.id,
+    status: "participated",
+    created_at: new Date().toISOString()
   }
 
   // Get all player-specific tournament data
@@ -65,7 +83,7 @@ export default async function PlayerControllerPage({ params }: { params: Promise
   return (
     <PlayerController
       tournament={tournament}
-      registration={registration}
+      registration={effectiveRegistration}
       userId={user.id}
       currentPhase={playerData.currentPhase}
       currentRound={playerData.currentRound}
