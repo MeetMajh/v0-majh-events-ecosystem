@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -38,6 +38,7 @@ export const metadata = {
 
 export default async function PlayerControllerPage() {
   const supabase = await createClient()
+  const adminClient = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
 
   if (!user) {
@@ -45,17 +46,14 @@ export default async function PlayerControllerPage() {
   }
 
   // DEBUG: Get user's profile to check their ID
-  const { data: userProfile } = await supabase
+  const { data: userProfile } = await adminClient
     .from("profiles")
     .select("id, first_name, last_name")
     .eq("id", user.id)
     .single()
-  
-  console.log("[v0] PlayerController - auth user.id:", user.id)
-  console.log("[v0] PlayerController - profile:", userProfile)
 
-  // Get all matches for this user with full details
-  const { data: userMatches, error: matchError } = await supabase
+  // Get all matches for this user with full details (using admin to bypass RLS)
+  const { data: userMatches, error: matchError } = await adminClient
     .from("tournament_matches")
     .select(`
       id,
@@ -78,28 +76,43 @@ export default async function PlayerControllerPage() {
 
   console.log("[v0] PlayerController - userMatches count:", userMatches?.length ?? 0, "error:", matchError?.message)
 
-  // DEBUG: Also fetch recent matches to see what player IDs look like
-  const { data: recentMatches } = await supabase
+  // DEBUG: Also fetch recent matches to see what player IDs look like (using admin)
+  const { data: recentMatches } = await adminClient
     .from("tournament_matches")
     .select("id, player1_id, player2_id, tournament_id")
     .order("created_at", { ascending: false })
     .limit(10)
+
+  // Get unique tournament IDs from matches
+  const tournamentIdsFromMatches = [...new Set(userMatches?.map(m => m.tournament_id).filter(Boolean) || [])]
   
-  console.log("[v0] PlayerController - recent match player IDs (sample):", 
-    recentMatches?.map(m => ({ p1: m.player1_id, p2: m.player2_id, tid: m.tournament_id })))
+  // Try to get tournaments from registrations using BOTH user_id and player_id columns
+  // Using admin client to bypass RLS
+  const { data: regsByUserId, error: regUserIdError } = await adminClient
+    .from("tournament_registrations")
+    .select("tournament_id")
+    .eq("user_id", user.id)
+  
+  const { data: regsByPlayerId, error: regPlayerIdError } = await adminClient
+    .from("tournament_registrations")
+    .select("tournament_id")
+    .eq("player_id", user.id)
+  
+  // Combine registrations from both queries (one may fail if column doesn't exist)
+  const allRegs = [...(regsByUserId || []), ...(regsByPlayerId || [])]
+  const tournamentIdsFromRegistrations = [...new Set(allRegs.map(r => r.tournament_id).filter(Boolean))]
+  
+  // Combine both sources
+  const tournamentIds = [...new Set([...tournamentIdsFromMatches, ...tournamentIdsFromRegistrations])]
 
-  // Get unique tournament IDs
-  const tournamentIds = [...new Set(userMatches?.map(m => m.tournament_id).filter(Boolean) || [])]
-  console.log("[v0] PlayerController - tournamentIds:", tournamentIds)
-
-  // Fetch tournament details
+  // Fetch tournament details using admin client
   let tournaments: any[] = []
   let announcementsMap: Record<string, any[]> = {}
   let standingsMap: Record<string, any[]> = {}
   let roundsMap: Record<string, any[]> = {}
 
   if (tournamentIds.length > 0) {
-    const { data: tournamentData } = await supabase
+    const { data: tournamentData } = await adminClient
       .from("tournaments")
       .select(`
         id,
@@ -121,7 +134,7 @@ export default async function PlayerControllerPage() {
     tournaments = tournamentData || []
 
     // Fetch announcements for all tournaments
-    const { data: allAnnouncements } = await supabase
+    const { data: allAnnouncements } = await adminClient
       .from("tournament_announcements")
       .select("*")
       .in("tournament_id", tournamentIds)
@@ -134,12 +147,12 @@ export default async function PlayerControllerPage() {
       announcementsMap[a.tournament_id].push(a)
     })
 
-    // Fetch standings for all tournaments
-    const { data: allStandings } = await supabase
+    // Fetch standings for all tournaments (try player_id first, fall back to user_id)
+    const { data: allStandings } = await adminClient
       .from("tournament_standings")
       .select(`
         *,
-        player:profiles!tournament_standings_player_id_fkey (id, first_name, last_name, avatar_url)
+        player:profiles (id, first_name, last_name, avatar_url)
       `)
       .in("tournament_id", tournamentIds)
       .order("rank", { ascending: true })
@@ -152,7 +165,7 @@ export default async function PlayerControllerPage() {
     })
 
     // Fetch rounds for all tournaments
-    const { data: allRounds } = await supabase
+    const { data: allRounds } = await adminClient
       .from("tournament_rounds")
       .select("*")
       .in("tournament_id", tournamentIds)
@@ -248,21 +261,35 @@ export default async function PlayerControllerPage() {
 
       {/* DEBUG INFO - Remove after fixing */}
       <Card className="border-yellow-500/50 bg-yellow-500/10">
-        <CardContent className="p-4 text-xs font-mono">
-          <p className="font-bold text-yellow-500 mb-2">DEBUG INFO:</p>
-          <p>User ID: {user.id}</p>
-          <p>Matches Found: {userMatches?.length ?? 0}</p>
-          <p>Tournament IDs: {tournamentIds.length > 0 ? tournamentIds.join(", ") : "NONE"}</p>
-          <p>Tournaments Loaded: {tournaments.length}</p>
-          <p>Active: {activeTournaments.length}, Upcoming: {upcomingTournaments.length}, Past: {pastTournaments.length}</p>
-          <p className="mt-2">Recent Match Sample (first 3):</p>
-          <pre className="text-[10px] overflow-auto max-h-32">
-            {JSON.stringify(recentMatches?.slice(0, 3).map(m => ({
-              p1: m.player1_id,
-              p2: m.player2_id,
-              tid: m.tournament_id
-            })), null, 2)}
-          </pre>
+        <CardContent className="p-4 text-xs font-mono space-y-2">
+          <p className="font-bold text-yellow-500">DEBUG INFO:</p>
+          <p><strong>Your User ID:</strong> {user.id}</p>
+          <p><strong>Matches Found for You:</strong> {userMatches?.length ?? 0}</p>
+          <p><strong>Tournament IDs (from matches):</strong> {tournamentIdsFromMatches.length > 0 ? tournamentIdsFromMatches.join(", ") : "NONE"}</p>
+          <p><strong>Registrations by user_id:</strong> {regsByUserId?.length ?? 0} {regUserIdError ? `(Error: ${regUserIdError.message})` : ""}</p>
+          <p><strong>Registrations by player_id:</strong> {regsByPlayerId?.length ?? 0} {regPlayerIdError ? `(Error: ${regPlayerIdError.message})` : ""}</p>
+          <p><strong>Tournament IDs (from registrations):</strong> {tournamentIdsFromRegistrations.length > 0 ? tournamentIdsFromRegistrations.join(", ") : "NONE"}</p>
+          <p><strong>Combined Tournament IDs:</strong> {tournamentIds.length}</p>
+          <p><strong>Tournaments Loaded:</strong> {tournaments.length}</p>
+          <p><strong>Grouped:</strong> Active: {activeTournaments.length}, Upcoming: {upcomingTournaments.length}, Past: {pastTournaments.length}</p>
+          
+          <div className="border-t border-yellow-500/30 pt-2 mt-2">
+            <p className="font-bold">Recent Matches (any user, first 5):</p>
+            <pre className="text-[10px] overflow-auto max-h-40 bg-black/20 p-2 rounded">
+              {JSON.stringify(recentMatches?.slice(0, 5).map(m => ({
+                p1: m.player1_id,
+                p2: m.player2_id,
+                tournament: m.tournament_id
+              })), null, 2)}
+            </pre>
+          </div>
+          
+          <div className="border-t border-yellow-500/30 pt-2">
+            <p className="font-bold text-green-400">Does YOUR ID appear in any match above?</p>
+            <p>{recentMatches?.some(m => m.player1_id === user.id || m.player2_id === user.id) 
+              ? "YES - Your ID matches!" 
+              : "NO - ID mismatch detected"}</p>
+          </div>
         </CardContent>
       </Card>
 

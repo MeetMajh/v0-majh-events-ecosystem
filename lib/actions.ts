@@ -115,9 +115,28 @@ export async function updateProfile(formData: FormData) {
     redirect("/auth/login")
   }
 
-  const updates = {
+  // Validate and sanitize username
+  const rawUsername = (formData.get("username") as string) || ""
+  const username = rawUsername.toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 30)
+
+  // Check if username is taken (if it changed)
+  if (username) {
+    const { data: existingUser } = await supabase
+      .from("profiles")
+      .select("id")
+      .ilike("username", username)
+      .neq("id", user.id)
+      .single()
+
+    if (existingUser) {
+      redirect(`/dashboard/profile?error=${encodeURIComponent("Username is already taken")}`)
+    }
+  }
+
+  const updates: Record<string, any> = {
     first_name: formData.get("first_name") as string,
     last_name: formData.get("last_name") as string,
+    username: username || null,
     phone: formData.get("phone") as string,
     birthday: (formData.get("birthday") as string) || null,
     country: (formData.get("country") as string) || null,

@@ -5,6 +5,7 @@ import Link from "next/link"
 import { format, formatDistanceToNow } from "date-fns"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import { getPlayerDisplayName } from "@/lib/player-utils"
 
 // UI Components
 import { Card, CardContent } from "@/components/ui/card"
@@ -387,9 +388,7 @@ function CurrentMatchSection({
 
   const isPlayer1 = match.player1_id === userId
   const opponent = isPlayer1 ? match.player2 : match.player1
-  const opponentName = opponent
-    ? `${opponent.first_name ?? ""} ${opponent.last_name ?? ""}`.trim() || "Unknown"
-    : "BYE"
+  const opponentName = opponent ? getPlayerDisplayName(opponent) : "BYE"
 
   return (
     <div className="space-y-4">
@@ -605,9 +604,7 @@ function SeatingsSection({ matches, userId }: { matches: any[], userId: string }
       {matches.map((match, index) => {
         const isPlayer1 = match.player1_id === userId
         const opponent = isPlayer1 ? match.player2 : match.player1
-        const opponentName = opponent
-          ? `${opponent.first_name ?? ""} ${opponent.last_name ?? ""}`.trim() || "Unknown"
-          : "BYE"
+        const opponentName = opponent ? getPlayerDisplayName(opponent) : "BYE"
         
         const won = (isPlayer1 && match.result === "player1") || (!isPlayer1 && match.result === "player2")
         const lost = (isPlayer1 && match.result === "player2") || (!isPlayer1 && match.result === "player1")

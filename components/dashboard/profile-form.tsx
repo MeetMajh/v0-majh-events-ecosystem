@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 interface ProfileData {
   first_name: string
   last_name: string
+  username: string
   phone: string
   birthday: string
   address_line1: string
@@ -28,6 +29,23 @@ export function ProfileForm({ profile, email }: { profile: ProfileData; email: s
         <Label>Email</Label>
         <Input value={email} disabled className="opacity-60" />
         <p className="text-xs text-muted-foreground">Contact support to change your email address</p>
+      </div>
+
+      {/* Username */}
+      <div className="space-y-2">
+        <Label htmlFor="username">Username</Label>
+        <Input 
+          id="username" 
+          name="username" 
+          defaultValue={profile.username} 
+          placeholder="Choose a unique username"
+          pattern="^[a-zA-Z0-9_-]+$"
+          minLength={3}
+          maxLength={30}
+        />
+        <p className="text-xs text-muted-foreground">
+          Your public display name. Letters, numbers, underscores, and hyphens only. 3-30 characters.
+        </p>
       </div>
 
       {/* Personal info */}

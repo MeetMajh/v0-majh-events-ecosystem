@@ -47,12 +47,29 @@ export async function GET() {
     test9Matches = matches
   }
 
-  // Get user's registrations
+  // Get user's registrations by player_id
   const { data: registrations } = await supabase
     .from("tournament_registrations")
-    .select("id, tournament_id, player_id, status")
+    .select("id, tournament_id, player_id, user_id, status")
     .eq("player_id", user.id)
     .limit(10)
+
+  // Also try by user_id (the column might be named differently)
+  const { data: registrationsByUserId } = await supabase
+    .from("tournament_registrations")
+    .select("id, tournament_id, player_id, user_id, status")
+    .eq("user_id", user.id)
+    .limit(10)
+
+  // Get Test 9 registrations specifically (to see what player_ids are used)
+  let test9Registrations = null
+  if (test9Tournament) {
+    const { data: regs } = await supabase
+      .from("tournament_registrations")
+      .select("id, tournament_id, player_id, user_id, status, profiles!inner(id, first_name, last_name)")
+      .eq("tournament_id", test9Tournament.id)
+    test9Registrations = regs
+  }
 
   // Get tournament IDs from matches
   const tournamentIds = [...new Set(userMatches?.map(m => m.tournament_id).filter(Boolean) || [])]
@@ -81,12 +98,21 @@ export async function GET() {
       isUserPlayer1: m.player1_id === user.id,
       isUserPlayer2: m.player2_id === user.id
     })),
-    registrations,
+    registrationsByPlayerId: registrations,
+    registrationsByUserId: registrationsByUserId,
+    test9Registrations: test9Registrations?.map(r => ({
+      id: r.id,
+      player_id: r.player_id,
+      user_id: r.user_id,
+      status: r.status,
+      profile: r.profiles
+    })),
     tournamentIdsFromMatches: tournamentIds,
     analysis: {
       userIdMatchesInTest9: test9Matches?.some(m => m.player1_id === user.id || m.player2_id === user.id) ?? false,
       samplePlayer1Id: recentMatches?.[0]?.player1_id,
-      idsMatch: recentMatches?.[0]?.player1_id === user.id
+      idsMatch: recentMatches?.[0]?.player1_id === user.id,
+      userFoundInTest9Registrations: test9Registrations?.some(r => r.player_id === user.id || r.user_id === user.id) ?? false
     }
   }, { status: 200 })
 }
