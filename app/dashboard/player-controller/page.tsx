@@ -52,8 +52,8 @@ export default async function PlayerControllerPage() {
     .eq("id", user.id)
     .single()
 
-  // Get all matches for this user with full details
-  const { data: userMatches } = await adminClient
+  // Get all matches for this user - query by direct ID match
+  const { data: matchesByDirectId } = await adminClient
     .from("tournament_matches")
     .select(`
       id,
@@ -74,11 +74,42 @@ export default async function PlayerControllerPage() {
     .or(`player1_id.eq.${user.id},player2_id.eq.${user.id}`)
     .order("created_at", { ascending: false })
 
+  // Also get matches where player1 or player2 profile.id matches our user
+  const { data: matchesByPlayer1Profile } = await adminClient
+    .from("tournament_matches")
+    .select(`
+      id, tournament_id, round_id, status, result, player1_id, player2_id,
+      player1_wins, player2_wins, table_number, created_at,
+      player1:profiles!tournament_matches_player1_id_fkey!inner (id, first_name, last_name, avatar_url),
+      player2:profiles!tournament_matches_player2_id_fkey (id, first_name, last_name, avatar_url),
+      tournament_rounds (id, round_number, status)
+    `)
+    .eq("player1.id", user.id)
+    .order("created_at", { ascending: false })
+
+  const { data: matchesByPlayer2Profile } = await adminClient
+    .from("tournament_matches")
+    .select(`
+      id, tournament_id, round_id, status, result, player1_id, player2_id,
+      player1_wins, player2_wins, table_number, created_at,
+      player1:profiles!tournament_matches_player1_id_fkey (id, first_name, last_name, avatar_url),
+      player2:profiles!tournament_matches_player2_id_fkey!inner (id, first_name, last_name, avatar_url),
+      tournament_rounds (id, round_number, status)
+    `)
+    .eq("player2.id", user.id)
+    .order("created_at", { ascending: false })
+
+  // Combine all matches, dedupe by ID
+  const allMatchesMap = new Map<string, any>()
+  ;[...(matchesByDirectId || []), ...(matchesByPlayer1Profile || []), ...(matchesByPlayer2Profile || [])].forEach(m => {
+    if (!allMatchesMap.has(m.id)) allMatchesMap.set(m.id, m)
+  })
+  const userMatches = Array.from(allMatchesMap.values())
+
   // Get unique tournament IDs from matches
-  const tournamentIdsFromMatches = [...new Set(userMatches?.map(m => m.tournament_id).filter(Boolean) || [])]
+  const tournamentIdsFromMatches = [...new Set(userMatches.map(m => m.tournament_id).filter(Boolean))]
   
-  // Get tournaments from registrations - check BOTH user_id and player_id columns
-  // since codebase uses both inconsistently
+  // Get tournaments from registrations - check user_id, player_id, AND profile link
   const { data: regsByUserId } = await adminClient
     .from("tournament_registrations")
     .select("tournament_id")
@@ -89,8 +120,18 @@ export default async function PlayerControllerPage() {
     .select("tournament_id")
     .eq("player_id", user.id)
   
-  // Combine results from both queries - one or both may return results
-  const allRegs = [...(regsByUserId || []), ...(regsByPlayerId || [])]
+  // Also query via profiles foreign key relationship (most reliable)
+  const { data: regsByProfile } = await adminClient
+    .from("tournament_registrations")
+    .select("tournament_id, profiles!inner(id)")
+    .eq("profiles.id", user.id)
+  
+  // Combine results from all queries
+  const allRegs = [
+    ...(regsByUserId || []), 
+    ...(regsByPlayerId || []),
+    ...(regsByProfile || [])
+  ]
   const tournamentIdsFromRegistrations = [...new Set(allRegs.map(r => r.tournament_id).filter(Boolean))]
 
   // Combine matches and registrations sources
