@@ -44,12 +44,15 @@ export default async function PlayerControllerPage({ params }: { params: Promise
   }
 
   // Check if user has participated via matches (player1_id or player2_id)
-  const { data: userMatches } = await supabase
+  // tournament_matches has tournament_id directly - no need to join tournament_rounds
+  const { data: userMatches, error: userMatchesError } = await supabase
     .from("tournament_matches")
-    .select("id, tournament_rounds!inner(tournament_id)")
+    .select("id")
+    .eq("tournament_id", tournamentId)
     .or(`player1_id.eq.${user.id},player2_id.eq.${user.id}`)
-    .eq("tournament_rounds.tournament_id", tournamentId)
     .limit(1)
+  
+  if (userMatchesError) console.error("[v0] userMatchesError:", userMatchesError)
 
   // Also check registration (may not match but worth trying)
   const { data: registration } = await adminClient
