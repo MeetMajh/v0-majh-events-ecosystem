@@ -1,4 +1,4 @@
-import { createClient, createAdminClient } from "@/lib/supabase/server"
+import { createClient } from "@/lib/supabase/server"
 import { redirect, notFound } from "next/navigation"
 import { PlayerController } from "@/components/player/player-controller"
 import { getPlayerTournamentData } from "@/lib/player-actions"
@@ -22,15 +22,14 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 export default async function PlayerControllerPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: tournamentId } = await params
   const supabase = await createClient()
-  const adminClient = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
 
   if (!user) {
     redirect("/login")
   }
 
-  // Get tournament details using admin client to bypass RLS
-  const { data: tournament } = await adminClient
+  // Get tournament details
+  const { data: tournament } = await supabase
     .from("tournaments")
     .select(`
       *,
@@ -44,18 +43,16 @@ export default async function PlayerControllerPage({ params }: { params: Promise
   }
 
   // Check if user has participated via matches (player1_id or player2_id)
-  // tournament_matches has tournament_id directly - no need to join tournament_rounds
-  const { data: userMatches, error: userMatchesError } = await supabase
+  // Uses same query pattern as My Events page (which works)
+  const { data: userMatches } = await supabase
     .from("tournament_matches")
     .select("id")
     .eq("tournament_id", tournamentId)
     .or(`player1_id.eq.${user.id},player2_id.eq.${user.id}`)
     .limit(1)
-  
-  if (userMatchesError) console.error("[v0] userMatchesError:", userMatchesError)
 
-  // Also check registration (may not match but worth trying)
-  const { data: registration } = await adminClient
+  // Also check registration
+  const { data: registration } = await supabase
     .from("tournament_registrations")
     .select("*")
     .eq("tournament_id", tournamentId)

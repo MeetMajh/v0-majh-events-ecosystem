@@ -1,4 +1,4 @@
-import { createClient, createAdminClient } from "@/lib/supabase/server"
+import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -32,15 +32,17 @@ export default async function PlayerPortalPage() {
     redirect("/login")
   }
 
-  // Use admin client to bypass RLS on all queries
-  const adminClient = createAdminClient()
-
-  // APPROACH 1: Get tournaments from match history
-  // tournament_matches has tournament_id directly - query it and then fetch tournament details
-  const { data: matches, error: matchError } = await adminClient
+  // Use same query pattern as My Events page (which works)
+  // Get user's match history with tournament info via tournament_rounds
+  const { data: matches } = await supabase
     .from("tournament_matches")
-    .select("id, tournament_id")
+    .select(`
+      id,
+      tournament_id,
+      tournament_rounds (round_number, status, tournament_id)
+    `)
     .or(`player1_id.eq.${user.id},player2_id.eq.${user.id}`)
+    .order("created_at", { ascending: false })
 
   // Get unique tournament IDs from matches
   const tournamentIdsFromMatches = [...new Set(matches?.map(m => m.tournament_id).filter(Boolean) || [])]
@@ -48,7 +50,7 @@ export default async function PlayerPortalPage() {
   // Fetch tournament details for those IDs
   let tournamentsFromMatches = new Map()
   if (tournamentIdsFromMatches.length > 0) {
-    const { data: tournamentDetails } = await adminClient
+    const { data: tournamentDetails } = await supabase
       .from("tournaments")
       .select(`
         id,
@@ -74,8 +76,8 @@ export default async function PlayerPortalPage() {
     })
   }
 
-  // APPROACH 2: Also try registrations (in case some registrations DO match)
-  const { data: registrations } = await adminClient
+  // Also try registrations
+  const { data: registrations } = await supabase
     .from("tournament_registrations")
     .select(`
       *,
