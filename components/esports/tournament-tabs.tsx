@@ -229,7 +229,7 @@ function ResultsView({ tournamentId, standings }: { tournamentId: string; standi
             <AvatarFallback>{(top3[1]?.username || top3[1]?.displayName)?.charAt(0)}</AvatarFallback>
           </Avatar>
           <div className="mt-2 text-center">
-            <p className="font-medium">{top3[1]?.username || top3[1]?.displayName ?? "---"}</p>
+            <p className="font-medium">{(top3[1]?.username || top3[1]?.displayName) ?? "---"}</p>
             <Badge variant="secondary">2nd Place</Badge>
           </div>
           <div className="mt-2 h-20 w-24 rounded-t-lg bg-muted/50" />
@@ -243,7 +243,7 @@ function ResultsView({ tournamentId, standings }: { tournamentId: string; standi
             <AvatarFallback>{(top3[0]?.username || top3[0]?.displayName)?.charAt(0)}</AvatarFallback>
           </Avatar>
           <div className="mt-2 text-center">
-            <p className="text-lg font-bold">{top3[0]?.username || top3[0]?.displayName ?? "---"}</p>
+            <p className="text-lg font-bold">{(top3[0]?.username || top3[0]?.displayName) ?? "---"}</p>
             <Badge className="bg-yellow-500/10 text-yellow-600">1st Place</Badge>
           </div>
           <div className="mt-2 h-28 w-24 rounded-t-lg bg-yellow-500/20" />
@@ -256,7 +256,7 @@ function ResultsView({ tournamentId, standings }: { tournamentId: string; standi
             <AvatarFallback>{(top3[2]?.username || top3[2]?.displayName)?.charAt(0)}</AvatarFallback>
           </Avatar>
           <div className="mt-2 text-center">
-            <p className="font-medium">{top3[2]?.username || top3[2]?.displayName ?? "---"}</p>
+            <p className="font-medium">{(top3[2]?.username || top3[2]?.displayName) ?? "---"}</p>
             <Badge variant="outline">3rd Place</Badge>
           </div>
           <div className="mt-2 h-14 w-24 rounded-t-lg bg-muted/30" />
