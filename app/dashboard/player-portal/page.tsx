@@ -32,11 +32,16 @@ export default async function PlayerPortalPage() {
     redirect("/login")
   }
 
-  // APPROACH 1: Get tournaments from match history (this works because player1_id/player2_id = user.id)
-  const { data: matches } = await supabase
+  // Use admin client to bypass RLS on all queries
+  const adminClient = createAdminClient()
+
+  // APPROACH 1: Get tournaments from match history (player1_id/player2_id = user.id)
+  const { data: matches, error: matchError } = await adminClient
     .from("tournament_matches")
     .select(`
       id,
+      player1_id,
+      player2_id,
       tournament_rounds (
         tournament_id,
         tournaments (
@@ -55,6 +60,17 @@ export default async function PlayerPortalPage() {
     `)
     .or(`player1_id.eq.${user.id},player2_id.eq.${user.id}`)
 
+  console.log("[v0] Player Portal - user.id:", user.id)
+  console.log("[v0] Player Portal - matches found:", matches?.length ?? 0, matchError?.message ?? "")
+  
+  // DEBUG: Also check recent matches without user filter to verify data exists
+  const { data: debugMatches } = await adminClient
+    .from("tournament_matches")
+    .select("id, player1_id, player2_id")
+    .order("created_at", { ascending: false })
+    .limit(5)
+  console.log("[v0] Player Portal - recent match player IDs (sample):", debugMatches?.map(m => ({ p1: m.player1_id, p2: m.player2_id })))
+
   // Extract unique tournaments from matches
   const tournamentsFromMatches = new Map()
   matches?.forEach((match) => {
@@ -69,8 +85,7 @@ export default async function PlayerPortalPage() {
     }
   })
 
-  // APPROACH 2: Also try registrations with admin client (in case some registrations DO match)
-  const adminClient = createAdminClient()
+  // APPROACH 2: Also try registrations (in case some registrations DO match)
   const { data: registrations } = await adminClient
     .from("tournament_registrations")
     .select(`
