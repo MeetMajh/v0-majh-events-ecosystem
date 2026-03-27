@@ -62,7 +62,15 @@ export async function getPlayerTournamentData(tournamentId: string) {
     return { error: "Tournament not found" }
   }
 
-  // Get player's registration
+  // Check if player has matches in this tournament (primary access method)
+  const { data: userMatches } = await supabase
+    .from("tournament_matches")
+    .select("id")
+    .eq("tournament_id", tournamentId)
+    .or(`player1_id.eq.${user.id},player2_id.eq.${user.id}`)
+    .limit(1)
+
+  // Also check for registration (secondary)
   const { data: registration } = await supabase
     .from("tournament_registrations")
     .select("*")
@@ -70,8 +78,18 @@ export async function getPlayerTournamentData(tournamentId: string) {
     .eq("player_id", user.id)
     .single()
 
-  if (!registration) {
+  // Player must have either matches OR registration to access
+  if (!userMatches?.length && !registration) {
     return { error: "Not registered for this tournament" }
+  }
+
+  // Create effective registration for players with matches but no registration record
+  const effectiveRegistration = registration || {
+    id: `match-${user.id}-${tournamentId}`,
+    tournament_id: tournamentId,
+    player_id: user.id,
+    status: "checked_in",
+    created_at: new Date().toISOString()
   }
 
   // Get current phase
@@ -109,18 +127,24 @@ export async function getPlayerTournamentData(tournamentId: string) {
     currentMatch = match
   }
 
-  // Get player's all matches
-  const { data: myMatches } = await supabase
+  // Get player's all matches with round info
+  const { data: myMatchesRaw } = await supabase
     .from("tournament_matches")
     .select(`
       *,
-      round:tournament_rounds (round_number, status),
+      round:tournament_rounds (id, round_number, status),
       player1:profiles!tournament_matches_player1_id_fkey (id, first_name, last_name, avatar_url),
       player2:profiles!tournament_matches_player2_id_fkey (id, first_name, last_name, avatar_url)
     `)
     .eq("tournament_id", tournamentId)
     .or(`player1_id.eq.${user.id},player2_id.eq.${user.id}`)
     .order("created_at", { ascending: true })
+
+  // Flatten round_number into match object for easier access
+  const myMatches = (myMatchesRaw || []).map(m => ({
+    ...m,
+    round_number: m.round?.round_number
+  }))
 
   // Get player's decklist
   const { data: decklist } = await supabase
@@ -207,11 +231,11 @@ export async function getPlayerTournamentData(tournamentId: string) {
 
   return {
     tournament,
-    registration,
+    registration: effectiveRegistration,
     currentPhase,
     currentRound,
     currentMatch,
-    myMatches: myMatches ?? [],
+    myMatches: myMatches,
     decklist,
     standings: standings ?? [],
     announcements: announcements ?? [],

@@ -1,20 +1,19 @@
-import { createClient, createAdminClient } from "@/lib/supabase/server"
+import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import Link from "next/link"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { 
   Gamepad2, 
   Calendar, 
   MapPin, 
-  Users, 
   ChevronRight, 
   Trophy,
   Clock,
   AlertCircle,
-  CheckCircle2,
-  Joystick
+  Joystick,
+  ExternalLink
 } from "lucide-react"
 import { format, formatDistanceToNow } from "date-fns"
 import { cn } from "@/lib/utils"
@@ -32,23 +31,19 @@ export default async function PlayerPortalPage() {
     redirect("/login")
   }
 
-  // Use admin client to bypass RLS on all queries
-  const adminClient = createAdminClient()
-
-  // APPROACH 1: Get tournaments from match history
-  // tournament_matches has tournament_id directly - query it and then fetch tournament details
-  const { data: matches, error: matchError } = await adminClient
+  // Get all matches for this user, then extract tournament IDs
+  const { data: userMatches } = await supabase
     .from("tournament_matches")
-    .select("id, tournament_id")
+    .select("id, tournament_id, player1_id, player2_id, status, result")
     .or(`player1_id.eq.${user.id},player2_id.eq.${user.id}`)
 
-  // Get unique tournament IDs from matches
-  const tournamentIdsFromMatches = [...new Set(matches?.map(m => m.tournament_id).filter(Boolean) || [])]
-  
-  // Fetch tournament details for those IDs
-  let tournamentsFromMatches = new Map()
-  if (tournamentIdsFromMatches.length > 0) {
-    const { data: tournamentDetails } = await adminClient
+  // Get unique tournament IDs
+  const tournamentIds = [...new Set(userMatches?.map(m => m.tournament_id).filter(Boolean) || [])]
+
+  // Fetch tournament details
+  let tournaments: any[] = []
+  if (tournamentIds.length > 0) {
+    const { data: tournamentData } = await supabase
       .from("tournaments")
       .select(`
         id,
@@ -62,75 +57,67 @@ export default async function PlayerPortalPage() {
         max_participants,
         games (name, icon_url)
       `)
-      .in("id", tournamentIdsFromMatches)
-
-    tournamentDetails?.forEach((tournament) => {
-      tournamentsFromMatches.set(tournament.id, {
-        id: tournament.id,
-        tournaments: tournament,
-        status: "participated",
-        source: "matches"
-      })
-    })
-  }
-
-  // APPROACH 2: Also try registrations (in case some registrations DO match)
-  const { data: registrations } = await adminClient
-    .from("tournament_registrations")
-    .select(`
-      *,
-      tournaments (
-        id,
-        name,
-        slug,
-        status,
-        format,
-        start_date,
-        venue_name,
-        location,
-        max_participants,
-        games (name, icon_url)
-      )
-    `)
-    .eq("player_id", user.id)
-
-  // Merge both sources - registrations take priority
-  registrations?.forEach((reg) => {
-    if (reg.tournaments) {
-      tournamentsFromMatches.set(reg.tournaments.id, {
-        ...reg,
-        source: "registration"
+      .in("id", tournamentIds)
+      .order("start_date", { ascending: false })
+    
+    if (tournamentData) {
+      // Count matches for each tournament
+      tournaments = tournamentData.map(t => {
+        const matchesInTournament = userMatches?.filter(m => m.tournament_id === t.id) || []
+        const wins = matchesInTournament.filter(m => 
+          (m.player1_id === user.id && m.result === "player1") ||
+          (m.player2_id === user.id && m.result === "player2")
+        ).length
+        const losses = matchesInTournament.filter(m => 
+          (m.player1_id === user.id && m.result === "player2") ||
+          (m.player2_id === user.id && m.result === "player1")
+        ).length
+        
+        return {
+          ...t,
+          matchCount: matchesInTournament.length,
+          wins,
+          losses,
+          draws: matchesInTournament.filter(m => m.result === "draw").length,
+          pendingMatches: matchesInTournament.filter(m => m.status === "pending" || m.status === "in_progress").length
+        }
       })
     }
-  })
-
-  const tournaments = Array.from(tournamentsFromMatches.values())
+  }
 
   // Group by status
-  const activeTournaments = tournaments.filter(
-    (t) => t.tournaments?.status === "in_progress"
-  )
-  const upcomingTournaments = tournaments.filter(
-    (t) => t.tournaments?.status === "registration" || t.tournaments?.status === "pending"
-  )
-  const pastTournaments = tournaments.filter(
-    (t) => t.tournaments?.status === "completed" || t.tournaments?.status === "cancelled"
-  )
+  const activeTournaments = tournaments.filter(t => t.status === "in_progress")
+  const upcomingTournaments = tournaments.filter(t => t.status === "registration" || t.status === "pending")
+  const pastTournaments = tournaments.filter(t => t.status === "completed" || t.status === "cancelled")
 
   return (
     <div className="space-y-8">
+      {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
+        <div className="flex items-center gap-3 mb-2">
           <Joystick className="h-8 w-8 text-primary" />
-          Player Portal
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Access your tournament player controllers to view matches, submit decklists, and more
+          <h1 className="text-3xl font-bold tracking-tight">Player Portal</h1>
+        </div>
+        <p className="text-muted-foreground">
+          Designed for mobile &amp; in-person tournaments
         </p>
+        <Link 
+          href="/esports/tournaments" 
+          className="inline-flex items-center gap-1 text-sm text-primary hover:underline mt-2"
+        >
+          <ExternalLink className="h-3 w-3" />
+          Find Events
+        </Link>
+      </div>
+
+      {/* Connection Status */}
+      <div className="flex items-center gap-2 text-sm">
+        <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+        <span className="text-muted-foreground">MAJH Events Connection</span>
       </div>
 
       {tournaments.length === 0 ? (
-        <Card>
+        <Card className="border-dashed">
           <CardContent className="flex flex-col items-center justify-center py-16">
             <Gamepad2 className="h-16 w-16 text-muted-foreground/30 mb-4" />
             <h3 className="text-lg font-semibold">No Tournament Registrations</h3>
@@ -146,56 +133,47 @@ export default async function PlayerPortalPage() {
         <div className="space-y-6">
           {/* Active Tournaments - Most Important */}
           {activeTournaments.length > 0 && (
-            <Card className="border-green-500/30 bg-green-500/5">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-green-500">
-                  <AlertCircle className="h-5 w-5" />
-                  Active Tournaments
-                </CardTitle>
-                <CardDescription>Tournaments currently in progress - click to open Player Controller</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {activeTournaments.map((reg) => (
-                  <TournamentCard key={reg.id} registration={reg} variant="active" />
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-5 w-5 text-green-500" />
+                <h2 className="text-lg font-semibold text-green-500">Live Tournaments</h2>
+              </div>
+              <div className="space-y-2">
+                {activeTournaments.map((tournament) => (
+                  <TournamentCard key={tournament.id} tournament={tournament} variant="active" />
                 ))}
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           )}
 
           {/* Upcoming Tournaments */}
           {upcomingTournaments.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Calendar className="h-5 w-5 text-primary" />
-                  Upcoming Tournaments
-                </CardTitle>
-                <CardDescription>Tournaments you&apos;re registered for</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {upcomingTournaments.map((reg) => (
-                  <TournamentCard key={reg.id} registration={reg} variant="upcoming" />
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Calendar className="h-5 w-5 text-primary" />
+                <h2 className="text-lg font-semibold">Upcoming Tournaments</h2>
+              </div>
+              <div className="space-y-2">
+                {upcomingTournaments.map((tournament) => (
+                  <TournamentCard key={tournament.id} tournament={tournament} variant="upcoming" />
                 ))}
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           )}
 
           {/* Past Tournaments */}
           {pastTournaments.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Trophy className="h-5 w-5 text-muted-foreground" />
-                  Past Tournaments
-                </CardTitle>
-                <CardDescription>View your match history and results</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {pastTournaments.map((reg) => (
-                  <TournamentCard key={reg.id} registration={reg} variant="past" />
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Trophy className="h-5 w-5 text-muted-foreground" />
+                <h2 className="text-lg font-semibold text-muted-foreground">Past Tournaments</h2>
+              </div>
+              <div className="space-y-2">
+                {pastTournaments.map((tournament) => (
+                  <TournamentCard key={tournament.id} tournament={tournament} variant="past" />
                 ))}
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           )}
         </div>
       )}
@@ -204,85 +182,105 @@ export default async function PlayerPortalPage() {
 }
 
 function TournamentCard({ 
-  registration, 
+  tournament, 
   variant 
 }: { 
-  registration: any
+  tournament: any
   variant: "active" | "upcoming" | "past"
 }) {
-  const tournament = registration.tournaments
-  if (!tournament) return null
-
   return (
-    <Link
-      href={`/dashboard/player-portal/${tournament.id}`}
-      className={cn(
-        "flex items-center justify-between p-4 rounded-xl border transition-all hover:shadow-md",
-        variant === "active" && "border-green-500/30 bg-green-500/5 hover:border-green-500/50",
-        variant === "upcoming" && "border-border hover:border-primary/30 hover:bg-muted/30",
-        variant === "past" && "border-border/50 bg-muted/20 hover:bg-muted/40"
-      )}
-    >
-      <div className="flex items-center gap-4">
-        <div className={cn(
-          "flex h-14 w-14 items-center justify-center rounded-xl",
-          variant === "active" && "bg-green-500/20",
-          variant === "upcoming" && "bg-primary/10",
-          variant === "past" && "bg-muted"
-        )}>
-          <Gamepad2 className={cn(
-            "h-7 w-7",
-            variant === "active" && "text-green-500",
-            variant === "upcoming" && "text-primary",
-            variant === "past" && "text-muted-foreground"
-          )} />
-        </div>
-        <div>
-          <p className="font-semibold text-foreground text-lg">{tournament.name}</p>
-          <div className="flex flex-wrap items-center gap-2 mt-1.5 text-xs text-muted-foreground">
-            <Badge variant="outline" className="text-[10px]">
-              {tournament.games?.name}
-            </Badge>
-            <Badge variant="outline" className="text-[10px] capitalize">
-              {tournament.format}
-            </Badge>
-            {tournament.venue_name && (
-              <span className="flex items-center gap-1">
-                <MapPin className="h-3 w-3" />
-                {tournament.venue_name}
-              </span>
-            )}
-            {tournament.start_date && (
-              <span className="flex items-center gap-1">
-                <Clock className="h-3 w-3" />
-                {variant === "upcoming" 
-                  ? formatDistanceToNow(new Date(tournament.start_date), { addSuffix: true })
-                  : format(new Date(tournament.start_date), "MMM d, yyyy")
-                }
-              </span>
-            )}
+    <Link href={`/dashboard/player-portal/${tournament.id}`}>
+      <Card className={cn(
+        "transition-all hover:shadow-md cursor-pointer",
+        variant === "active" && "border-green-500/50 bg-green-500/5 hover:border-green-500",
+        variant === "upcoming" && "hover:border-primary/50",
+        variant === "past" && "opacity-80 hover:opacity-100"
+      )}>
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className={cn(
+                "flex h-12 w-12 items-center justify-center rounded-lg",
+                variant === "active" && "bg-green-500/20",
+                variant === "upcoming" && "bg-primary/10",
+                variant === "past" && "bg-muted"
+              )}>
+                <Gamepad2 className={cn(
+                  "h-6 w-6",
+                  variant === "active" && "text-green-500",
+                  variant === "upcoming" && "text-primary",
+                  variant === "past" && "text-muted-foreground"
+                )} />
+              </div>
+              <div>
+                <p className="font-semibold text-lg">{tournament.name}</p>
+                <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-muted-foreground">
+                  {tournament.games?.name && (
+                    <Badge variant="outline" className="text-[10px]">
+                      {tournament.games.name}
+                    </Badge>
+                  )}
+                  <Badge variant="outline" className="text-[10px] capitalize">
+                    {tournament.format}
+                  </Badge>
+                  {tournament.venue_name && (
+                    <span className="flex items-center gap-1">
+                      <MapPin className="h-3 w-3" />
+                      {tournament.venue_name}
+                    </span>
+                  )}
+                  {tournament.start_date && (
+                    <span className="flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      {variant === "upcoming" 
+                        ? formatDistanceToNow(new Date(tournament.start_date), { addSuffix: true })
+                        : format(new Date(tournament.start_date), "MMM d, yyyy")
+                      }
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-4">
+              {/* Match Record */}
+              {(tournament.matchCount > 0) && (
+                <div className="text-right mr-2">
+                  <p className="text-sm font-medium">
+                    {tournament.wins}-{tournament.losses}{tournament.draws > 0 ? `-${tournament.draws}` : ""}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Record</p>
+                </div>
+              )}
+              
+              {/* Status Badge */}
+              <Badge className={cn(
+                variant === "active" && "bg-green-500 text-white",
+                variant === "upcoming" && "bg-primary/20 text-primary",
+                variant === "past" && "bg-muted text-muted-foreground"
+              )}>
+                {variant === "active" && "Live"}
+                {variant === "upcoming" && "Upcoming"}
+                {variant === "past" && (tournament.status === "completed" ? "Ended" : "Cancelled")}
+              </Badge>
+              
+              <Button size="sm" variant={variant === "active" ? "default" : "ghost"}>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
-        </div>
-      </div>
-      <div className="flex items-center gap-3">
-        <div className="text-right">
-          <Badge className={cn(
-            "mb-1",
-            variant === "active" && "bg-green-500/20 text-green-600 border-green-500/30",
-            variant === "upcoming" && registration.status === "checked_in" && "bg-blue-500/20 text-blue-600 border-blue-500/30",
-            variant === "past" && tournament.status === "completed" && "bg-muted text-muted-foreground"
-          )}>
-            {variant === "active" && "Live Now"}
-            {variant === "upcoming" && (registration.status === "checked_in" ? "Checked In" : "Registered")}
-            {variant === "past" && (tournament.status === "completed" ? "Completed" : "Cancelled")}
-          </Badge>
-          <p className="text-xs text-muted-foreground capitalize">{registration.status}</p>
-        </div>
-        <Button size="sm" variant={variant === "active" ? "default" : "secondary"} className="gap-1">
-          {variant === "active" ? "Open Controller" : "View"}
-          <ChevronRight className="h-4 w-4" />
-        </Button>
-      </div>
+          
+          {/* Active match indicator */}
+          {variant === "active" && tournament.pendingMatches > 0 && (
+            <div className="mt-3 pt-3 border-t border-green-500/20">
+              <p className="text-sm text-green-500 flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                You have {tournament.pendingMatches} active match{tournament.pendingMatches > 1 ? "es" : ""}
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </Link>
   )
 }

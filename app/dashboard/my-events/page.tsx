@@ -200,7 +200,7 @@ export default async function MyEventsPage() {
                 {activeEvents.map((reg) => (
                   <Link 
                     key={reg.id} 
-                    href={`/dashboard/my-events/${reg.tournaments?.id}`}
+                    href={`/dashboard/player-portal/${reg.tournaments?.id}`}
                     className="flex items-center justify-between p-4 rounded-lg border border-border hover:border-primary/30 hover:bg-muted/30 transition-colors"
                   >
                     <div className="flex items-center gap-4">
@@ -249,7 +249,7 @@ export default async function MyEventsPage() {
                 {upcomingEvents.map((reg) => (
                   <Link 
                     key={reg.id} 
-                    href={`/dashboard/my-events/${reg.tournaments?.id}`}
+                    href={`/dashboard/player-portal/${reg.tournaments?.id}`}
                     className="flex items-center justify-between p-4 rounded-lg border border-border hover:border-primary/30 hover:bg-muted/30 transition-colors"
                   >
                     <div className="flex items-center gap-4">
@@ -298,7 +298,7 @@ export default async function MyEventsPage() {
                 {registrations.map((reg) => (
                   <Link 
                     key={reg.id} 
-                    href={`/dashboard/my-events/${reg.tournaments?.id}`}
+                    href={`/dashboard/player-portal/${reg.tournaments?.id}`}
                     className="flex items-center justify-between p-4 rounded-lg border border-border hover:border-primary/30 hover:bg-muted/30 transition-colors"
                   >
                     <div className="flex items-center gap-4">
