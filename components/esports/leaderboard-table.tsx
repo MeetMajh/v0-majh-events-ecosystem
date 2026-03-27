@@ -12,8 +12,17 @@ type LeaderboardEntry = {
   tournaments_won: number
   ranking_points: number
   previous_rank?: number
-  profiles: { id: string; display_name: string; avatar_url: string | null } | null
+  profiles: { id: string; display_name: string; username?: string | null; avatar_url: string | null } | null
   games?: { name: string; slug: string; icon_url?: string } | null
+}
+
+// Helper to get display name, preferring username if available
+function getPlayerDisplayName(profile: { display_name?: string; username?: string | null; first_name?: string; last_name?: string } | null): string {
+  if (!profile) return "Unknown"
+  if (profile.username) return profile.username
+  if (profile.display_name) return profile.display_name
+  if (profile.first_name || profile.last_name) return `${profile.first_name || ""} ${profile.last_name || ""}`.trim()
+  return "Unknown"
 }
 
 function RankBadge({ rank }: { rank: number }) {
@@ -123,12 +132,12 @@ export function LeaderboardTable({
                       <Avatar className="h-8 w-8 ring-2 ring-border group-hover:ring-primary/50 transition-all">
                         <AvatarImage src={entry.profiles.avatar_url ?? undefined} />
                         <AvatarFallback className="text-xs">
-                          {entry.profiles.display_name?.charAt(0)?.toUpperCase()}
+                          {getPlayerDisplayName(entry.profiles).charAt(0).toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
                       <div>
                         <span className="font-medium text-foreground group-hover:text-primary transition-colors">
-                          {entry.profiles.display_name}
+                          {getPlayerDisplayName(entry.profiles)}
                         </span>
                         {entry.tournaments_won > 0 && (
                           <div className="flex items-center gap-1 text-[10px] text-yellow-600">

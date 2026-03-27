@@ -42,6 +42,7 @@ export default async function ProfilePage(props: {
         profile={{
           first_name: profile?.first_name || "",
           last_name: profile?.last_name || "",
+          username: profile?.username || "",
           phone: profile?.phone || "",
           birthday: profile?.birthday || "",
           address_line1: profile?.address_line1 || "",

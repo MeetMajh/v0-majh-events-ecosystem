@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -38,14 +38,22 @@ export const metadata = {
 
 export default async function PlayerControllerPage() {
   const supabase = await createClient()
+  const adminClient = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
 
   if (!user) {
     redirect("/login")
   }
 
+  // Get user's profile
+  const { data: userProfile } = await adminClient
+    .from("profiles")
+    .select("id, first_name, last_name")
+    .eq("id", user.id)
+    .single()
+
   // Get all matches for this user with full details
-  const { data: userMatches } = await supabase
+  const { data: userMatches } = await adminClient
     .from("tournament_matches")
     .select(`
       id,
@@ -66,17 +74,39 @@ export default async function PlayerControllerPage() {
     .or(`player1_id.eq.${user.id},player2_id.eq.${user.id}`)
     .order("created_at", { ascending: false })
 
-  // Get unique tournament IDs
-  const tournamentIds = [...new Set(userMatches?.map(m => m.tournament_id).filter(Boolean) || [])]
+  // Get unique tournament IDs from matches
+  const tournamentIdsFromMatches = [...new Set(userMatches?.map(m => m.tournament_id).filter(Boolean) || [])]
+  
+  // Get tournaments from registrations - check BOTH user_id and player_id columns
+  // since codebase uses both inconsistently
+  const { data: regsByUserId } = await adminClient
+    .from("tournament_registrations")
+    .select("tournament_id")
+    .eq("user_id", user.id)
+  
+  const { data: regsByPlayerId } = await adminClient
+    .from("tournament_registrations")
+    .select("tournament_id")
+    .eq("player_id", user.id)
+  
+  // Combine results from both queries - one or both may return results
+  const allRegs = [...(regsByUserId || []), ...(regsByPlayerId || [])]
+  const tournamentIdsFromRegistrations = [...new Set(allRegs.map(r => r.tournament_id).filter(Boolean))]
 
-  // Fetch tournament details
+  // Combine matches and registrations sources
+  const tournamentIds = [...new Set([
+    ...tournamentIdsFromMatches, 
+    ...tournamentIdsFromRegistrations
+  ])]
+
+  // Fetch tournament details using admin client
   let tournaments: any[] = []
   let announcementsMap: Record<string, any[]> = {}
   let standingsMap: Record<string, any[]> = {}
   let roundsMap: Record<string, any[]> = {}
 
   if (tournamentIds.length > 0) {
-    const { data: tournamentData } = await supabase
+    const { data: tournamentData } = await adminClient
       .from("tournaments")
       .select(`
         id,
@@ -98,7 +128,7 @@ export default async function PlayerControllerPage() {
     tournaments = tournamentData || []
 
     // Fetch announcements for all tournaments
-    const { data: allAnnouncements } = await supabase
+    const { data: allAnnouncements } = await adminClient
       .from("tournament_announcements")
       .select("*")
       .in("tournament_id", tournamentIds)
@@ -111,12 +141,12 @@ export default async function PlayerControllerPage() {
       announcementsMap[a.tournament_id].push(a)
     })
 
-    // Fetch standings for all tournaments
-    const { data: allStandings } = await supabase
+    // Fetch standings for all tournaments (try player_id first, fall back to user_id)
+    const { data: allStandings } = await adminClient
       .from("tournament_standings")
       .select(`
         *,
-        player:profiles!tournament_standings_player_id_fkey (id, first_name, last_name, avatar_url)
+        player:profiles (id, first_name, last_name, avatar_url)
       `)
       .in("tournament_id", tournamentIds)
       .order("rank", { ascending: true })
@@ -129,7 +159,7 @@ export default async function PlayerControllerPage() {
     })
 
     // Fetch rounds for all tournaments
-    const { data: allRounds } = await supabase
+    const { data: allRounds } = await adminClient
       .from("tournament_rounds")
       .select("*")
       .in("tournament_id", tournamentIds)
@@ -144,9 +174,21 @@ export default async function PlayerControllerPage() {
   }
 
   // Group tournaments by status
+  // Live = in_progress
+  // Upcoming = registration, pending, draft
+  // History = completed, cancelled, ended, OR any tournament not in the other categories
   const activeTournaments = tournaments.filter(t => t.status === "in_progress")
-  const upcomingTournaments = tournaments.filter(t => t.status === "registration" || t.status === "pending")
-  const pastTournaments = tournaments.filter(t => t.status === "completed" || t.status === "cancelled")
+  const upcomingTournaments = tournaments.filter(t => t.status === "registration" || t.status === "pending" || t.status === "draft")
+  const pastTournaments = tournaments.filter(t => 
+    t.status === "completed" || t.status === "cancelled" || t.status === "ended" ||
+    // Include any tournaments that don't fit other categories (fallback)
+    (!["in_progress", "registration", "pending", "draft"].includes(t.status))
+  )
+  
+  console.log("[v0] Player Controller - user.id:", user.id)
+  console.log("[v0] Player Controller - tournamentIds from matches:", tournamentIds)
+  console.log("[v0] Player Controller - tournaments found:", tournaments.map(t => ({ id: t.id, name: t.name, status: t.status })))
+  console.log("[v0] Player Controller - active:", activeTournaments.length, "upcoming:", upcomingTournaments.length, "past:", pastTournaments.length)
 
   // Calculate overall stats
   let totalWins = 0, totalLosses = 0, totalDraws = 0
@@ -285,7 +327,7 @@ export default async function PlayerControllerPage() {
       </div>
 
       {/* Tabs for Organization */}
-      <Tabs defaultValue={activeTournaments.length > 0 ? "active" : "history"} className="space-y-4">
+      <Tabs defaultValue={activeTournaments.length > 0 ? "active" : pastTournaments.length > 0 ? "history" : "upcoming"} className="space-y-4">
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="active" className="flex items-center gap-2">
             <div className={`h-2 w-2 rounded-full ${activeTournaments.length > 0 ? "bg-green-500 animate-pulse" : "bg-muted"}`} />
@@ -577,14 +619,63 @@ export default async function PlayerControllerPage() {
                           </div>
                         )}
 
-                        {/* Links */}
+                        {/* Rounds Summary */}
+                        {rounds.length > 0 && (
+                          <div className="space-y-2">
+                            <h4 className="font-medium flex items-center gap-2">
+                              <Table2 className="h-4 w-4" />
+                              Rounds ({rounds.length})
+                            </h4>
+                            <div className="flex flex-wrap gap-2">
+                              {rounds.map(r => (
+                                <Badge key={r.id} variant={r.status === "completed" ? "secondary" : "outline"}>
+                                  Round {r.round_number}: {r.status}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Tournament Quick Links */}
+                        <div className="space-y-2">
+                          <h4 className="font-medium">Tournament Details</h4>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                            <Link href={`/esports/tournaments/${tournament.slug}?tab=bracket`}>
+                              <Button variant="outline" size="sm" className="w-full">
+                                <Trophy className="h-3 w-3 mr-1" />
+                                Bracket
+                              </Button>
+                            </Link>
+                            <Link href={`/esports/tournaments/${tournament.slug}?tab=rounds`}>
+                              <Button variant="outline" size="sm" className="w-full">
+                                <Table2 className="h-3 w-3 mr-1" />
+                                Rounds
+                              </Button>
+                            </Link>
+                            <Link href={`/esports/tournaments/${tournament.slug}?tab=standings`}>
+                              <Button variant="outline" size="sm" className="w-full">
+                                <Medal className="h-3 w-3 mr-1" />
+                                Standings
+                              </Button>
+                            </Link>
+                            <Link href={`/esports/tournaments/${tournament.slug}?tab=participants`}>
+                              <Button variant="outline" size="sm" className="w-full">
+                                <Users className="h-3 w-3 mr-1" />
+                                Participants
+                              </Button>
+                            </Link>
+                          </div>
+                        </div>
+
+                        {/* Main Actions */}
                         <div className="flex gap-2">
                           <Link href={`/dashboard/player-portal/${tournament.id}`} className="flex-1">
-                            <Button variant="outline" className="w-full">View Full Details</Button>
+                            <Button variant="outline" className="w-full">View Player Controller</Button>
                           </Link>
                           <Link href={`/esports/tournaments/${tournament.slug}`}>
-                            <Button variant="ghost" size="icon">
-                              <Trophy className="h-4 w-4" />
+                            <Button className="flex-1">
+                              View Full Tournament
+                              <ArrowRight className="ml-2 h-4 w-4" />
                             </Button>
                           </Link>
                         </div>
@@ -598,7 +689,10 @@ export default async function PlayerControllerPage() {
             <Card className="p-8 text-center">
               <History className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
               <h3 className="font-semibold mb-2">No Tournament History</h3>
-              <p className="text-muted-foreground text-sm mb-4">Your completed tournaments will appear here.</p>
+              <p className="text-muted-foreground text-sm mb-4">
+                Tournaments you&apos;ve participated in will appear here with full match history, 
+                announcements, standings, and results.
+              </p>
               <Link href="/esports/tournaments">
                 <Button>Find Tournaments</Button>
               </Link>

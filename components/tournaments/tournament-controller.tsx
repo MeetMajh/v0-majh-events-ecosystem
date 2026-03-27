@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
+import { getPlayerDisplayName } from "@/lib/player-utils"
 import { calculateSwissRounds } from "@/lib/pairing-algorithms"
 import {
   AlertTriangle,
@@ -1514,7 +1515,7 @@ const handleAddPlayer = () => {
                               {deck.decklist_name || "Unnamed Deck"}
                             </h4>
                             <p className="text-xs text-muted-foreground mt-1">
-                              Submitted by {deck.profiles?.first_name} {deck.profiles?.last_name}
+                              Submitted by {getPlayerDisplayName(deck.profiles)}
                             </p>
                             {deck.validation_errors && (
                               <p className="text-xs text-destructive mt-1 line-clamp-2">
@@ -1539,7 +1540,7 @@ const handleAddPlayer = () => {
                                 <DialogHeader>
                                   <DialogTitle>{deck.decklist_name || "Decklist"}</DialogTitle>
                                   <DialogDescription>
-                                    Submitted by {deck.profiles?.first_name} {deck.profiles?.last_name}
+                                    Submitted by {getPlayerDisplayName(deck.profiles)}
                                   </DialogDescription>
                                 </DialogHeader>
                                 <div className="space-y-4">
@@ -1678,7 +1679,7 @@ const handleAddPlayer = () => {
                               <p className="whitespace-pre-wrap">{ann.message}</p>
                               {ann.profiles && (
                                 <p className="text-xs text-muted-foreground mt-2">
-                                  Sent by {ann.profiles.first_name} {ann.profiles.last_name}
+                                  Sent by {getPlayerDisplayName(ann.profiles)}
                                 </p>
                               )}
                             </div>
@@ -1867,7 +1868,7 @@ const handleAddPlayer = () => {
                             </p>
                             <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
                               <span>
-                                Reported by {ticket.reporter?.first_name} {ticket.reporter?.last_name}
+                                Reported by {getPlayerDisplayName(ticket.reporter)}
                               </span>
                               <span>
                                 {formatDistanceToNow(new Date(ticket.created_at), { addSuffix: true })}
