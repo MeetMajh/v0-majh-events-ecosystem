@@ -20,8 +20,57 @@ export const metadata = {
 async function getMyEvents(userId: string) {
   const supabase = await createClient()
 
-  // Get user's tournament registrations - query all statuses except dropped
-  const { data: registrations, error: regError } = await supabase
+  // PRIMARY: Get tournaments from match history (player1_id/player2_id = user.id)
+  // This works because match records have the auth user ID
+  const { data: matchData } = await supabase
+    .from("tournament_matches")
+    .select(`
+      id,
+      tournament_id,
+      status,
+      result,
+      player1_id,
+      player2_id,
+      tournament_rounds (round_number, status),
+      player1:profiles!player1_id (id, first_name, last_name, avatar_url),
+      player2:profiles!player2_id (id, first_name, last_name, avatar_url)
+    `)
+    .or(`player1_id.eq.${userId},player2_id.eq.${userId}`)
+    .order("created_at", { ascending: false })
+    .limit(50)
+
+  const matches = matchData || []
+
+  // Get unique tournament IDs from matches
+  const tournamentIdsFromMatches = [...new Set(matches.map(m => m.tournament_id).filter(Boolean))]
+
+  // Fetch tournament details for tournaments the user has matches in
+  let tournamentsFromMatches: any[] = []
+  if (tournamentIdsFromMatches.length > 0) {
+    const { data: tournamentData } = await supabase
+      .from("tournaments")
+      .select(`
+        id, name, slug, status, start_date, end_date, location, venue_name,
+        games (id, name, category, icon_url)
+      `)
+      .in("id", tournamentIdsFromMatches)
+      .order("start_date", { ascending: false })
+    
+    tournamentsFromMatches = tournamentData || []
+  }
+
+  // Build registration-like objects from match data
+  const registrations = tournamentsFromMatches.map(tournament => ({
+    id: `match-${userId}-${tournament.id}`,
+    player_id: userId,
+    tournament_id: tournament.id,
+    status: "checked_in",
+    created_at: new Date().toISOString(),
+    tournaments: tournament
+  }))
+
+  // SECONDARY: Also try traditional registrations (may not work if player_id doesn't match)
+  const { data: traditionalRegs } = await supabase
     .from("tournament_registrations")
     .select(`
       *,
@@ -32,23 +81,14 @@ async function getMyEvents(userId: string) {
     `)
     .eq("player_id", userId)
     .order("created_at", { ascending: false })
-  
-  if (regError) {
-    console.error("[v0] Error fetching registrations:", regError)
-  }
 
-  // Get user's match history
-  const { data: matches } = await supabase
-    .from("tournament_matches")
-    .select(`
-      *,
-      tournament_rounds (round_number, status, tournament_id),
-      player1:profiles!player1_id (id, first_name, last_name, avatar_url),
-      player2:profiles!player2_id (id, first_name, last_name, avatar_url)
-    `)
-    .or(`player1_id.eq.${userId},player2_id.eq.${userId}`)
-    .order("created_at", { ascending: false })
-    .limit(20)
+  // Merge registrations, preferring traditional ones if they exist
+  const existingTournamentIds = new Set(registrations.map(r => r.tournament_id))
+  traditionalRegs?.forEach(reg => {
+    if (!existingTournamentIds.has(reg.tournament_id)) {
+      registrations.push(reg)
+    }
+  })
 
   // Get user's leaderboard entries
   const { data: leaderboardEntries } = await supabase
@@ -119,6 +159,28 @@ export default async function MyEventsPage() {
           View your tournament registrations, matches, and player stats
         </p>
       </div>
+
+      {/* Player Controller Quick Access - Prominent for Active Tournaments */}
+      {activeEvents.length > 0 && (
+        <Link href="/dashboard/player-controller">
+          <Card className="mb-8 border-primary/50 bg-primary/5 hover:bg-primary/10 transition-colors cursor-pointer">
+            <CardContent className="flex items-center justify-between p-4">
+              <div className="flex items-center gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/20">
+                  <Gamepad2 className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-primary">Player Controller</h3>
+                  <p className="text-sm text-muted-foreground">
+                    You have {activeEvents.length} active tournament{activeEvents.length !== 1 ? "s" : ""} - manage your matches
+                  </p>
+                </div>
+              </div>
+              <ChevronRight className="h-5 w-5 text-primary" />
+            </CardContent>
+          </Card>
+        </Link>
+      )}
 
       {/* Player Stats Overview */}
       <div className="grid gap-4 md:grid-cols-5 mb-8">
