@@ -540,13 +540,13 @@ function PairingsView({
                   <div className="flex items-center gap-2">
                     <Avatar className="h-6 w-6">
                       <AvatarImage src={match.player1?.avatar_url} />
-                      <AvatarFallback>{match.player1?.display_name?.charAt(0) ?? "?"}</AvatarFallback>
+                      <AvatarFallback>{match.player1 ? getPlayerDisplayName(match.player1)?.charAt(0) : "?"}</AvatarFallback>
                     </Avatar>
                     <span className={cn(
                       "text-sm",
                       match.winner_id === match.player1?.id && "font-semibold"
                     )}>
-                      {match.player1?.display_name ?? "TBD"}
+                      {match.player1 ? getPlayerDisplayName(match.player1) : "TBD"}
                     </span>
                     {match.winner_id === match.player1?.id && (
                       <Trophy className="h-3 w-3 text-yellow-500" />
@@ -569,13 +569,13 @@ function PairingsView({
                     <div className="flex items-center gap-2">
                       <Avatar className="h-6 w-6">
                         <AvatarImage src={match.player2?.avatar_url} />
-                        <AvatarFallback>{match.player2?.display_name?.charAt(0) ?? "?"}</AvatarFallback>
+                        <AvatarFallback>{match.player2 ? getPlayerDisplayName(match.player2)?.charAt(0) : "?"}</AvatarFallback>
                       </Avatar>
                       <span className={cn(
                         "text-sm",
                         match.winner_id === match.player2?.id && "font-semibold"
                       )}>
-                        {match.player2?.display_name ?? "TBD"}
+                        {match.player2 ? getPlayerDisplayName(match.player2) : "TBD"}
                       </span>
                       {match.winner_id === match.player2?.id && (
                         <Trophy className="h-3 w-3 text-yellow-500" />
@@ -706,13 +706,13 @@ function RoundsView({ rounds, tournamentStatus }: { rounds: any[]; tournamentSta
                             <div className="flex items-center gap-2">
                               <Avatar className="h-6 w-6">
                                 <AvatarImage src={match.player1?.avatar_url} />
-                                <AvatarFallback>{match.player1?.display_name?.charAt(0) ?? "?"}</AvatarFallback>
+                                <AvatarFallback>{match.player1 ? getPlayerDisplayName(match.player1)?.charAt(0) : "?"}</AvatarFallback>
                               </Avatar>
                               <span className={cn(
                                 "text-sm",
                                 match.winner_id === match.player1_id && "font-semibold text-primary"
                               )}>
-                                {match.player1?.display_name ?? "TBD"}
+                                {match.player1 ? getPlayerDisplayName(match.player1) : "TBD"}
                               </span>
                               {match.winner_id === match.player1_id && (
                                 <Trophy className="h-3 w-3 text-yellow-500" />
@@ -737,13 +737,13 @@ function RoundsView({ rounds, tournamentStatus }: { rounds: any[]; tournamentSta
                               <div className="flex items-center gap-2">
                                 <Avatar className="h-6 w-6">
                                   <AvatarImage src={match.player2?.avatar_url} />
-                                  <AvatarFallback>{match.player2?.display_name?.charAt(0) ?? "?"}</AvatarFallback>
+                                  <AvatarFallback>{match.player2 ? getPlayerDisplayName(match.player2)?.charAt(0) : "?"}</AvatarFallback>
                                 </Avatar>
                                 <span className={cn(
                                   "text-sm",
                                   match.winner_id === match.player2_id && "font-semibold text-primary"
                                 )}>
-                                  {match.player2?.display_name ?? "TBD"}
+                                  {match.player2 ? getPlayerDisplayName(match.player2) : "TBD"}
                                 </span>
                                 {match.winner_id === match.player2_id && (
                                   <Trophy className="h-3 w-3 text-yellow-500" />

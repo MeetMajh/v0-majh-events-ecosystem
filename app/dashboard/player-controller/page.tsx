@@ -77,8 +77,8 @@ export default async function PlayerControllerPage() {
   // Get unique tournament IDs from matches
   const tournamentIdsFromMatches = [...new Set(userMatches?.map(m => m.tournament_id).filter(Boolean) || [])]
   
-  // Get tournaments from registrations using BOTH user_id and player_id columns
-  // (code uses both inconsistently)
+  // Get tournaments from registrations - check BOTH user_id and player_id columns
+  // since codebase uses both inconsistently
   const { data: regsByUserId } = await adminClient
     .from("tournament_registrations")
     .select("tournament_id")
@@ -89,37 +89,14 @@ export default async function PlayerControllerPage() {
     .select("tournament_id")
     .eq("player_id", user.id)
   
-  // Combine registrations from both queries
+  // Combine results from both queries - one or both may return results
   const allRegs = [...(regsByUserId || []), ...(regsByPlayerId || [])]
   const tournamentIdsFromRegistrations = [...new Set(allRegs.map(r => r.tournament_id).filter(Boolean))]
-  
-  // FALLBACK: Look up registrations where the linked profile's ID matches our user ID
-  // This handles cases where player_id is stored but doesn't equal user.id directly
-  let tournamentIdsFromProfileLookup: string[] = []
-  
-  if (tournamentIdsFromMatches.length === 0 && tournamentIdsFromRegistrations.length === 0) {
-    // Query registrations that link to our profile via the profiles foreign key
-    const { data: profileLinkedRegs } = await adminClient
-      .from("tournament_registrations")
-      .select(`
-        tournament_id,
-        profiles!inner (id)
-      `)
-      .eq("profiles.id", user.id)
-    
-    // Also try matching on player_id -> profiles table
-    const matchingRegs = profileLinkedRegs?.filter(r => 
-      r.profiles?.id === user.id
-    ) || []
-    
-    tournamentIdsFromProfileLookup = [...new Set(matchingRegs.map(r => r.tournament_id).filter(Boolean))]
-  }
 
-  // Combine all sources
+  // Combine matches and registrations sources
   const tournamentIds = [...new Set([
     ...tournamentIdsFromMatches, 
-    ...tournamentIdsFromRegistrations,
-    ...tournamentIdsFromProfileLookup
+    ...tournamentIdsFromRegistrations
   ])]
 
   // Fetch tournament details using admin client
