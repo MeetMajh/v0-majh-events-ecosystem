@@ -32,45 +32,49 @@ export default async function PlayerPortalPage() {
     redirect("/login")
   }
 
-  // APPROACH 1: Get tournaments from match history (this works because player1_id/player2_id = user.id)
-  const { data: matches } = await supabase
+  // Use admin client to bypass RLS on all queries
+  const adminClient = createAdminClient()
+
+  // APPROACH 1: Get tournaments from match history
+  // tournament_matches has tournament_id directly - query it and then fetch tournament details
+  const { data: matches, error: matchError } = await adminClient
     .from("tournament_matches")
-    .select(`
-      id,
-      tournament_rounds (
-        tournament_id,
-        tournaments (
-          id,
-          name,
-          slug,
-          status,
-          format,
-          start_date,
-          venue_name,
-          location,
-          max_participants,
-          games (name, icon_url)
-        )
-      )
-    `)
+    .select("id, tournament_id")
     .or(`player1_id.eq.${user.id},player2_id.eq.${user.id}`)
 
-  // Extract unique tournaments from matches
-  const tournamentsFromMatches = new Map()
-  matches?.forEach((match) => {
-    const tournament = match.tournament_rounds?.tournaments
-    if (tournament && !tournamentsFromMatches.has(tournament.id)) {
+  // Get unique tournament IDs from matches
+  const tournamentIdsFromMatches = [...new Set(matches?.map(m => m.tournament_id).filter(Boolean) || [])]
+  
+  // Fetch tournament details for those IDs
+  let tournamentsFromMatches = new Map()
+  if (tournamentIdsFromMatches.length > 0) {
+    const { data: tournamentDetails } = await adminClient
+      .from("tournaments")
+      .select(`
+        id,
+        name,
+        slug,
+        status,
+        format,
+        start_date,
+        venue_name,
+        location,
+        max_participants,
+        games (name, icon_url)
+      `)
+      .in("id", tournamentIdsFromMatches)
+
+    tournamentDetails?.forEach((tournament) => {
       tournamentsFromMatches.set(tournament.id, {
         id: tournament.id,
         tournaments: tournament,
-        status: "participated", // They played in matches
+        status: "participated",
         source: "matches"
       })
-    }
-  })
+    })
+  }
 
-  // APPROACH 2: Also try registrations with admin client (in case some registrations DO match)
-  const adminClient = createAdminClient()
+  // APPROACH 2: Also try registrations (in case some registrations DO match)
   const { data: registrations } = await adminClient
     .from("tournament_registrations")
     .select(`
