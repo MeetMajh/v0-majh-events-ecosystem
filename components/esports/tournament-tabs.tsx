@@ -17,6 +17,15 @@ import { format } from "date-fns"
 
 type TabKey = "bracket" | "rounds" | "standings" | "pairings" | "participants" | "rules" | "results"
 
+// Helper to get display name, preferring username if available
+function getPlayerDisplayName(profile: { display_name?: string; username?: string | null; first_name?: string; last_name?: string } | null): string {
+  if (!profile) return "Unknown"
+  if (profile.username) return profile.username
+  if (profile.display_name) return profile.display_name
+  if (profile.first_name || profile.last_name) return `${profile.first_name || ""} ${profile.last_name || ""}`.trim()
+  return "Unknown"
+}
+
 const TABS: { key: TabKey; label: string; icon: any }[] = [
   { key: "bracket", label: "Bracket", icon: Trophy },
   { key: "rounds", label: "Rounds", icon: LayoutList },
@@ -149,7 +158,7 @@ function ParticipantsList({ participants }: { participants: any[] }) {
                     href={`/esports/players/${p.profiles.id || p.user_id}`}
                     className="text-sm font-medium text-foreground hover:text-primary transition-colors"
                   >
-                    {p.profiles.display_name || "Player"}
+                    {getPlayerDisplayName(p.profiles)}
                   </Link>
                 ) : (
                   <span className="text-sm text-muted-foreground">Unknown Player</span>
@@ -217,10 +226,10 @@ function ResultsView({ tournamentId, standings }: { tournamentId: string; standi
         <div className="flex flex-col items-center">
           <Avatar className="h-16 w-16 ring-2 ring-muted">
             <AvatarImage src={top3[1]?.avatarUrl} />
-            <AvatarFallback>{top3[1]?.displayName?.charAt(0)}</AvatarFallback>
+            <AvatarFallback>{(top3[1]?.username || top3[1]?.displayName)?.charAt(0)}</AvatarFallback>
           </Avatar>
           <div className="mt-2 text-center">
-            <p className="font-medium">{top3[1]?.displayName ?? "---"}</p>
+            <p className="font-medium">{top3[1]?.username || top3[1]?.displayName ?? "---"}</p>
             <Badge variant="secondary">2nd Place</Badge>
           </div>
           <div className="mt-2 h-20 w-24 rounded-t-lg bg-muted/50" />
@@ -231,10 +240,10 @@ function ResultsView({ tournamentId, standings }: { tournamentId: string; standi
           <Trophy className="mb-2 h-8 w-8 text-yellow-500" />
           <Avatar className="h-20 w-20 ring-4 ring-yellow-500">
             <AvatarImage src={top3[0]?.avatarUrl} />
-            <AvatarFallback>{top3[0]?.displayName?.charAt(0)}</AvatarFallback>
+            <AvatarFallback>{(top3[0]?.username || top3[0]?.displayName)?.charAt(0)}</AvatarFallback>
           </Avatar>
           <div className="mt-2 text-center">
-            <p className="text-lg font-bold">{top3[0]?.displayName ?? "---"}</p>
+            <p className="text-lg font-bold">{top3[0]?.username || top3[0]?.displayName ?? "---"}</p>
             <Badge className="bg-yellow-500/10 text-yellow-600">1st Place</Badge>
           </div>
           <div className="mt-2 h-28 w-24 rounded-t-lg bg-yellow-500/20" />
@@ -244,10 +253,10 @@ function ResultsView({ tournamentId, standings }: { tournamentId: string; standi
         <div className="flex flex-col items-center">
           <Avatar className="h-14 w-14 ring-2 ring-muted">
             <AvatarImage src={top3[2]?.avatarUrl} />
-            <AvatarFallback>{top3[2]?.displayName?.charAt(0)}</AvatarFallback>
+            <AvatarFallback>{(top3[2]?.username || top3[2]?.displayName)?.charAt(0)}</AvatarFallback>
           </Avatar>
           <div className="mt-2 text-center">
-            <p className="font-medium">{top3[2]?.displayName ?? "---"}</p>
+            <p className="font-medium">{top3[2]?.username || top3[2]?.displayName ?? "---"}</p>
             <Badge variant="outline">3rd Place</Badge>
           </div>
           <div className="mt-2 h-14 w-24 rounded-t-lg bg-muted/30" />
@@ -305,9 +314,9 @@ function StandingsView({ standings, showTitle = true }: { standings: any[]; show
                 >
                   <Avatar className="h-6 w-6">
                     <AvatarImage src={player.avatarUrl} />
-                    <AvatarFallback>{player.displayName?.charAt(0)}</AvatarFallback>
+                    <AvatarFallback>{(player.username || player.displayName)?.charAt(0)}</AvatarFallback>
                   </Avatar>
-                  {player.displayName}
+                  {player.username || player.displayName}
                   {player.isDropped && <Badge variant="destructive" className="text-[10px]">Dropped</Badge>}
                 </Link>
               </td>
@@ -413,10 +422,10 @@ function PairingsView({
             <div className="flex items-center gap-3">
               <Avatar className="h-10 w-10">
                 <AvatarImage src={userMatch.player1?.avatar_url} />
-                <AvatarFallback>{userMatch.player1?.display_name?.charAt(0)}</AvatarFallback>
+                <AvatarFallback>{getPlayerDisplayName(userMatch.player1)?.charAt(0)}</AvatarFallback>
               </Avatar>
               <div>
-                <p className="font-medium">{userMatch.player1?.display_name}</p>
+                <p className="font-medium">{getPlayerDisplayName(userMatch.player1)}</p>
                 {userMatch.winner_id === userMatch.player1?.id && (
                   <Badge className="text-[10px]">Winner</Badge>
                 )}
@@ -433,14 +442,14 @@ function PairingsView({
             </div>
             <div className="flex items-center gap-3">
               <div className="text-right">
-                <p className="font-medium">{userMatch.player2?.display_name ?? "BYE"}</p>
+                <p className="font-medium">{userMatch.player2 ? getPlayerDisplayName(userMatch.player2) : "BYE"}</p>
                 {userMatch.winner_id === userMatch.player2?.id && (
                   <Badge className="text-[10px]">Winner</Badge>
                 )}
               </div>
               <Avatar className="h-10 w-10">
                 <AvatarImage src={userMatch.player2?.avatar_url} />
-                <AvatarFallback>{userMatch.player2?.display_name?.charAt(0) ?? "-"}</AvatarFallback>
+                <AvatarFallback>{userMatch.player2 ? getPlayerDisplayName(userMatch.player2)?.charAt(0) : "-"}</AvatarFallback>
               </Avatar>
             </div>
           </div>
@@ -465,7 +474,7 @@ function PairingsView({
                   </DialogHeader>
                   <div className="grid gap-4 py-4">
                     <div className="grid grid-cols-3 items-center gap-4">
-                      <Label>{userMatch.player1?.display_name}</Label>
+                      <Label>{getPlayerDisplayName(userMatch.player1)}</Label>
                       <Input
                         type="number"
                         min="0"
@@ -476,7 +485,7 @@ function PairingsView({
                       <span className="text-sm text-muted-foreground">Wins</span>
                     </div>
                     <div className="grid grid-cols-3 items-center gap-4">
-                      <Label>{userMatch.player2?.display_name}</Label>
+                      <Label>{getPlayerDisplayName(userMatch.player2)}</Label>
                       <Input
                         type="number"
                         min="0"
