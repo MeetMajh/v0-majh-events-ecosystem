@@ -44,8 +44,18 @@ export default async function PlayerControllerPage() {
     redirect("/login")
   }
 
+  // DEBUG: Get user's profile to check their ID
+  const { data: userProfile } = await supabase
+    .from("profiles")
+    .select("id, first_name, last_name")
+    .eq("id", user.id)
+    .single()
+  
+  console.log("[v0] PlayerController - auth user.id:", user.id)
+  console.log("[v0] PlayerController - profile:", userProfile)
+
   // Get all matches for this user with full details
-  const { data: userMatches } = await supabase
+  const { data: userMatches, error: matchError } = await supabase
     .from("tournament_matches")
     .select(`
       id,
@@ -66,8 +76,21 @@ export default async function PlayerControllerPage() {
     .or(`player1_id.eq.${user.id},player2_id.eq.${user.id}`)
     .order("created_at", { ascending: false })
 
+  console.log("[v0] PlayerController - userMatches count:", userMatches?.length ?? 0, "error:", matchError?.message)
+
+  // DEBUG: Also fetch recent matches to see what player IDs look like
+  const { data: recentMatches } = await supabase
+    .from("tournament_matches")
+    .select("id, player1_id, player2_id, tournament_id")
+    .order("created_at", { ascending: false })
+    .limit(10)
+  
+  console.log("[v0] PlayerController - recent match player IDs (sample):", 
+    recentMatches?.map(m => ({ p1: m.player1_id, p2: m.player2_id, tid: m.tournament_id })))
+
   // Get unique tournament IDs
   const tournamentIds = [...new Set(userMatches?.map(m => m.tournament_id).filter(Boolean) || [])]
+  console.log("[v0] PlayerController - tournamentIds:", tournamentIds)
 
   // Fetch tournament details
   let tournaments: any[] = []
