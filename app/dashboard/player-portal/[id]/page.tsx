@@ -51,13 +51,29 @@ export default async function PlayerControllerPage({ params }: { params: Promise
     .or(`player1_id.eq.${user.id},player2_id.eq.${user.id}`)
     .limit(1)
 
-  // Also check registration
-  const { data: registration } = await supabase
+  // Also check registration via multiple methods (player_id, user_id, or profile link)
+  const { data: regByPlayerId } = await supabase
     .from("tournament_registrations")
     .select("*")
     .eq("tournament_id", tournamentId)
     .eq("player_id", user.id)
     .single()
+
+  const { data: regByUserId } = await supabase
+    .from("tournament_registrations")
+    .select("*")
+    .eq("tournament_id", tournamentId)
+    .eq("user_id", user.id)
+    .single()
+
+  const { data: regByProfile } = await supabase
+    .from("tournament_registrations")
+    .select("*, profiles:player_id!inner(id)")
+    .eq("tournament_id", tournamentId)
+    .eq("profiles.id", user.id)
+    .single()
+
+  const registration = regByPlayerId || regByUserId || regByProfile
 
   // User must have either matches OR registration
   if (!userMatches?.length && !registration) {

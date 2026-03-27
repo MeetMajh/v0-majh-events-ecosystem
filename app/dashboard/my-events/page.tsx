@@ -69,8 +69,8 @@ async function getMyEvents(userId: string) {
     tournaments: tournament
   }))
 
-  // SECONDARY: Also try traditional registrations (may not work if player_id doesn't match)
-  const { data: traditionalRegs } = await supabase
+  // SECONDARY: Try registrations via player_id direct match
+  const { data: regsByPlayerId } = await supabase
     .from("tournament_registrations")
     .select(`
       *,
@@ -81,6 +81,36 @@ async function getMyEvents(userId: string) {
     `)
     .eq("player_id", userId)
     .order("created_at", { ascending: false })
+
+  // TERTIARY: Try via user_id column (some code uses this)
+  const { data: regsByUserId } = await supabase
+    .from("tournament_registrations")
+    .select(`
+      *,
+      tournaments (
+        id, name, slug, status, start_date, end_date, location, venue_name,
+        games (id, name, category, icon_url)
+      )
+    `)
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+
+  // QUATERNARY: Try via profile foreign key (most reliable)
+  const { data: regsByProfile } = await supabase
+    .from("tournament_registrations")
+    .select(`
+      *,
+      profiles:player_id!inner(id),
+      tournaments (
+        id, name, slug, status, start_date, end_date, location, venue_name,
+        games (id, name, category, icon_url)
+      )
+    `)
+    .eq("profiles.id", userId)
+    .order("created_at", { ascending: false })
+
+  // Combine all registration sources
+  const traditionalRegs = [...(regsByPlayerId || []), ...(regsByUserId || []), ...(regsByProfile || [])]
 
   // Merge registrations, preferring traditional ones if they exist
   const existingTournamentIds = new Set(registrations.map(r => r.tournament_id))

@@ -120,10 +120,10 @@ export default async function PlayerControllerPage() {
     .select("tournament_id")
     .eq("player_id", user.id)
   
-  // Also query via profiles foreign key relationship (most reliable)
+  // Also query via player_id -> profiles foreign key (most reliable based on esports-actions.ts)
   const { data: regsByProfile } = await adminClient
     .from("tournament_registrations")
-    .select("tournament_id, profiles!inner(id)")
+    .select("tournament_id, profiles:player_id!inner(id)")
     .eq("profiles.id", user.id)
   
   // Combine results from all queries
