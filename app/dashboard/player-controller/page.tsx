@@ -246,6 +246,26 @@ export default async function PlayerControllerPage() {
         <span>MAJH Events Connection Active</span>
       </div>
 
+      {/* DEBUG INFO - Remove after fixing */}
+      <Card className="border-yellow-500/50 bg-yellow-500/10">
+        <CardContent className="p-4 text-xs font-mono">
+          <p className="font-bold text-yellow-500 mb-2">DEBUG INFO:</p>
+          <p>User ID: {user.id}</p>
+          <p>Matches Found: {userMatches?.length ?? 0}</p>
+          <p>Tournament IDs: {tournamentIds.length > 0 ? tournamentIds.join(", ") : "NONE"}</p>
+          <p>Tournaments Loaded: {tournaments.length}</p>
+          <p>Active: {activeTournaments.length}, Upcoming: {upcomingTournaments.length}, Past: {pastTournaments.length}</p>
+          <p className="mt-2">Recent Match Sample (first 3):</p>
+          <pre className="text-[10px] overflow-auto max-h-32">
+            {JSON.stringify(recentMatches?.slice(0, 3).map(m => ({
+              p1: m.player1_id,
+              p2: m.player2_id,
+              tid: m.tournament_id
+            })), null, 2)}
+          </pre>
+        </CardContent>
+      </Card>
+
       {/* Overall Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <Card className="border-border/50">
