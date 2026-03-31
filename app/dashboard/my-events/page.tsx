@@ -46,6 +46,9 @@ async function getMyEvents(userId: string) {
     .select("player_id, tournament_id")
     .eq("player_id", userId)
 
+  // playerIds for leaderboard/results queries
+  const playerIds = [userId]
+
   const playerMap = new Map<string, string>(
     (registrationRecords || []).map(r => [r.tournament_id, r.player_id])
   )

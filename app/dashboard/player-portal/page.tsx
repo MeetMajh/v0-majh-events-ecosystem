@@ -37,8 +37,16 @@ export default async function PlayerPortalPage() {
     .select("id, tournament_id, player1_id, player2_id, status, result")
     .or(`player1_id.eq.${user.id},player2_id.eq.${user.id}`)
 
-  // Get unique tournament IDs
-  const tournamentIds = [...new Set(userMatches?.map(m => m.tournament_id).filter(Boolean) || [])]
+  // Also get tournament_participants records for this user
+  const { data: participantRecords } = await supabase
+    .from("tournament_participants")
+    .select("tournament_id")
+    .eq("user_id", user.id)
+
+  // Combine tournament IDs from matches and participants
+  const tournamentIdsFromMatches = userMatches?.map(m => m.tournament_id).filter(Boolean) || []
+  const tournamentIdsFromParticipants = participantRecords?.map(p => p.tournament_id).filter(Boolean) || []
+  const tournamentIds = [...new Set([...tournamentIdsFromMatches, ...tournamentIdsFromParticipants])]
 
   // Fetch tournament details
   let tournaments: any[] = []
