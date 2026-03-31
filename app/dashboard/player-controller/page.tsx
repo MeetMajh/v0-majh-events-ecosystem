@@ -53,45 +53,47 @@ export default async function PlayerControllerPage() {
     .eq("id", user.id)
     .single()
 
-// Step 1: Get all registrations for this user from tournament_registrations
-  // player_id in tournament_registrations references profiles.id which equals user.id
+// Step 1: Get matches directly using user.id (matches store auth user IDs in player1_id/player2_id)
+  const { data: matchData, error: matchesError } = await adminClient
+    .from("tournament_matches")
+    .select(`
+      id,
+      tournament_id,
+      round_id,
+      status,
+      result,
+      player1_id,
+      player2_id,
+      player1_wins,
+      player2_wins,
+      winner_id,
+      table_number,
+      created_at,
+      player1:profiles!tournament_matches_player1_id_fkey (id, first_name, last_name, avatar_url),
+      player2:profiles!tournament_matches_player2_id_fkey (id, first_name, last_name, avatar_url),
+      tournament_rounds (id, round_number, status)
+    `)
+    .or(`player1_id.eq.${user.id},player2_id.eq.${user.id}`)
+    .order("created_at", { ascending: false })
+  
+  const userMatches = matchData || []
+
+  // Step 2: Get registrations for additional context
   const { data: registrationRecords, error: registrationsError } = await adminClient
     .from("tournament_registrations")
     .select("player_id, tournament_id")
     .eq("player_id", user.id)
 
-  // Create a map of tournament_id -> player_id for match lookups
+  // Create a map of tournament_id -> player_id for reference
   const playerMap = new Map<string, string>(
     (registrationRecords || []).map(r => [r.tournament_id, r.player_id])
   )
-  const playerIds = [...new Set((registrationRecords || []).map(r => r.player_id).filter(Boolean))]
-
-  // Step 2: Get matches using the player_ids (not user.id)
-  let userMatches: any[] = []
-  if (playerIds.length > 0) {
-    const { data: matchData } = await adminClient
-      .from("tournament_matches")
-      .select(`
-        id,
-        tournament_id,
-        round_id,
-        status,
-        result,
-        player1_id,
-        player2_id,
-        player1_wins,
-        player2_wins,
-        table_number,
-        created_at,
-        player1:profiles!tournament_matches_player1_id_fkey (id, first_name, last_name, avatar_url),
-        player2:profiles!tournament_matches_player2_id_fkey (id, first_name, last_name, avatar_url),
-        tournament_rounds (id, round_number, status)
-      `)
-      .or(playerIds.map(id => `player1_id.eq.${id},player2_id.eq.${id}`).join(","))
-      .order("created_at", { ascending: false })
-    
-    userMatches = matchData || []
-  }
+  // Also add user.id for tournaments found via matches (in case no registration exists)
+  userMatches.forEach(m => {
+    if (!playerMap.has(m.tournament_id)) {
+      playerMap.set(m.tournament_id, user.id)
+    }
+  })
 
   // Get unique tournament IDs from matches
   const tournamentIdsFromMatches = [...new Set(userMatches.map(m => m.tournament_id).filter(Boolean))]
@@ -116,6 +118,7 @@ export default async function PlayerControllerPage() {
     userEmail: user.email,
     registrationRecords: registrationRecords || [],
     registrationsError: registrationsError?.message || null,
+    matchesError: matchesError?.message || null,
     participantData: participantData || [],
     tournamentIdsFromMatches,
     tournamentIdsFromParticipants,
