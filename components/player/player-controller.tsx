@@ -62,6 +62,7 @@ interface PlayerControllerProps {
   myTickets: any[]
   allRounds: any[]
   userId: string
+  playerId?: string // The player's ID in this tournament (from players table)
 }
 
 export function PlayerController({
@@ -77,6 +78,7 @@ export function PlayerController({
   myTickets,
   allRounds,
   userId,
+  playerId,
 }: PlayerControllerProps) {
   const [isPending, startTransition] = useTransition()
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
@@ -108,7 +110,7 @@ export function PlayerController({
   const hasDropped = registration.status === "dropped"
   
   // Find player's current standing
-  const myStanding = standings.find(s => s.player_id === userId)
+  const myStanding = standings.find(s => s.player_id === playerId)
   const myPoints = myStanding?.match_points ?? 0
 
   // Get organizer name
@@ -386,7 +388,7 @@ function CurrentMatchSection({
     )
   }
 
-  const isPlayer1 = match.player1_id === userId
+  const isPlayer1 = match.player1_id === playerId
   const opponent = isPlayer1 ? match.player2 : match.player1
   const opponentName = opponent ? getPlayerDisplayName(opponent) : "BYE"
 
@@ -602,7 +604,7 @@ function SeatingsSection({ matches, userId }: { matches: any[], userId: string }
   return (
     <div className="space-y-2">
       {matches.map((match, index) => {
-        const isPlayer1 = match.player1_id === userId
+        const isPlayer1 = match.player1_id === playerId
         const opponent = isPlayer1 ? match.player2 : match.player1
         const opponentName = opponent ? getPlayerDisplayName(opponent) : "BYE"
         

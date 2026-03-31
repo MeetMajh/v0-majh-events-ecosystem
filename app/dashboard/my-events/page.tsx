@@ -22,24 +22,39 @@ async function getMyEvents(userId: string) {
 
   // PRIMARY: Get tournaments from match history (player1_id/player2_id = user.id)
   // This works because match records have the auth user ID
-  const { data: matchData } = await supabase
-    .from("tournament_matches")
-    .select(`
-      id,
-      tournament_id,
-      status,
-      result,
-      player1_id,
-      player2_id,
-      tournament_rounds (round_number, status),
-      player1:profiles!player1_id (id, first_name, last_name, avatar_url),
-      player2:profiles!player2_id (id, first_name, last_name, avatar_url)
-    `)
-    .or(`player1_id.eq.${userId},player2_id.eq.${userId}`)
-    .order("created_at", { ascending: false })
-    .limit(50)
+  // Step 1: Get all player_ids for this user from the players table
+  const { data: playerRecords } = await supabase
+    .from("players")
+    .select("id, tournament_id")
+    .eq("user_id", userId)
 
-  const matches = matchData || []
+  const playerIds = (playerRecords || []).map(p => p.id)
+  const playerMap = new Map<string, string>(
+    (playerRecords || []).map(p => [p.tournament_id, p.id])
+  )
+
+  // Step 2: Get matches using player_ids
+  let matches: any[] = []
+  if (playerIds.length > 0) {
+    const { data: matchData } = await supabase
+      .from("tournament_matches")
+      .select(`
+        id,
+        tournament_id,
+        status,
+        result,
+        player1_id,
+        player2_id,
+        tournament_rounds (round_number, status),
+        player1:profiles!player1_id (id, first_name, last_name, avatar_url),
+        player2:profiles!player2_id (id, first_name, last_name, avatar_url)
+      `)
+      .or(playerIds.map(id => `player1_id.eq.${id},player2_id.eq.${id}`).join(","))
+      .order("created_at", { ascending: false })
+      .limit(50)
+    
+    matches = matchData || []
+  }
 
   // Get unique tournament IDs from matches
   const tournamentIdsFromMatches = [...new Set(matches.map(m => m.tournament_id).filter(Boolean))]
@@ -90,32 +105,41 @@ async function getMyEvents(userId: string) {
     }
   })
 
-  // Get user's leaderboard entries
-  const { data: leaderboardEntries } = await supabase
-    .from("leaderboard_entries")
-    .select(`
-      *,
-      games (id, name, category, icon_url)
-    `)
-    .eq("player_id", userId)
-    .order("ranking_points", { ascending: false })
+  // Get user's leaderboard entries (using playerIds)
+  let leaderboardEntries: any[] = []
+  if (playerIds.length > 0) {
+    const { data } = await supabase
+      .from("leaderboard_entries")
+      .select(`
+        *,
+        games (id, name, category, icon_url)
+      `)
+      .in("player_id", playerIds)
+      .order("ranking_points", { ascending: false })
+    leaderboardEntries = data || []
+  }
 
-  // Get user's tournament results
-  const { data: results } = await supabase
-    .from("tournament_results")
-    .select(`
-      *,
-      tournaments (id, name, slug, start_date, games (name))
-    `)
-    .eq("player_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(10)
+  // Get user's tournament results (using playerIds)
+  let results: any[] = []
+  if (playerIds.length > 0) {
+    const { data } = await supabase
+      .from("tournament_results")
+      .select(`
+        *,
+        tournaments (id, name, slug, start_date, games (name))
+      `)
+      .in("player_id", playerIds)
+      .order("created_at", { ascending: false })
+      .limit(10)
+    results = data || []
+  }
 
   return {
     registrations: registrations ?? [],
     matches: matches ?? [],
-    leaderboardEntries: leaderboardEntries ?? [],
-    results: results ?? [],
+    leaderboardEntries,
+    results,
+    playerMap, // Pass the map for UI to check player identity
   }
 }
 
