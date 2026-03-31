@@ -30,6 +30,7 @@ import {
   TrendingUp
 } from "lucide-react"
 import { formatDistanceToNow, format } from "date-fns"
+import { DebugPanel } from "@/components/player/debug-panel"
 
 export const metadata = {
   title: "Player Controller | MAJH Events",
@@ -274,53 +275,8 @@ export default async function PlayerControllerPage() {
         <span>MAJH Events Connection Active</span>
       </div>
 
-      {/* DEBUG PANEL - Remove after troubleshooting */}
-      <Card className="border-yellow-500/50 bg-yellow-500/5">
-        <CardContent className="p-4">
-          <p className="font-bold text-yellow-500 mb-3">DEBUG: Data Troubleshooting</p>
-          <div className="grid gap-2 text-xs font-mono">
-            <div className="p-2 bg-black/20 rounded">
-              <p className="text-muted-foreground">User ID:</p>
-              <p className="text-white break-all">{debugData.userId}</p>
-            </div>
-            <div className="p-2 bg-black/20 rounded">
-              <p className="text-muted-foreground">User Email:</p>
-              <p className="text-white">{debugData.userEmail}</p>
-            </div>
-            <div className="p-2 bg-black/20 rounded">
-              <p className="text-muted-foreground">Registration Records ({debugData.registrationRecords.length}):</p>
-              {debugData.registrationRecords.length > 0 ? (
-                <pre className="text-green-400 text-[10px] overflow-auto max-h-32">
-                  {JSON.stringify(debugData.registrationRecords, null, 2)}
-                </pre>
-              ) : (
-                <p className="text-red-400">NO RECORDS FOUND in tournament_registrations</p>
-              )}
-              {debugData.registrationsError && <p className="text-red-400">Error: {debugData.registrationsError}</p>}
-            </div>
-            <div className="p-2 bg-black/20 rounded">
-              <p className="text-muted-foreground">Participants Table Records ({debugData.participantData.length}):</p>
-              {debugData.participantData.length > 0 ? (
-                <pre className="text-green-400 text-[10px] overflow-auto max-h-32">
-                  {JSON.stringify(debugData.participantData, null, 2)}
-                </pre>
-              ) : (
-                <p className="text-red-400">NO RECORDS FOUND in tournament_participants</p>
-              )}
-            </div>
-            <div className="p-2 bg-black/20 rounded">
-              <p className="text-muted-foreground">Tournament IDs Found:</p>
-              <p className="text-white">From Matches: {debugData.tournamentIdsFromMatches.length > 0 ? debugData.tournamentIdsFromMatches.join(", ") : "NONE"}</p>
-              <p className="text-white">From Participants: {debugData.tournamentIdsFromParticipants.length > 0 ? debugData.tournamentIdsFromParticipants.join(", ") : "NONE"}</p>
-              <p className="text-white">Combined: {debugData.tournamentIds.length}</p>
-            </div>
-            <div className="p-2 bg-black/20 rounded">
-              <p className="text-muted-foreground">Match Count:</p>
-              <p className="text-white">{debugData.matchCount}</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Debug Panel - Collapsible */}
+      <DebugPanel debugData={debugData} />
 
       {/* Overall Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
