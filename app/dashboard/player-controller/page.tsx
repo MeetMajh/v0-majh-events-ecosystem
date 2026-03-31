@@ -109,30 +109,13 @@ export default async function PlayerControllerPage() {
   // Get unique tournament IDs from matches
   const tournamentIdsFromMatches = [...new Set(userMatches.map(m => m.tournament_id).filter(Boolean))]
   
-  // Get tournaments from registrations - check user_id, player_id, AND profile link
-  const { data: regsByUserId } = await adminClient
-    .from("tournament_registrations")
-    .select("tournament_id")
-    .eq("user_id", user.id)
-  
+  // Get tournaments from registrations via player_id (the correct column)
   const { data: regsByPlayerId } = await adminClient
     .from("tournament_registrations")
     .select("tournament_id")
     .eq("player_id", user.id)
   
-  // Also query via player_id -> profiles foreign key (most reliable based on esports-actions.ts)
-  const { data: regsByProfile } = await adminClient
-    .from("tournament_registrations")
-    .select("tournament_id, profiles:player_id!inner(id)")
-    .eq("profiles.id", user.id)
-  
-  // Combine results from all queries
-  const allRegs = [
-    ...(regsByUserId || []), 
-    ...(regsByPlayerId || []),
-    ...(regsByProfile || [])
-  ]
-  const tournamentIdsFromRegistrations = [...new Set(allRegs.map(r => r.tournament_id).filter(Boolean))]
+  const tournamentIdsFromRegistrations = [...new Set((regsByPlayerId || []).map(r => r.tournament_id).filter(Boolean))]
 
   // Combine matches and registrations sources
   const tournamentIds = [...new Set([
@@ -226,11 +209,6 @@ export default async function PlayerControllerPage() {
     (!["in_progress", "registration", "pending", "draft"].includes(t.status))
   )
   
-  console.log("[v0] Player Controller - user.id:", user.id)
-  console.log("[v0] Player Controller - tournamentIds from matches:", tournamentIds)
-  console.log("[v0] Player Controller - tournaments found:", tournaments.map(t => ({ id: t.id, name: t.name, status: t.status })))
-  console.log("[v0] Player Controller - active:", activeTournaments.length, "upcoming:", upcomingTournaments.length, "past:", pastTournaments.length)
-
   // Calculate overall stats
   let totalWins = 0, totalLosses = 0, totalDraws = 0
   userMatches?.forEach(m => {
