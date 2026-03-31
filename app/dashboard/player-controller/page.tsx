@@ -53,10 +53,14 @@ export default async function PlayerControllerPage() {
     .single()
 
   // Step 1: Get all player_ids for this user from the players table
-  const { data: playerRecords } = await adminClient
+  const { data: playerRecords, error: playersError } = await adminClient
     .from("players")
     .select("id, tournament_id")
     .eq("user_id", user.id)
+
+  console.log("[v0] USER ID:", user.id)
+  console.log("[v0] PLAYER RECORDS:", playerRecords)
+  console.log("[v0] PLAYERS ERROR:", playersError)
 
   // Create a map of tournament_id -> player_id for match lookups
   const playerMap = new Map<string, string>(
