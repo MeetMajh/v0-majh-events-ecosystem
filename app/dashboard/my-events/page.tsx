@@ -20,41 +20,42 @@ export const metadata = {
 async function getMyEvents(userId: string) {
   const supabase = await createClient()
 
-  // PRIMARY: Get tournaments from match history (player1_id/player2_id = user.id)
-  // Get all registrations for this user from tournament_registrations
-  // player_id in tournament_registrations references profiles.id which equals user.id
+  // PRIMARY: Get matches directly using user.id (matches store auth user IDs)
+  const { data: matchData } = await supabase
+    .from("tournament_matches")
+    .select(`
+      id,
+      tournament_id,
+      status,
+      result,
+      player1_id,
+      player2_id,
+      winner_id,
+      tournament_rounds (round_number, status),
+      player1:profiles!player1_id (id, first_name, last_name, avatar_url),
+      player2:profiles!player2_id (id, first_name, last_name, avatar_url)
+    `)
+    .or(`player1_id.eq.${userId},player2_id.eq.${userId}`)
+    .order("created_at", { ascending: false })
+    .limit(50)
+  
+  const matches = matchData || []
+
+  // Get registrations for additional tournament info
   const { data: registrationRecords } = await supabase
     .from("tournament_registrations")
     .select("player_id, tournament_id")
     .eq("player_id", userId)
 
-  const playerIds = [...new Set((registrationRecords || []).map(r => r.player_id).filter(Boolean))]
   const playerMap = new Map<string, string>(
     (registrationRecords || []).map(r => [r.tournament_id, r.player_id])
   )
-
-  // Step 2: Get matches using player_ids
-  let matches: any[] = []
-  if (playerIds.length > 0) {
-    const { data: matchData } = await supabase
-      .from("tournament_matches")
-      .select(`
-        id,
-        tournament_id,
-        status,
-        result,
-        player1_id,
-        player2_id,
-        tournament_rounds (round_number, status),
-        player1:profiles!player1_id (id, first_name, last_name, avatar_url),
-        player2:profiles!player2_id (id, first_name, last_name, avatar_url)
-      `)
-      .or(playerIds.map(id => `player1_id.eq.${id},player2_id.eq.${id}`).join(","))
-      .order("created_at", { ascending: false })
-      .limit(50)
-    
-    matches = matchData || []
-  }
+  // Also add userId for tournaments found via matches
+  matches.forEach(m => {
+    if (!playerMap.has(m.tournament_id)) {
+      playerMap.set(m.tournament_id, userId)
+    }
+  })
 
   // Get unique tournament IDs from matches
   const tournamentIdsFromMatches = [...new Set(matches.map(m => m.tournament_id).filter(Boolean))]

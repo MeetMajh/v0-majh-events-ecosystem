@@ -30,6 +30,7 @@ import {
   TrendingUp
 } from "lucide-react"
 import { formatDistanceToNow, format } from "date-fns"
+import { DebugPanel } from "@/components/player/debug-panel"
 
 export const metadata = {
   title: "Player Controller | MAJH Events",
@@ -52,45 +53,47 @@ export default async function PlayerControllerPage() {
     .eq("id", user.id)
     .single()
 
-// Step 1: Get all registrations for this user from tournament_registrations
-  // player_id in tournament_registrations references profiles.id which equals user.id
+// Step 1: Get matches directly using user.id (matches store auth user IDs in player1_id/player2_id)
+  const { data: matchData, error: matchesError } = await adminClient
+    .from("tournament_matches")
+    .select(`
+      id,
+      tournament_id,
+      round_id,
+      status,
+      result,
+      player1_id,
+      player2_id,
+      player1_wins,
+      player2_wins,
+      winner_id,
+      table_number,
+      created_at,
+      player1:profiles!tournament_matches_player1_id_fkey (id, first_name, last_name, avatar_url),
+      player2:profiles!tournament_matches_player2_id_fkey (id, first_name, last_name, avatar_url),
+      tournament_rounds (id, round_number, status)
+    `)
+    .or(`player1_id.eq.${user.id},player2_id.eq.${user.id}`)
+    .order("created_at", { ascending: false })
+  
+  const userMatches = matchData || []
+
+  // Step 2: Get registrations for additional context
   const { data: registrationRecords, error: registrationsError } = await adminClient
     .from("tournament_registrations")
     .select("player_id, tournament_id")
     .eq("player_id", user.id)
 
-  // Create a map of tournament_id -> player_id for match lookups
+  // Create a map of tournament_id -> player_id for reference
   const playerMap = new Map<string, string>(
     (registrationRecords || []).map(r => [r.tournament_id, r.player_id])
   )
-  const playerIds = [...new Set((registrationRecords || []).map(r => r.player_id).filter(Boolean))]
-
-  // Step 2: Get matches using the player_ids (not user.id)
-  let userMatches: any[] = []
-  if (playerIds.length > 0) {
-    const { data: matchData } = await adminClient
-      .from("tournament_matches")
-      .select(`
-        id,
-        tournament_id,
-        round_id,
-        status,
-        result,
-        player1_id,
-        player2_id,
-        player1_wins,
-        player2_wins,
-        table_number,
-        created_at,
-        player1:profiles!tournament_matches_player1_id_fkey (id, first_name, last_name, avatar_url),
-        player2:profiles!tournament_matches_player2_id_fkey (id, first_name, last_name, avatar_url),
-        tournament_rounds (id, round_number, status)
-      `)
-      .or(playerIds.map(id => `player1_id.eq.${id},player2_id.eq.${id}`).join(","))
-      .order("created_at", { ascending: false })
-    
-    userMatches = matchData || []
-  }
+  // Also add user.id for tournaments found via matches (in case no registration exists)
+  userMatches.forEach(m => {
+    if (!playerMap.has(m.tournament_id)) {
+      playerMap.set(m.tournament_id, user.id)
+    }
+  })
 
   // Get unique tournament IDs from matches
   const tournamentIdsFromMatches = [...new Set(userMatches.map(m => m.tournament_id).filter(Boolean))]
@@ -115,6 +118,7 @@ export default async function PlayerControllerPage() {
     userEmail: user.email,
     registrationRecords: registrationRecords || [],
     registrationsError: registrationsError?.message || null,
+    matchesError: matchesError?.message || null,
     participantData: participantData || [],
     tournamentIdsFromMatches,
     tournamentIdsFromParticipants,
@@ -274,53 +278,8 @@ export default async function PlayerControllerPage() {
         <span>MAJH Events Connection Active</span>
       </div>
 
-      {/* DEBUG PANEL - Remove after troubleshooting */}
-      <Card className="border-yellow-500/50 bg-yellow-500/5">
-        <CardContent className="p-4">
-          <p className="font-bold text-yellow-500 mb-3">DEBUG: Data Troubleshooting</p>
-          <div className="grid gap-2 text-xs font-mono">
-            <div className="p-2 bg-black/20 rounded">
-              <p className="text-muted-foreground">User ID:</p>
-              <p className="text-white break-all">{debugData.userId}</p>
-            </div>
-            <div className="p-2 bg-black/20 rounded">
-              <p className="text-muted-foreground">User Email:</p>
-              <p className="text-white">{debugData.userEmail}</p>
-            </div>
-            <div className="p-2 bg-black/20 rounded">
-              <p className="text-muted-foreground">Registration Records ({debugData.registrationRecords.length}):</p>
-              {debugData.registrationRecords.length > 0 ? (
-                <pre className="text-green-400 text-[10px] overflow-auto max-h-32">
-                  {JSON.stringify(debugData.registrationRecords, null, 2)}
-                </pre>
-              ) : (
-                <p className="text-red-400">NO RECORDS FOUND in tournament_registrations</p>
-              )}
-              {debugData.registrationsError && <p className="text-red-400">Error: {debugData.registrationsError}</p>}
-            </div>
-            <div className="p-2 bg-black/20 rounded">
-              <p className="text-muted-foreground">Participants Table Records ({debugData.participantData.length}):</p>
-              {debugData.participantData.length > 0 ? (
-                <pre className="text-green-400 text-[10px] overflow-auto max-h-32">
-                  {JSON.stringify(debugData.participantData, null, 2)}
-                </pre>
-              ) : (
-                <p className="text-red-400">NO RECORDS FOUND in tournament_participants</p>
-              )}
-            </div>
-            <div className="p-2 bg-black/20 rounded">
-              <p className="text-muted-foreground">Tournament IDs Found:</p>
-              <p className="text-white">From Matches: {debugData.tournamentIdsFromMatches.length > 0 ? debugData.tournamentIdsFromMatches.join(", ") : "NONE"}</p>
-              <p className="text-white">From Participants: {debugData.tournamentIdsFromParticipants.length > 0 ? debugData.tournamentIdsFromParticipants.join(", ") : "NONE"}</p>
-              <p className="text-white">Combined: {debugData.tournamentIds.length}</p>
-            </div>
-            <div className="p-2 bg-black/20 rounded">
-              <p className="text-muted-foreground">Match Count:</p>
-              <p className="text-white">{debugData.matchCount}</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Debug Panel - Collapsible */}
+      <DebugPanel debugData={debugData} />
 
       {/* Overall Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
