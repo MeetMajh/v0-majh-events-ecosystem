@@ -54,6 +54,7 @@ export default async function PlayerControllerPage() {
     .single()
 
 // Step 1: Get matches directly using user.id (matches store auth user IDs in player1_id/player2_id)
+  // Use left join syntax to avoid errors when profiles don't exist
   const { data: matchData, error: matchesError } = await adminClient
     .from("tournament_matches")
     .select(`
@@ -69,8 +70,6 @@ export default async function PlayerControllerPage() {
       winner_id,
       table_number,
       created_at,
-      player1:profiles!tournament_matches_player1_id_fkey (id, first_name, last_name, avatar_url),
-      player2:profiles!tournament_matches_player2_id_fkey (id, first_name, last_name, avatar_url),
       tournament_rounds (id, round_number, status)
     `)
     .or(`player1_id.eq.${user.id},player2_id.eq.${user.id}`)
