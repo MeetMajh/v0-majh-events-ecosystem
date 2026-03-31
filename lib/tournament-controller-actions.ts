@@ -546,7 +546,10 @@ export async function reportMatchResult(
 
   if (!match) return { error: "Match not found" }
 
-  const isPlayer = match.player1_id === user.id || match.player2_id === user.id
+  // Check if reporting player is in this match (player_id from registrations)
+  const isPlayer1 = match.player1_id === reportingPlayerId || match.player1_id === user.id
+  const isPlayer2 = match.player2_id === reportingPlayerId || match.player2_id === user.id
+  const isPlayer = isPlayer1 || isPlayer2
   
   // Check if TO
   const auth = await requireTournamentOrganizer(match.tournament_id)
@@ -579,13 +582,15 @@ export async function reportMatchResult(
     updates.status = "confirmed"
     updates.confirmed_at = new Date().toISOString()
     updates.confirmed_by = user.id
-  } else if (match.player1_id === user.id) {
+  } else if (isPlayer1) {
+    // Player 1 is reporting
     updates.status = match.status === "player2_reported" ? "confirmed" : "player1_reported"
     updates.player1_reported_at = new Date().toISOString()
     if (updates.status === "confirmed") {
       updates.confirmed_at = new Date().toISOString()
     }
-  } else {
+  } else if (isPlayer2) {
+    // Player 2 is reporting
     updates.status = match.status === "player1_reported" ? "confirmed" : "player2_reported"
     updates.player2_reported_at = new Date().toISOString()
     if (updates.status === "confirmed") {

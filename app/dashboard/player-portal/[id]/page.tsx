@@ -42,15 +42,15 @@ export default async function PlayerControllerPage({ params }: { params: Promise
     notFound()
   }
 
-  // Get the player_id for this user in this tournament
-  const { data: playerRecord } = await supabase
-    .from("players")
-    .select("id")
-    .eq("user_id", user.id)
+  // Get the player_id for this user in this tournament from tournament_registrations
+  const { data: registrationRecord } = await supabase
+    .from("tournament_registrations")
+    .select("player_id")
+    .eq("player_id", user.id)
     .eq("tournament_id", tournamentId)
     .single()
 
-  const playerId = playerRecord?.id
+  const playerId = registrationRecord?.player_id || user.id
 
   // Check if user has participated via matches using player_id
   let userMatches: any[] = []
