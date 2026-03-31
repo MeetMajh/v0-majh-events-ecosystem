@@ -52,64 +52,49 @@ export default async function PlayerControllerPage() {
     .eq("id", user.id)
     .single()
 
-  // Get all matches for this user - query by direct ID match
-  const { data: matchesByDirectId } = await adminClient
-    .from("tournament_matches")
-    .select(`
-      id,
-      tournament_id,
-      round_id,
-      status,
-      result,
-      player1_id,
-      player2_id,
-      player1_wins,
-      player2_wins,
-      table_number,
-      created_at,
-      player1:profiles!tournament_matches_player1_id_fkey (id, first_name, last_name, avatar_url),
-      player2:profiles!tournament_matches_player2_id_fkey (id, first_name, last_name, avatar_url),
-      tournament_rounds (id, round_number, status)
-    `)
-    .or(`player1_id.eq.${user.id},player2_id.eq.${user.id}`)
-    .order("created_at", { ascending: false })
+  // Step 1: Get all player_ids for this user from the players table
+  const { data: playerRecords } = await adminClient
+    .from("players")
+    .select("id, tournament_id")
+    .eq("user_id", user.id)
 
-  // Also get matches where player1 or player2 profile.id matches our user
-  const { data: matchesByPlayer1Profile } = await adminClient
-    .from("tournament_matches")
-    .select(`
-      id, tournament_id, round_id, status, result, player1_id, player2_id,
-      player1_wins, player2_wins, table_number, created_at,
-      player1:profiles!tournament_matches_player1_id_fkey!inner (id, first_name, last_name, avatar_url),
-      player2:profiles!tournament_matches_player2_id_fkey (id, first_name, last_name, avatar_url),
-      tournament_rounds (id, round_number, status)
-    `)
-    .eq("player1.id", user.id)
-    .order("created_at", { ascending: false })
+  // Create a map of tournament_id -> player_id for match lookups
+  const playerMap = new Map<string, string>(
+    (playerRecords || []).map(p => [p.tournament_id, p.id])
+  )
+  const playerIds = (playerRecords || []).map(p => p.id)
 
-  const { data: matchesByPlayer2Profile } = await adminClient
-    .from("tournament_matches")
-    .select(`
-      id, tournament_id, round_id, status, result, player1_id, player2_id,
-      player1_wins, player2_wins, table_number, created_at,
-      player1:profiles!tournament_matches_player1_id_fkey (id, first_name, last_name, avatar_url),
-      player2:profiles!tournament_matches_player2_id_fkey!inner (id, first_name, last_name, avatar_url),
-      tournament_rounds (id, round_number, status)
-    `)
-    .eq("player2.id", user.id)
-    .order("created_at", { ascending: false })
-
-  // Combine all matches, dedupe by ID
-  const allMatchesMap = new Map<string, any>()
-  ;[...(matchesByDirectId || []), ...(matchesByPlayer1Profile || []), ...(matchesByPlayer2Profile || [])].forEach(m => {
-    if (!allMatchesMap.has(m.id)) allMatchesMap.set(m.id, m)
-  })
-  const userMatches = Array.from(allMatchesMap.values())
+  // Step 2: Get matches using the player_ids (not user.id)
+  let userMatches: any[] = []
+  if (playerIds.length > 0) {
+    const { data: matchData } = await adminClient
+      .from("tournament_matches")
+      .select(`
+        id,
+        tournament_id,
+        round_id,
+        status,
+        result,
+        player1_id,
+        player2_id,
+        player1_wins,
+        player2_wins,
+        table_number,
+        created_at,
+        player1:profiles!tournament_matches_player1_id_fkey (id, first_name, last_name, avatar_url),
+        player2:profiles!tournament_matches_player2_id_fkey (id, first_name, last_name, avatar_url),
+        tournament_rounds (id, round_number, status)
+      `)
+      .or(playerIds.map(id => `player1_id.eq.${id},player2_id.eq.${id}`).join(","))
+      .order("created_at", { ascending: false })
+    
+    userMatches = matchData || []
+  }
 
   // Get unique tournament IDs from matches
   const tournamentIdsFromMatches = [...new Set(userMatches.map(m => m.tournament_id).filter(Boolean))]
   
-  // Get tournaments from tournament_participants (the correct table with user_id)
+  // Step 3: Get tournaments from tournament_participants (using user_id)
   const { data: participantData } = await adminClient
     .from("tournament_participants")
     .select("tournament_id")
@@ -213,7 +198,8 @@ export default async function PlayerControllerPage() {
   let totalWins = 0, totalLosses = 0, totalDraws = 0
   userMatches?.forEach(m => {
     if (m.status === "completed" || m.result) {
-      const isPlayer1 = m.player1_id === user.id
+      const playerId = playerMap.get(m.tournament_id)
+      const isPlayer1 = m.player1_id === playerId
       if (m.result === "draw") {
         totalDraws++
       } else if ((isPlayer1 && (m.player1_wins || 0) > (m.player2_wins || 0)) || (!isPlayer1 && (m.player2_wins || 0) > (m.player1_wins || 0))) {
@@ -228,12 +214,13 @@ export default async function PlayerControllerPage() {
   // Calculate match stats per tournament
   const getTournamentStats = (tournamentId: string) => {
     const matches = userMatches?.filter(m => m.tournament_id === tournamentId) || []
+    const playerId = playerMap.get(tournamentId)
     let wins = 0, losses = 0, draws = 0
     const currentMatch = matches.find(m => m.status === "in_progress" || m.status === "pending")
     
     matches.forEach(m => {
       if (m.status === "completed" || m.result) {
-        const isPlayer1 = m.player1_id === user.id
+        const isPlayer1 = m.player1_id === playerId
         if (m.result === "draw") {
           draws++
         } else if ((isPlayer1 && (m.player1_wins || 0) > (m.player2_wins || 0)) || (!isPlayer1 && (m.player2_wins || 0) > (m.player1_wins || 0))) {
@@ -250,7 +237,8 @@ export default async function PlayerControllerPage() {
   // Get player's standing in a tournament
   const getPlayerStanding = (tournamentId: string) => {
     const standings = standingsMap[tournamentId] || []
-    return standings.find(s => s.player_id === user.id)
+    const playerId = playerMap.get(tournamentId)
+    return standings.find(s => s.player_id === playerId)
   }
 
   return (

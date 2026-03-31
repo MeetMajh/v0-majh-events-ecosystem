@@ -42,16 +42,29 @@ export default async function PlayerControllerPage({ params }: { params: Promise
     notFound()
   }
 
-  // Check if user has participated via matches (player1_id or player2_id)
-  // Uses same query pattern as My Events page (which works)
-  const { data: userMatches } = await supabase
-    .from("tournament_matches")
+  // Get the player_id for this user in this tournament
+  const { data: playerRecord } = await supabase
+    .from("players")
     .select("id")
+    .eq("user_id", user.id)
     .eq("tournament_id", tournamentId)
-    .or(`player1_id.eq.${user.id},player2_id.eq.${user.id}`)
-    .limit(1)
+    .single()
 
-  // Check participation via tournament_participants (the correct table with user_id)
+  const playerId = playerRecord?.id
+
+  // Check if user has participated via matches using player_id
+  let userMatches: any[] = []
+  if (playerId) {
+    const { data } = await supabase
+      .from("tournament_matches")
+      .select("id")
+      .eq("tournament_id", tournamentId)
+      .or(`player1_id.eq.${playerId},player2_id.eq.${playerId}`)
+      .limit(1)
+    userMatches = data || []
+  }
+
+  // Check participation via tournament_participants (using user_id)
   const { data: registration } = await supabase
     .from("tournament_participants")
     .select("*")
@@ -60,7 +73,7 @@ export default async function PlayerControllerPage({ params }: { params: Promise
     .single()
 
   // User must have either matches OR registration
-  if (!userMatches?.length && !registration) {
+  if (!userMatches.length && !registration) {
     redirect("/dashboard/player-portal?error=not_registered")
   }
 
@@ -85,6 +98,7 @@ export default async function PlayerControllerPage({ params }: { params: Promise
       tournament={tournament}
       registration={effectiveRegistration}
       userId={user.id}
+      playerId={playerId}
       currentPhase={playerData.currentPhase}
       currentRound={playerData.currentRound}
       currentMatch={playerData.currentMatch}
