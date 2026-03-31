@@ -51,12 +51,12 @@ export default async function PlayerControllerPage({ params }: { params: Promise
     .or(`player1_id.eq.${user.id},player2_id.eq.${user.id}`)
     .limit(1)
 
-  // Check registration via player_id (the correct column)
+  // Check participation via tournament_participants (the correct table with user_id)
   const { data: registration } = await supabase
-    .from("tournament_registrations")
+    .from("tournament_participants")
     .select("*")
     .eq("tournament_id", tournamentId)
-    .eq("player_id", user.id)
+    .eq("user_id", user.id)
     .single()
 
   // User must have either matches OR registration

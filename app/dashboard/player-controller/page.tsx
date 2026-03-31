@@ -109,18 +109,18 @@ export default async function PlayerControllerPage() {
   // Get unique tournament IDs from matches
   const tournamentIdsFromMatches = [...new Set(userMatches.map(m => m.tournament_id).filter(Boolean))]
   
-  // Get tournaments from registrations via player_id (the correct column)
-  const { data: regsByPlayerId } = await adminClient
-    .from("tournament_registrations")
+  // Get tournaments from tournament_participants (the correct table with user_id)
+  const { data: participantData } = await adminClient
+    .from("tournament_participants")
     .select("tournament_id")
-    .eq("player_id", user.id)
+    .eq("user_id", user.id)
   
-  const tournamentIdsFromRegistrations = [...new Set((regsByPlayerId || []).map(r => r.tournament_id).filter(Boolean))]
+  const tournamentIdsFromParticipants = [...new Set((participantData || []).map(r => r.tournament_id).filter(Boolean))]
 
-  // Combine matches and registrations sources
+  // Combine matches and participants sources
   const tournamentIds = [...new Set([
     ...tournamentIdsFromMatches, 
-    ...tournamentIdsFromRegistrations
+    ...tournamentIdsFromParticipants
   ])]
 
   // Fetch tournament details using admin client

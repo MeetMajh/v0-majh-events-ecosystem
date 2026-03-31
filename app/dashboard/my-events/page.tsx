@@ -69,9 +69,9 @@ async function getMyEvents(userId: string) {
     tournaments: tournament
   }))
 
-  // SECONDARY: Try registrations via player_id (the correct column)
-  const { data: traditionalRegs } = await supabase
-    .from("tournament_registrations")
+  // SECONDARY: Get from tournament_participants (the correct table with user_id)
+  const { data: participantRegs } = await supabase
+    .from("tournament_participants")
     .select(`
       *,
       tournaments (
@@ -79,12 +79,12 @@ async function getMyEvents(userId: string) {
         games (id, name, category, icon_url)
       )
     `)
-    .eq("player_id", userId)
+    .eq("user_id", userId)
     .order("created_at", { ascending: false })
 
-  // Merge registrations, preferring traditional ones if they exist
+  // Merge registrations, preferring participant records if they exist
   const existingTournamentIds = new Set(registrations.map(r => r.tournament_id))
-  traditionalRegs?.forEach(reg => {
+  participantRegs?.forEach(reg => {
     if (!existingTournamentIds.has(reg.tournament_id)) {
       registrations.push(reg)
     }
