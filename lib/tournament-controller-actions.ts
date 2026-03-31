@@ -157,17 +157,19 @@ export async function createSwissRound(tournamentId: string, phaseId: string) {
 
     const roundNumber = (existingRounds?.[0]?.round_number ?? 0) + 1
 
-    // Get all registered players (not dropped)
-    const { data: registrations } = await supabase
-      .from("tournament_registrations")
-      .select("player_id")
+    // Get all registered players from tournament_participants (not dropped)
+    const { data: participants } = await supabase
+      .from("tournament_participants")
+      .select("user_id")
       .eq("tournament_id", tournamentId)
-      .neq("status", "dropped")
-      .neq("status", "disqualified")
+      .in("status", ["registered", "checked_in"])
 
-    if (!registrations || registrations.length < 2) {
+    if (!participants || participants.length < 2) {
       return { error: "Need at least 2 active players" }
     }
+
+    // Map participants to registrations format for compatibility
+    const registrations = participants.map(p => ({ player_id: p.user_id }))
 
     // Get player stats for pairing
     const { data: stats } = await supabase
@@ -337,17 +339,19 @@ export async function regeneratePairings(tournamentId: string, roundId: string) 
 
   if (!phase) return { error: "Phase not found" }
 
-  // Get active registrations
-  const { data: registrations } = await supabase
-    .from("tournament_registrations")
-    .select("player_id")
+  // Get active participants from tournament_participants
+  const { data: participants } = await supabase
+    .from("tournament_participants")
+    .select("user_id")
     .eq("tournament_id", tournamentId)
-    .neq("status", "dropped")
-    .neq("status", "disqualified")
+    .in("status", ["registered", "checked_in"])
 
-  if (!registrations || registrations.length < 2) {
+  if (!participants || participants.length < 2) {
     return { error: "Need at least 2 active players" }
   }
+
+  // Map participants to registrations format for compatibility
+  const registrations = participants.map(p => ({ player_id: p.user_id }))
 
   // Get player stats
   const { data: stats } = await supabase
@@ -938,9 +942,9 @@ export async function startTournament(tournamentId: string) {
     
     if (!tournament) return { error: "Tournament not found" }
     
-    // Verify enough players - count all who are registered or checked_in
+    // Verify enough players - count all who are registered or checked_in from tournament_participants
     const { count: playerCount } = await supabase
-      .from("tournament_registrations")
+      .from("tournament_participants")
       .select("*", { count: "exact", head: true })
       .eq("tournament_id", tournamentId)
       .in("status", ["registered", "checked_in"])
@@ -1580,7 +1584,7 @@ export async function advanceEliminationWinner(matchId: string) {
   return { success: true }
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
+// ═════���════════════════════════════════════════════════════════════════════════
 // Player Registration & Check-in
 // ══════════════════════════════════════════════════════════════════════════════
 
