@@ -46,7 +46,7 @@ import {
 
 // Actions
 import { dropFromTournament, submitPlayerTicket } from "@/lib/player-actions"
-import { submitDecklist } from "@/lib/tournament-controller-actions"
+import { submitDecklist, reportMatchResult } from "@/lib/tournament-controller-actions"
 import { ISSUE_CATEGORIES } from "@/lib/tournament-issue-constants"
 
 interface PlayerControllerProps {
@@ -412,20 +412,210 @@ function CurrentMatchSection({
         </div>
       )}
 
-      {match.status === "pending" && (
-        <p className="text-center text-yellow-500 font-medium">
-          Match in progress
-        </p>
+      {/* Match Result Reporting */}
+      {(match.status === "pending" || match.status === "in_progress") && !match.is_bye && (
+        <MatchResultReporter
+          matchId={match.id}
+          playerId={playerId}
+          isPlayer1={isPlayer1}
+          opponentName={opponentName}
+        />
       )}
 
-      <div className="flex justify-center">
-        <Button asChild variant="outline">
+      {/* Already reported status */}
+      {(match.status === "player1_reported" || match.status === "player2_reported") && (
+        <div className="text-center p-3 bg-yellow-500/10 rounded-lg border border-yellow-500/30">
+          <p className="text-yellow-500 font-medium">
+            {match.status === (isPlayer1 ? "player1_reported" : "player2_reported")
+              ? "Waiting for opponent to confirm"
+              : "Opponent reported - please confirm"}
+          </p>
+          {match.status !== (isPlayer1 ? "player1_reported" : "player2_reported") && (
+            <MatchResultReporter
+              matchId={match.id}
+              playerId={playerId}
+              isPlayer1={isPlayer1}
+              opponentName={opponentName}
+              prefillWins={isPlayer1 ? match.player1_wins : match.player2_wins}
+              prefillLosses={isPlayer1 ? match.player2_wins : match.player1_wins}
+              prefillDraws={match.draws}
+            />
+          )}
+        </div>
+      )}
+
+      {match.status === "confirmed" && (
+        <div className="text-center p-3 bg-green-500/10 rounded-lg border border-green-500/30">
+          <p className="text-green-500 font-medium flex items-center justify-center gap-2">
+            <CheckCircle2 className="h-4 w-4" />
+            Result Confirmed
+          </p>
+        </div>
+      )}
+
+      <div className="flex justify-center pt-2">
+        <Button asChild variant="outline" size="sm">
           <Link href={`/esports/tournaments/${tournamentId}`}>
             <ExternalLink className="h-4 w-4 mr-2" />
-            View Tournament &amp; Report Result
+            View Full Tournament
           </Link>
         </Button>
       </div>
+    </div>
+  )
+}
+
+// ── Match Result Reporter ──
+
+function MatchResultReporter({
+  matchId,
+  playerId,
+  isPlayer1,
+  opponentName,
+  prefillWins = 0,
+  prefillLosses = 0,
+  prefillDraws = 0,
+}: {
+  matchId: string
+  playerId: string
+  isPlayer1: boolean
+  opponentName: string
+  prefillWins?: number
+  prefillLosses?: number
+  prefillDraws?: number
+}) {
+  const [isPending, startTransition] = useTransition()
+  const [myWins, setMyWins] = useState(prefillWins)
+  const [myLosses, setMyLosses] = useState(prefillLosses)
+  const [draws, setDraws] = useState(prefillDraws)
+  const [showAdvanced, setShowAdvanced] = useState(false)
+
+  const handleQuickReport = (result: "win" | "lose" | "draw") => {
+    let p1Wins = 0, p2Wins = 0, drawCount = 0
+    
+    if (result === "win") {
+      if (isPlayer1) { p1Wins = 2; p2Wins = 0 }
+      else { p1Wins = 0; p2Wins = 2 }
+    } else if (result === "lose") {
+      if (isPlayer1) { p1Wins = 0; p2Wins = 2 }
+      else { p1Wins = 2; p2Wins = 0 }
+    } else {
+      drawCount = 1
+      p1Wins = 1; p2Wins = 1
+    }
+
+    startTransition(async () => {
+      const res = await reportMatchResult(matchId, playerId, p1Wins, p2Wins, drawCount)
+      if ("error" in res) {
+        toast.error(res.error)
+      } else {
+        toast.success("Result reported! Waiting for confirmation.")
+      }
+    })
+  }
+
+  const handleDetailedReport = () => {
+    const p1Wins = isPlayer1 ? myWins : myLosses
+    const p2Wins = isPlayer1 ? myLosses : myWins
+    
+    startTransition(async () => {
+      const res = await reportMatchResult(matchId, playerId, p1Wins, p2Wins, draws)
+      if ("error" in res) {
+        toast.error(res.error)
+      } else {
+        toast.success("Result reported! Waiting for confirmation.")
+      }
+    })
+  }
+
+  return (
+    <div className="space-y-3 pt-2">
+      <p className="text-sm text-muted-foreground text-center">Report your result vs {opponentName}</p>
+      
+      {/* Quick buttons */}
+      <div className="grid grid-cols-3 gap-2">
+        <Button
+          variant="outline"
+          className="border-green-500/50 hover:bg-green-500/10 hover:border-green-500"
+          onClick={() => handleQuickReport("win")}
+          disabled={isPending}
+        >
+          <Trophy className="h-4 w-4 mr-1 text-green-500" />
+          I Won
+        </Button>
+        <Button
+          variant="outline"
+          className="border-yellow-500/50 hover:bg-yellow-500/10 hover:border-yellow-500"
+          onClick={() => handleQuickReport("draw")}
+          disabled={isPending}
+        >
+          <Swords className="h-4 w-4 mr-1 text-yellow-500" />
+          Draw
+        </Button>
+        <Button
+          variant="outline"
+          className="border-red-500/50 hover:bg-red-500/10 hover:border-red-500"
+          onClick={() => handleQuickReport("lose")}
+          disabled={isPending}
+        >
+          <AlertCircle className="h-4 w-4 mr-1 text-red-500" />
+          I Lost
+        </Button>
+      </div>
+
+      {/* Advanced reporting toggle */}
+      <Collapsible open={showAdvanced} onOpenChange={setShowAdvanced}>
+        <CollapsibleTrigger asChild>
+          <Button variant="ghost" size="sm" className="w-full text-xs text-muted-foreground">
+            {showAdvanced ? <ChevronUp className="h-3 w-3 mr-1" /> : <ChevronDown className="h-3 w-3 mr-1" />}
+            Detailed Score Entry
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="pt-2 space-y-3">
+          <div className="grid grid-cols-3 gap-3 text-center">
+            <div>
+              <Label className="text-xs text-muted-foreground">My Wins</Label>
+              <Input
+                type="number"
+                min={0}
+                max={9}
+                value={myWins}
+                onChange={(e) => setMyWins(parseInt(e.target.value) || 0)}
+                className="text-center"
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground">Draws</Label>
+              <Input
+                type="number"
+                min={0}
+                max={9}
+                value={draws}
+                onChange={(e) => setDraws(parseInt(e.target.value) || 0)}
+                className="text-center"
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground">My Losses</Label>
+              <Input
+                type="number"
+                min={0}
+                max={9}
+                value={myLosses}
+                onChange={(e) => setMyLosses(parseInt(e.target.value) || 0)}
+                className="text-center"
+              />
+            </div>
+          </div>
+          <Button
+            onClick={handleDetailedReport}
+            disabled={isPending}
+            className="w-full"
+          >
+            Submit Detailed Result
+          </Button>
+        </CollapsibleContent>
+      </Collapsible>
     </div>
   )
 }

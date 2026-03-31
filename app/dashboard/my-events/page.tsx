@@ -21,16 +21,16 @@ async function getMyEvents(userId: string) {
   const supabase = await createClient()
 
   // PRIMARY: Get tournaments from match history (player1_id/player2_id = user.id)
-  // This works because match records have the auth user ID
-  // Step 1: Get all player_ids for this user from the players table
-  const { data: playerRecords } = await supabase
-    .from("players")
-    .select("id, tournament_id")
-    .eq("user_id", userId)
+  // Get all registrations for this user from tournament_registrations
+  // player_id in tournament_registrations references profiles.id which equals user.id
+  const { data: registrationRecords } = await supabase
+    .from("tournament_registrations")
+    .select("player_id, tournament_id")
+    .eq("player_id", userId)
 
-  const playerIds = (playerRecords || []).map(p => p.id)
+  const playerIds = [...new Set((registrationRecords || []).map(r => r.player_id).filter(Boolean))]
   const playerMap = new Map<string, string>(
-    (playerRecords || []).map(p => [p.tournament_id, p.id])
+    (registrationRecords || []).map(r => [r.tournament_id, r.player_id])
   )
 
   // Step 2: Get matches using player_ids
