@@ -25,6 +25,7 @@ interface DebugData {
   userEmail: string | undefined
   registrationRecords: any[]
   registrationsError: string | null
+  matchesError?: string | null
   participantData: any[]
   tournamentIdsFromMatches: string[]
   tournamentIdsFromParticipants: string[]
@@ -317,9 +318,20 @@ export function DebugPanel({ debugData }: DebugPanelProps) {
             )}
 
             {/* Error Display */}
-            {debugData.registrationsError && (
-              <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30">
-                <p className="text-sm text-red-500">{debugData.registrationsError}</p>
+            {(debugData.registrationsError || debugData.matchesError) && (
+              <div className="space-y-2">
+                {debugData.registrationsError && (
+                  <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30">
+                    <p className="text-xs text-muted-foreground">Registrations Error:</p>
+                    <p className="text-sm text-red-500">{debugData.registrationsError}</p>
+                  </div>
+                )}
+                {debugData.matchesError && (
+                  <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30">
+                    <p className="text-xs text-muted-foreground">Matches Error:</p>
+                    <p className="text-sm text-red-500">{debugData.matchesError}</p>
+                  </div>
+                )}
               </div>
             )}
           </CardContent>

@@ -21,6 +21,7 @@ async function getMyEvents(userId: string) {
   const supabase = await createClient()
 
   // PRIMARY: Get matches directly using user.id (matches store auth user IDs)
+  // Get matches directly using userId - remove profile joins to avoid FK errors
   const { data: matchData } = await supabase
     .from("tournament_matches")
     .select(`
@@ -31,9 +32,7 @@ async function getMyEvents(userId: string) {
       player1_id,
       player2_id,
       winner_id,
-      tournament_rounds (round_number, status),
-      player1:profiles!player1_id (id, first_name, last_name, avatar_url),
-      player2:profiles!player2_id (id, first_name, last_name, avatar_url)
+      tournament_rounds (round_number, status)
     `)
     .or(`player1_id.eq.${userId},player2_id.eq.${userId}`)
     .order("created_at", { ascending: false })
