@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import { getPlayerDisplayName } from "@/lib/player-utils"
@@ -56,6 +57,7 @@ import {
   TicketCheck,
   Shield,
   ArrowLeftRight,
+  Edit2,
 } from "lucide-react"
 import {
   createSwissRound,
@@ -150,6 +152,30 @@ currentRound: {
       player2: { id: string; display_name: string; avatar_url: string | null } | null
     }>
   } | null
+  allRounds: Array<{
+    id: string
+    round_number: number
+    round_type: string
+    status: string
+    started_at: string | null
+    end_time: string | null
+    time_limit_minutes?: number
+    tournament_phases: { name: string } | null
+    matches: Array<{
+      id: string
+      table_number: number
+      status: string
+      is_bye: boolean
+      player1_wins: number | null
+      player2_wins: number | null
+      winner_id: string | null
+      loser_id: string | null
+      reported_player1_wins: number | null
+      reported_player2_wins: number | null
+      player1: { id: string; display_name: string; avatar_url: string | null } | null
+      player2: { id: string; display_name: string; avatar_url: string | null } | null
+    }>
+  }>
   standings: PlayerStanding[]
   paymentSummary: {
     totalRegistrations: number
@@ -193,6 +219,7 @@ export function TournamentController({
   phases,
   registrations,
   currentRound,
+  allRounds,
   standings,
   paymentSummary,
   isStaff,
@@ -202,7 +229,7 @@ export function TournamentController({
   const [activeSection, setActiveSection] = useState("overview")
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedMatch, setSelectedMatch] = useState<string | null>(null)
-  const [matchResult, setMatchResult] = useState({ p1Wins: 0, p2Wins: 0, draws: 0 })
+  const [matchResult, setMatchResult] = useState({ player1Wins: 0, player2Wins: 0, draws: 0 })
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null)
   const [isTimerRunning, setIsTimerRunning] = useState(false)
   const [newPlayerEmail, setNewPlayerEmail] = useState("")
@@ -369,28 +396,37 @@ export function TournamentController({
     })
   }
 
-  const handleReportResult = () => {
-    if (!selectedMatch) return
-    const match = currentRound?.matches.find(m => m.id === selectedMatch)
+  const handleReportResult = (matchIdOverride?: string) => {
+    const matchId = matchIdOverride || selectedMatch
+    if (!matchId) return
+    
+    // Find match in currentRound or allRounds
+    let match = currentRound?.matches.find(m => m.id === matchId)
+    if (!match) {
+      for (const round of allRounds) {
+        match = round.matches.find(m => m.id === matchId)
+        if (match) break
+      }
+    }
     if (!match || !match.player1) return
 
     startTransition(async () => {
-      const winnerId = matchResult.p1Wins > matchResult.p2Wins 
+      const winnerId = matchResult.player1Wins > matchResult.player2Wins 
         ? match.player1!.id 
-        : matchResult.p2Wins > matchResult.p1Wins
+        : matchResult.player2Wins > matchResult.player1Wins
           ? match.player2?.id ?? null
           : null
 
-      if (!winnerId && matchResult.p1Wins === matchResult.p2Wins && matchResult.draws === 0) {
+      if (!winnerId && matchResult.player1Wins === matchResult.player2Wins && matchResult.draws === 0) {
         toast.error("Must have a winner or draws")
         return
       }
 
       const result = await reportMatchResult(
-        selectedMatch,
+        matchId,
         winnerId || match.player1!.id,
-        matchResult.p1Wins,
-        matchResult.p2Wins,
+        matchResult.player1Wins,
+        matchResult.player2Wins,
         matchResult.draws
       )
       
@@ -399,7 +435,7 @@ export function TournamentController({
       } else {
         toast.success("Result recorded!")
         setSelectedMatch(null)
-        setMatchResult({ p1Wins: 0, p2Wins: 0, draws: 0 })
+        setMatchResult({ player1Wins: 0, player2Wins: 0, draws: 0 })
         router.refresh()
       }
     })
@@ -1285,8 +1321,8 @@ const handleAddPlayer = () => {
                                         <Input
                                           type="number"
                                           min="0"
-                                          value={matchResult.p1Wins}
-                                          onChange={(e) => setMatchResult(prev => ({ ...prev, p1Wins: parseInt(e.target.value) || 0 }))}
+                                          value={matchResult.player1Wins}
+                                          onChange={(e) => setMatchResult(prev => ({ ...prev, player1Wins: parseInt(e.target.value) || 0 }))}
                                           className="text-center"
                                         />
                                         <span className="text-sm text-muted-foreground">Wins</span>
@@ -1296,8 +1332,8 @@ const handleAddPlayer = () => {
                                         <Input
                                           type="number"
                                           min="0"
-                                          value={matchResult.p2Wins}
-                                          onChange={(e) => setMatchResult(prev => ({ ...prev, p2Wins: parseInt(e.target.value) || 0 }))}
+                                          value={matchResult.player2Wins}
+                                          onChange={(e) => setMatchResult(prev => ({ ...prev, player2Wins: parseInt(e.target.value) || 0 }))}
                                           className="text-center"
                                         />
                                         <span className="text-sm text-muted-foreground">Wins</span>
@@ -1316,7 +1352,7 @@ const handleAddPlayer = () => {
                                       </div>
                                     </div>
                                     <DialogFooter>
-                                      <Button onClick={handleReportResult} disabled={isPending}>
+                                      <Button onClick={() => handleReportResult()} disabled={isPending}>
                                         <Send className="mr-2 h-4 w-4" />
                                         Submit Result
                                       </Button>
@@ -1331,11 +1367,200 @@ const handleAddPlayer = () => {
                     </Table>
                   </CardContent>
                 </Card>
+              ) : allRounds.length > 0 ? (
+                // Show all historical rounds with matches
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-muted-foreground">
+                      {allRounds.length} round{allRounds.length !== 1 ? 's' : ''} • {allRounds.reduce((sum, r) => sum + r.matches.length, 0)} total matches
+                    </p>
+                  </div>
+                  {allRounds.map((round) => (
+                    <Card key={round.id}>
+                      <Collapsible defaultOpen={round.status !== "completed"}>
+                        <CollapsibleTrigger asChild>
+                          <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary font-bold">
+                                  {round.round_number}
+                                </div>
+                                <div>
+                                  <CardTitle className="text-base">Round {round.round_number}</CardTitle>
+                                  <p className="text-xs text-muted-foreground">
+                                    {round.matches.filter(m => m.status === 'confirmed' || m.winner_id).length}/{round.matches.length} matches completed
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Badge variant={round.status === "completed" ? "secondary" : round.status === "active" ? "default" : "outline"}>
+                                  {round.status}
+                                </Badge>
+                                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                              </div>
+                            </div>
+                          </CardHeader>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <CardContent className="pt-0">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead className="w-16">Table</TableHead>
+                                  <TableHead>Player 1</TableHead>
+                                  <TableHead className="text-center w-24">Result</TableHead>
+                                  <TableHead>Player 2</TableHead>
+                                  <TableHead className="text-center w-24">Status</TableHead>
+                                  <TableHead className="w-32">Actions</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {round.matches.map((match) => (
+                                  <TableRow key={match.id}>
+                                    <TableCell className="font-mono">{match.table_number}</TableCell>
+                                    <TableCell>
+                                      <div className="flex items-center gap-2">
+                                        <Avatar className="h-6 w-6">
+                                          <AvatarImage src={match.player1?.avatar_url ?? undefined} />
+                                          <AvatarFallback>{match.player1?.display_name?.charAt(0) ?? "?"}</AvatarFallback>
+                                        </Avatar>
+                                        <span className={match.winner_id === match.player1?.id ? "font-bold text-green-500" : ""}>
+                                          {match.player1?.display_name ?? (match.is_bye ? "BYE" : "TBD")}
+                                        </span>
+                                      </div>
+                                    </TableCell>
+                                    <TableCell className="text-center font-mono">
+                                      {match.is_bye ? (
+                                        <span className="text-muted-foreground">BYE</span>
+                                      ) : match.winner_id ? (
+                                        <span>{match.player1_wins ?? 0} - {match.player2_wins ?? 0}</span>
+                                      ) : (
+                                        <span className="text-muted-foreground">vs</span>
+                                      )}
+                                    </TableCell>
+                                    <TableCell>
+                                      <div className="flex items-center gap-2">
+                                        <Avatar className="h-6 w-6">
+                                          <AvatarImage src={match.player2?.avatar_url ?? undefined} />
+                                          <AvatarFallback>{match.player2?.display_name?.charAt(0) ?? "?"}</AvatarFallback>
+                                        </Avatar>
+                                        <span className={match.winner_id === match.player2?.id ? "font-bold text-green-500" : ""}>
+                                          {match.player2?.display_name ?? (match.is_bye ? "-" : "TBD")}
+                                        </span>
+                                      </div>
+                                    </TableCell>
+                                    <TableCell className="text-center">
+                                      <Badge variant={
+                                        match.status === "confirmed" || match.status === "completed" ? "secondary" :
+                                        match.status === "disputed" ? "destructive" :
+                                        match.status === "player1_reported" || match.status === "player2_reported" ? "outline" :
+                                        "default"
+                                      } className="text-xs">
+                                        {match.status === "confirmed" || match.status === "completed" ? "Done" :
+                                         match.status === "disputed" ? "Disputed" :
+                                         match.status === "player1_reported" ? "P1 Reported" :
+                                         match.status === "player2_reported" ? "P2 Reported" :
+                                         "Pending"}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell>
+                                      {!match.is_bye && (
+                                        <Dialog>
+                                          <DialogTrigger asChild>
+                                            <Button 
+                                              variant="outline" 
+                                              size="sm"
+                                              onClick={() => {
+                                                setSelectedMatch(match.id)
+                                                setMatchResult({
+                                                  player1Wins: match.player1_wins ?? 0,
+                                                  player2Wins: match.player2_wins ?? 0,
+                                                  draws: 0
+                                                })
+                                              }}
+                                            >
+                                              <Edit2 className="h-3 w-3 mr-1" />
+                                              Edit
+                                            </Button>
+                                          </DialogTrigger>
+                                          <DialogContent>
+                                            <DialogHeader>
+                                              <DialogTitle>Edit Match Result</DialogTitle>
+                                              <DialogDescription>
+                                                Round {round.round_number}, Table {match.table_number}
+                                              </DialogDescription>
+                                            </DialogHeader>
+                                            <div className="grid grid-cols-3 gap-4 py-4">
+                                              <div className="flex flex-col items-center gap-2">
+                                                <Avatar className="h-12 w-12">
+                                                  <AvatarImage src={match.player1?.avatar_url ?? undefined} />
+                                                  <AvatarFallback>{match.player1?.display_name?.charAt(0)}</AvatarFallback>
+                                                </Avatar>
+                                                <span className="text-sm font-medium text-center">{match.player1?.display_name}</span>
+                                                <Input
+                                                  type="number"
+                                                  min="0"
+                                                  value={matchResult.player1Wins}
+                                                  onChange={(e) => setMatchResult(prev => ({ ...prev, player1Wins: parseInt(e.target.value) || 0 }))}
+                                                  className="text-center w-16"
+                                                />
+                                                <span className="text-xs text-muted-foreground">Wins</span>
+                                              </div>
+                                              <div className="flex flex-col items-center justify-center gap-2">
+                                                <span className="text-2xl font-bold text-muted-foreground">vs</span>
+                                                <Input
+                                                  type="number"
+                                                  min="0"
+                                                  value={matchResult.draws}
+                                                  onChange={(e) => setMatchResult(prev => ({ ...prev, draws: parseInt(e.target.value) || 0 }))}
+                                                  className="text-center w-16"
+                                                />
+                                                <span className="text-xs text-muted-foreground">Draws</span>
+                                              </div>
+                                              <div className="flex flex-col items-center gap-2">
+                                                <Avatar className="h-12 w-12">
+                                                  <AvatarImage src={match.player2?.avatar_url ?? undefined} />
+                                                  <AvatarFallback>{match.player2?.display_name?.charAt(0)}</AvatarFallback>
+                                                </Avatar>
+                                                <span className="text-sm font-medium text-center">{match.player2?.display_name}</span>
+                                                <Input
+                                                  type="number"
+                                                  min="0"
+                                                  value={matchResult.player2Wins}
+                                                  onChange={(e) => setMatchResult(prev => ({ ...prev, player2Wins: parseInt(e.target.value) || 0 }))}
+                                                  className="text-center w-16"
+                                                />
+                                                <span className="text-xs text-muted-foreground">Wins</span>
+                                              </div>
+                                            </div>
+                                            <DialogFooter>
+                                              <Button 
+                                                onClick={() => handleReportResult(match.id)} 
+                                                disabled={isPending}
+                                              >
+                                                <Send className="mr-2 h-4 w-4" />
+                                                Save Result
+                                              </Button>
+                                            </DialogFooter>
+                                          </DialogContent>
+                                        </Dialog>
+                                      )}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </CardContent>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    </Card>
+                  ))}
+                </div>
               ) : (
                 <Card>
                   <CardContent className="flex flex-col items-center justify-center py-12">
                     <Clock className="mb-4 h-12 w-12 text-muted-foreground/50" />
-                    <h3 className="text-lg font-semibold">No active round</h3>
+                    <h3 className="text-lg font-semibold">No rounds yet</h3>
                     <p className="text-sm text-muted-foreground">
                       {tournament.status === "in_progress" 
                         ? "Create a new round to begin pairings"
