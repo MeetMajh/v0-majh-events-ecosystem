@@ -62,7 +62,7 @@ export default async function PlayerPortalPage() {
     tournamentIds,
   })
 
-  // Fetch tournament details using adminClient
+  // Fetch tournament details using adminClient (without games join to avoid FK issues)
   let tournaments: any[] = []
   let tournamentQueryError: string | null = null
   if (tournamentIds.length > 0) {
@@ -78,7 +78,7 @@ export default async function PlayerPortalPage() {
         venue_name,
         location,
         max_participants,
-        games (name, icon_url)
+        game_id
       `)
       .in("id", tournamentIds)
       .order("start_date", { ascending: false })
@@ -88,21 +88,40 @@ export default async function PlayerPortalPage() {
       tournamentQueryError = error.message
     }
     
+    // Fetch games separately to avoid FK relationship issues
+    let gamesMap: Record<string, { name: string; icon_url: string | null }> = {}
+    if (tournamentData && tournamentData.length > 0) {
+      const gameIds = [...new Set(tournamentData.map(t => t.game_id).filter(Boolean))]
+      if (gameIds.length > 0) {
+        const { data: gamesData } = await adminClient
+          .from("games")
+          .select("id, name, icon_url")
+          .in("id", gameIds)
+        
+        gamesData?.forEach(g => {
+          gamesMap[g.id] = { name: g.name, icon_url: g.icon_url }
+        })
+      }
+    }
+    
     if (tournamentData) {
-      // Count matches for each tournament
+      // Count matches for each tournament and attach games
       tournaments = tournamentData.map(t => {
         const matchesInTournament = userMatches?.filter(m => m.tournament_id === t.id) || []
         const wins = matchesInTournament.filter(m => 
           (m.player1_id === user.id && m.result === "player1") ||
-          (m.player2_id === user.id && m.result === "player2")
+          (m.player2_id === user.id && m.result === "player2") ||
+          m.winner_id === user.id
         ).length
         const losses = matchesInTournament.filter(m => 
           (m.player1_id === user.id && m.result === "player2") ||
-          (m.player2_id === user.id && m.result === "player1")
+          (m.player2_id === user.id && m.result === "player1") ||
+          (m.winner_id && m.winner_id !== user.id)
         ).length
         
         return {
           ...t,
+          games: t.game_id ? gamesMap[t.game_id] : null,
           matchCount: matchesInTournament.length,
           wins,
           losses,
