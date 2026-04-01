@@ -54,13 +54,6 @@ export default async function PlayerPortalPage() {
   const tournamentIdsFromMatches = userMatches?.map(m => m.tournament_id).filter(Boolean) || []
   const tournamentIdsFromParticipants = participantRecords?.map(p => p.tournament_id).filter(Boolean) || []
   const tournamentIds = [...new Set([...tournamentIdsFromMatches, ...tournamentIdsFromParticipants])]
-  
-  console.log("[v0] Player Portal Debug:", {
-    userId: user.id,
-    matchesFound: userMatches?.length || 0,
-    participantsFound: participantRecords?.length || 0,
-    tournamentIds,
-  })
 
   // Fetch tournament details using adminClient (without games join to avoid FK issues)
   let tournaments: any[] = []
@@ -129,8 +122,6 @@ export default async function PlayerPortalPage() {
       })
     }
   }
-
-  console.log("[v0] Tournaments fetched:", tournaments.length, tournaments.map(t => ({ id: t.id, name: t.name, status: t.status })))
 
   // Group by status
   const activeTournaments = tournaments.filter(t => t.status === "in_progress")
