@@ -1,7 +1,8 @@
 import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import Link from "next/link"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { 
@@ -9,11 +10,16 @@ import {
   Calendar, 
   MapPin, 
   ChevronRight, 
+  ChevronDown,
   Trophy,
   Clock,
   AlertCircle,
   Joystick,
-  ExternalLink
+  ExternalLink,
+  Activity,
+  Target,
+  Users,
+  Zap
 } from "lucide-react"
 import { format, formatDistanceToNow } from "date-fns"
 import { cn } from "@/lib/utils"
@@ -56,10 +62,11 @@ export default async function PlayerPortalPage() {
     tournamentIds,
   })
 
-  // Fetch tournament details using adminClient
+  // Fetch tournament details using adminClient (without games join to avoid FK issues)
   let tournaments: any[] = []
+  let tournamentQueryError: string | null = null
   if (tournamentIds.length > 0) {
-    const { data: tournamentData } = await adminClient
+    const { data: tournamentData, error } = await adminClient
       .from("tournaments")
       .select(`
         id,
@@ -71,26 +78,50 @@ export default async function PlayerPortalPage() {
         venue_name,
         location,
         max_participants,
-        games (name, icon_url)
+        game_id
       `)
       .in("id", tournamentIds)
       .order("start_date", { ascending: false })
     
+    if (error) {
+      console.log("[v0] Tournament query error:", error)
+      tournamentQueryError = error.message
+    }
+    
+    // Fetch games separately to avoid FK relationship issues
+    let gamesMap: Record<string, { name: string; icon_url: string | null }> = {}
+    if (tournamentData && tournamentData.length > 0) {
+      const gameIds = [...new Set(tournamentData.map(t => t.game_id).filter(Boolean))]
+      if (gameIds.length > 0) {
+        const { data: gamesData } = await adminClient
+          .from("games")
+          .select("id, name, icon_url")
+          .in("id", gameIds)
+        
+        gamesData?.forEach(g => {
+          gamesMap[g.id] = { name: g.name, icon_url: g.icon_url }
+        })
+      }
+    }
+    
     if (tournamentData) {
-      // Count matches for each tournament
+      // Count matches for each tournament and attach games
       tournaments = tournamentData.map(t => {
         const matchesInTournament = userMatches?.filter(m => m.tournament_id === t.id) || []
         const wins = matchesInTournament.filter(m => 
           (m.player1_id === user.id && m.result === "player1") ||
-          (m.player2_id === user.id && m.result === "player2")
+          (m.player2_id === user.id && m.result === "player2") ||
+          m.winner_id === user.id
         ).length
         const losses = matchesInTournament.filter(m => 
           (m.player1_id === user.id && m.result === "player2") ||
-          (m.player2_id === user.id && m.result === "player1")
+          (m.player2_id === user.id && m.result === "player1") ||
+          (m.winner_id && m.winner_id !== user.id)
         ).length
         
         return {
           ...t,
+          games: t.game_id ? gamesMap[t.game_id] : null,
           matchCount: matchesInTournament.length,
           wins,
           losses,
@@ -134,18 +165,83 @@ export default async function PlayerPortalPage() {
         <span className="text-muted-foreground">MAJH Events Connection</span>
       </div>
 
-      {/* Debug Panel - Remove after testing */}
-      <Card className="bg-yellow-500/10 border-yellow-500/50">
-        <CardContent className="py-3 text-xs font-mono">
-          <p><strong>Debug Info:</strong></p>
-          <p>User ID: {user.id}</p>
-          <p>Matches Found: {userMatches?.length || 0}</p>
-          <p>Participants Found: {participantRecords?.length || 0}</p>
-          <p>Tournament IDs: {tournamentIds.length > 0 ? tournamentIds.join(", ") : "None"}</p>
-          <p>Tournaments Fetched: {tournaments.length}</p>
-          <p>Active: {activeTournaments.length}, Upcoming: {upcomingTournaments.length}, Past: {pastTournaments.length}</p>
-        </CardContent>
-      </Card>
+      {/* System Diagnostics Panel */}
+      <Collapsible>
+        <Card className="bg-gradient-to-r from-primary/5 via-primary/10 to-primary/5 border-primary/30 overflow-hidden">
+          <CollapsibleTrigger asChild>
+            <CardHeader className="py-3 px-4 cursor-pointer hover:bg-primary/5 transition-colors">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/20">
+                    <Activity className="h-4 w-4 text-primary" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-semibold">System Diagnostics</h4>
+                    <p className="text-xs text-muted-foreground">Connection status and data sync</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant={tournaments.length > 0 ? "default" : "destructive"} className="text-xs">
+                    {tournaments.length > 0 ? "Synced" : "No Data"}
+                  </Badge>
+                  <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform" />
+                </div>
+              </div>
+            </CardHeader>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <CardContent className="pt-0 pb-4 px-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                <div className="bg-background/50 rounded-lg p-3 border border-border/50">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Target className="h-3 w-3 text-primary" />
+                    <span className="text-xs text-muted-foreground">Matches</span>
+                  </div>
+                  <p className="text-lg font-bold">{userMatches?.length || 0}</p>
+                </div>
+                <div className="bg-background/50 rounded-lg p-3 border border-border/50">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Users className="h-3 w-3 text-primary" />
+                    <span className="text-xs text-muted-foreground">Registrations</span>
+                  </div>
+                  <p className="text-lg font-bold">{participantRecords?.length || 0}</p>
+                </div>
+                <div className="bg-background/50 rounded-lg p-3 border border-border/50">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Trophy className="h-3 w-3 text-primary" />
+                    <span className="text-xs text-muted-foreground">Tournaments</span>
+                  </div>
+                  <p className="text-lg font-bold">{tournaments.length}</p>
+                </div>
+                <div className="bg-background/50 rounded-lg p-3 border border-border/50">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Zap className="h-3 w-3 text-primary" />
+                    <span className="text-xs text-muted-foreground">Active</span>
+                  </div>
+                  <p className="text-lg font-bold">{activeTournaments.length}</p>
+                </div>
+              </div>
+              
+              <div className="space-y-2 text-xs">
+                <div className="flex items-center justify-between p-2 bg-background/30 rounded">
+                  <span className="text-muted-foreground">Player ID</span>
+                  <code className="bg-background px-2 py-0.5 rounded text-[10px]">{user.id.slice(0, 8)}...</code>
+                </div>
+                <div className="flex items-center justify-between p-2 bg-background/30 rounded">
+                  <span className="text-muted-foreground">Tournament IDs Found</span>
+                  <Badge variant="outline" className="text-[10px]">{tournamentIds.length}</Badge>
+                </div>
+                {tournamentQueryError && (
+                  <div className="flex items-center gap-2 p-2 bg-destructive/10 border border-destructive/30 rounded text-destructive">
+                    <AlertCircle className="h-3 w-3" />
+                    <span>Query Error: {tournamentQueryError}</span>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </CollapsibleContent>
+        </Card>
+      </Collapsible>
 
       {tournaments.length === 0 ? (
         <Card className="border-dashed">
