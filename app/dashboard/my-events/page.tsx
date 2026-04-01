@@ -172,7 +172,12 @@ export default async function MyEventsPage() {
     r => r.tournaments && r.tournaments.status === "completed"
   )
 
-  // Calculate stats
+  // Calculate stats from matches directly
+  const matchWins = matches.filter(m => m.winner_id === user.id).length
+  const matchLosses = matches.filter(m => m.winner_id && m.winner_id !== user.id).length
+  const matchDraws = matches.filter(m => m.status === "confirmed" && !m.winner_id).length
+  
+  // Use match-based stats
   const totalWins = leaderboardEntries.reduce((sum, e) => sum + (e.total_wins ?? 0), 0)
   const totalLosses = leaderboardEntries.reduce((sum, e) => sum + (e.total_losses ?? 0), 0)
   const totalPoints = leaderboardEntries.reduce((sum, e) => sum + (e.ranking_points ?? 0), 0)
