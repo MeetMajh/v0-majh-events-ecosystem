@@ -199,6 +199,22 @@ export default async function PlayerControllerPage() {
     })
   }
 
+  // Get leaderboard entries for ranking points
+  const { data: leaderboardEntries } = await adminClient
+    .from("leaderboard_entries")
+    .select("*")
+    .eq("player_id", user.id)
+  
+  const totalRankingPoints = (leaderboardEntries || []).reduce((sum, e) => sum + (e.ranking_points || 0), 0)
+
+  // Get tournament results for titles won
+  const { data: tournamentResults } = await adminClient
+    .from("tournament_results")
+    .select("*")
+    .eq("player_id", user.id)
+  
+  const titlesWon = (tournamentResults || []).filter(r => r.placement === 1).length
+
   // Group tournaments by status
   // Live = in_progress
   // Upcoming = registration, pending, draft
@@ -211,14 +227,17 @@ export default async function PlayerControllerPage() {
     (!["in_progress", "registration", "pending", "draft"].includes(t.status))
   )
   
-  // Calculate overall stats
+  // Calculate overall stats - use user.id directly since matches store auth user IDs
   let totalWins = 0, totalLosses = 0, totalDraws = 0
   userMatches?.forEach(m => {
-    if (m.status === "completed" || m.result) {
-      const playerId = playerMap.get(m.tournament_id)
-      const isPlayer1 = m.player1_id === playerId
+    if (m.status === "completed" || m.status === "confirmed" || m.winner_id) {
+      const isPlayer1 = m.player1_id === user.id
       if (m.result === "draw") {
         totalDraws++
+      } else if (m.winner_id === user.id) {
+        totalWins++
+      } else if (m.winner_id && m.winner_id !== user.id) {
+        totalLosses++
       } else if ((isPlayer1 && (m.player1_wins || 0) > (m.player2_wins || 0)) || (!isPlayer1 && (m.player2_wins || 0) > (m.player1_wins || 0))) {
         totalWins++
       } else if (m.result) {
@@ -228,18 +247,21 @@ export default async function PlayerControllerPage() {
   })
   const winRate = totalWins + totalLosses > 0 ? Math.round((totalWins / (totalWins + totalLosses)) * 100) : 0
 
-  // Calculate match stats per tournament
+  // Calculate match stats per tournament - use user.id directly
   const getTournamentStats = (tournamentId: string) => {
     const matches = userMatches?.filter(m => m.tournament_id === tournamentId) || []
-    const playerId = playerMap.get(tournamentId)
     let wins = 0, losses = 0, draws = 0
     const currentMatch = matches.find(m => m.status === "in_progress" || m.status === "pending")
     
     matches.forEach(m => {
-      if (m.status === "completed" || m.result) {
-        const isPlayer1 = m.player1_id === playerId
+      if (m.status === "completed" || m.status === "confirmed" || m.winner_id) {
+        const isPlayer1 = m.player1_id === user.id
         if (m.result === "draw") {
           draws++
+        } else if (m.winner_id === user.id) {
+          wins++
+        } else if (m.winner_id && m.winner_id !== user.id) {
+          losses++
         } else if ((isPlayer1 && (m.player1_wins || 0) > (m.player2_wins || 0)) || (!isPlayer1 && (m.player2_wins || 0) > (m.player1_wins || 0))) {
           wins++
         } else if (m.result) {
@@ -251,11 +273,11 @@ export default async function PlayerControllerPage() {
     return { wins, losses, draws, currentMatch, totalMatches: matches.length, matches }
   }
 
-  // Get player's standing in a tournament
+  // Get player's standing in a tournament - check both user.id and any mapped playerId
   const getPlayerStanding = (tournamentId: string) => {
     const standings = standingsMap[tournamentId] || []
-    const playerId = playerMap.get(tournamentId)
-    return standings.find(s => s.player_id === playerId)
+    const playerId = playerMap.get(tournamentId) || user.id
+    return standings.find(s => s.player_id === playerId || s.player_id === user.id)
   }
 
   return (
@@ -289,7 +311,7 @@ export default async function PlayerControllerPage() {
                 <TrendingUp className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="text-2xl font-bold">0</p>
+                <p className="text-2xl font-bold">{totalRankingPoints}</p>
                 <p className="text-xs text-muted-foreground">Ranking Points</p>
               </div>
             </div>
@@ -345,7 +367,7 @@ export default async function PlayerControllerPage() {
                 <Trophy className="h-5 w-5 text-amber-500" />
               </div>
               <div>
-                <p className="text-2xl font-bold">0</p>
+                <p className="text-2xl font-bold">{titlesWon}</p>
                 <p className="text-xs text-muted-foreground">Titles Won</p>
               </div>
             </div>
