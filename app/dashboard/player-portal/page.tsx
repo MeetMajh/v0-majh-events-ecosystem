@@ -75,7 +75,6 @@ export default async function PlayerPortalPage() {
         status,
         format,
         start_date,
-        venue_name,
         location,
         max_participants,
         game_id
