@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect, notFound } from "next/navigation"
 import { TournamentController } from "@/components/tournaments/tournament-controller"
-import { getTournamentPhases, getTournamentStandings, getCurrentRound } from "@/lib/tournament-controller-actions"
+import { getTournamentPhases, getTournamentStandings, getCurrentRound, getAllTournamentRounds } from "@/lib/tournament-controller-actions"
 import { getTournamentRegistrations } from "@/lib/tournament-controller-actions"
 import { getPaymentSummary } from "@/lib/tournament-payment-actions"
 
@@ -58,18 +58,21 @@ export default async function TournamentControllerPage({
     netRevenue: 0,
   }
   let standings: Awaited<ReturnType<typeof getTournamentStandings>> = []
+  let allRounds: Awaited<ReturnType<typeof getAllTournamentRounds>> = []
 
   try {
-    const [phasesResult, registrationsResult, currentRoundResult, paymentSummaryResult] = await Promise.all([
+    const [phasesResult, registrationsResult, currentRoundResult, paymentSummaryResult, allRoundsResult] = await Promise.all([
       getTournamentPhases(tournament.id).catch(() => []),
       getTournamentRegistrations(tournament.id).catch(() => []),
       getCurrentRound(tournament.id).catch(() => null),
       getPaymentSummary(tournament.id).catch(() => null),
+      getAllTournamentRounds(tournament.id).catch(() => []),
     ])
     
     phases = phasesResult ?? []
     registrations = registrationsResult ?? []
     currentRound = currentRoundResult
+    allRounds = allRoundsResult ?? []
     paymentSummary = paymentSummaryResult ?? {
       totalRegistrations: 0,
       paidCount: 0,
@@ -95,6 +98,7 @@ export default async function TournamentControllerPage({
       phases={phases}
       registrations={registrations}
       currentRound={currentRound}
+      allRounds={allRounds}
       standings={standings}
       paymentSummary={paymentSummary}
       isStaff={isStaff}
