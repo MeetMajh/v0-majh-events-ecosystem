@@ -134,6 +134,19 @@ export default async function PlayerPortalPage() {
         <span className="text-muted-foreground">MAJH Events Connection</span>
       </div>
 
+      {/* Debug Panel - Remove after testing */}
+      <Card className="bg-yellow-500/10 border-yellow-500/50">
+        <CardContent className="py-3 text-xs font-mono">
+          <p><strong>Debug Info:</strong></p>
+          <p>User ID: {user.id}</p>
+          <p>Matches Found: {userMatches?.length || 0}</p>
+          <p>Participants Found: {participantRecords?.length || 0}</p>
+          <p>Tournament IDs: {tournamentIds.length > 0 ? tournamentIds.join(", ") : "None"}</p>
+          <p>Tournaments Fetched: {tournaments.length}</p>
+          <p>Active: {activeTournaments.length}, Upcoming: {upcomingTournaments.length}, Past: {pastTournaments.length}</p>
+        </CardContent>
+      </Card>
+
       {tournaments.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center justify-center py-16">
