@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { cn } from "@/lib/utils"
 import { redirect } from "next/navigation"
 import Link from "next/link"
@@ -19,10 +19,11 @@ export const metadata = {
 
 async function getMyEvents(userId: string) {
   const supabase = await createClient()
+  const adminClient = createAdminClient()
 
   // PRIMARY: Get matches directly using user.id (matches store auth user IDs)
-  // Get matches directly using userId - remove profile joins to avoid FK errors
-  const { data: matchData } = await supabase
+  // Use adminClient to bypass RLS restrictions
+  const { data: matchData } = await adminClient
     .from("tournament_matches")
     .select(`
       id,
@@ -41,7 +42,7 @@ async function getMyEvents(userId: string) {
   const matches = matchData || []
 
   // Get registrations for additional tournament info
-  const { data: registrationRecords } = await supabase
+  const { data: registrationRecords } = await adminClient
     .from("tournament_registrations")
     .select("player_id, tournament_id")
     .eq("player_id", userId)
@@ -65,7 +66,7 @@ async function getMyEvents(userId: string) {
   // Fetch tournament details for tournaments the user has matches in
   let tournamentsFromMatches: any[] = []
   if (tournamentIdsFromMatches.length > 0) {
-    const { data: tournamentData } = await supabase
+    const { data: tournamentData } = await adminClient
       .from("tournaments")
       .select(`
         id, name, slug, status, start_date, end_date, location, venue_name,
@@ -88,7 +89,7 @@ async function getMyEvents(userId: string) {
   }))
 
   // SECONDARY: Get from tournament_participants (the correct table with user_id)
-  const { data: participantRegs } = await supabase
+  const { data: participantRegs } = await adminClient
     .from("tournament_participants")
     .select(`
       *,
@@ -111,7 +112,7 @@ async function getMyEvents(userId: string) {
   // Get user's leaderboard entries (using playerIds)
   let leaderboardEntries: any[] = []
   if (playerIds.length > 0) {
-    const { data } = await supabase
+    const { data } = await adminClient
       .from("leaderboard_entries")
       .select(`
         *,
@@ -125,7 +126,7 @@ async function getMyEvents(userId: string) {
   // Get user's tournament results (using playerIds)
   let results: any[] = []
   if (playerIds.length > 0) {
-    const { data } = await supabase
+    const { data } = await adminClient
       .from("tournament_results")
       .select(`
         *,

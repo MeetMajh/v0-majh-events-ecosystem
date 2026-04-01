@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import Link from "next/link"
 import { Card, CardContent } from "@/components/ui/card"
@@ -25,20 +25,21 @@ export const metadata = {
 
 export default async function PlayerPortalPage() {
   const supabase = await createClient()
+  const adminClient = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
 
   if (!user) {
     redirect("/login")
   }
 
-  // Get all matches for this user, then extract tournament IDs
-  const { data: userMatches } = await supabase
+  // Get all matches for this user using adminClient to bypass RLS
+  const { data: userMatches } = await adminClient
     .from("tournament_matches")
-    .select("id, tournament_id, player1_id, player2_id, status, result")
+    .select("id, tournament_id, player1_id, player2_id, status, result, winner_id")
     .or(`player1_id.eq.${user.id},player2_id.eq.${user.id}`)
 
   // Also get tournament_participants records for this user
-  const { data: participantRecords } = await supabase
+  const { data: participantRecords } = await adminClient
     .from("tournament_participants")
     .select("tournament_id")
     .eq("user_id", user.id)
@@ -48,10 +49,10 @@ export default async function PlayerPortalPage() {
   const tournamentIdsFromParticipants = participantRecords?.map(p => p.tournament_id).filter(Boolean) || []
   const tournamentIds = [...new Set([...tournamentIdsFromMatches, ...tournamentIdsFromParticipants])]
 
-  // Fetch tournament details
+  // Fetch tournament details using adminClient
   let tournaments: any[] = []
   if (tournamentIds.length > 0) {
-    const { data: tournamentData } = await supabase
+    const { data: tournamentData } = await adminClient
       .from("tournaments")
       .select(`
         id,

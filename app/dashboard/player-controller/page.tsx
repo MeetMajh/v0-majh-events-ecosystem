@@ -199,6 +199,22 @@ export default async function PlayerControllerPage() {
     })
   }
 
+  // Get leaderboard entries for ranking points
+  const { data: leaderboardEntries } = await adminClient
+    .from("leaderboard_entries")
+    .select("*")
+    .eq("player_id", user.id)
+  
+  const totalRankingPoints = (leaderboardEntries || []).reduce((sum, e) => sum + (e.ranking_points || 0), 0)
+
+  // Get tournament results for titles won
+  const { data: tournamentResults } = await adminClient
+    .from("tournament_results")
+    .select("*")
+    .eq("player_id", user.id)
+  
+  const titlesWon = (tournamentResults || []).filter(r => r.placement === 1).length
+
   // Group tournaments by status
   // Live = in_progress
   // Upcoming = registration, pending, draft
@@ -295,7 +311,7 @@ export default async function PlayerControllerPage() {
                 <TrendingUp className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="text-2xl font-bold">0</p>
+                <p className="text-2xl font-bold">{totalRankingPoints}</p>
                 <p className="text-xs text-muted-foreground">Ranking Points</p>
               </div>
             </div>
@@ -351,7 +367,7 @@ export default async function PlayerControllerPage() {
                 <Trophy className="h-5 w-5 text-amber-500" />
               </div>
               <div>
-                <p className="text-2xl font-bold">0</p>
+                <p className="text-2xl font-bold">{titlesWon}</p>
                 <p className="text-xs text-muted-foreground">Titles Won</p>
               </div>
             </div>
