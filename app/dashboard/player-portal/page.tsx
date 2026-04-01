@@ -48,6 +48,13 @@ export default async function PlayerPortalPage() {
   const tournamentIdsFromMatches = userMatches?.map(m => m.tournament_id).filter(Boolean) || []
   const tournamentIdsFromParticipants = participantRecords?.map(p => p.tournament_id).filter(Boolean) || []
   const tournamentIds = [...new Set([...tournamentIdsFromMatches, ...tournamentIdsFromParticipants])]
+  
+  console.log("[v0] Player Portal Debug:", {
+    userId: user.id,
+    matchesFound: userMatches?.length || 0,
+    participantsFound: participantRecords?.length || 0,
+    tournamentIds,
+  })
 
   // Fetch tournament details using adminClient
   let tournaments: any[] = []
@@ -94,6 +101,8 @@ export default async function PlayerPortalPage() {
     }
   }
 
+  console.log("[v0] Tournaments fetched:", tournaments.length, tournaments.map(t => ({ id: t.id, name: t.name, status: t.status })))
+
   // Group by status
   const activeTournaments = tournaments.filter(t => t.status === "in_progress")
   const upcomingTournaments = tournaments.filter(t => t.status === "registration" || t.status === "pending")
@@ -124,6 +133,19 @@ export default async function PlayerPortalPage() {
         <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
         <span className="text-muted-foreground">MAJH Events Connection</span>
       </div>
+
+      {/* Debug Panel - Remove after testing */}
+      <Card className="bg-yellow-500/10 border-yellow-500/50">
+        <CardContent className="py-3 text-xs font-mono">
+          <p><strong>Debug Info:</strong></p>
+          <p>User ID: {user.id}</p>
+          <p>Matches Found: {userMatches?.length || 0}</p>
+          <p>Participants Found: {participantRecords?.length || 0}</p>
+          <p>Tournament IDs: {tournamentIds.length > 0 ? tournamentIds.join(", ") : "None"}</p>
+          <p>Tournaments Fetched: {tournaments.length}</p>
+          <p>Active: {activeTournaments.length}, Upcoming: {upcomingTournaments.length}, Past: {pastTournaments.length}</p>
+        </CardContent>
+      </Card>
 
       {tournaments.length === 0 ? (
         <Card className="border-dashed">
