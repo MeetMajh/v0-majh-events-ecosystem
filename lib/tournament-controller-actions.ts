@@ -569,32 +569,62 @@ export async function reportMatchResult(
   // If equal and no draws, it's a draw match
 
   // Update match based on who is reporting
+  const now = new Date().toISOString()
   const updates: Record<string, unknown> = {
-    player1_wins: player1Wins,
-    player2_wins: player2Wins,
-    draws,
-    winner_id: winnerId,
-    updated_at: new Date().toISOString(),
+    updated_at: now,
   }
 
   if (isTO) {
-    // TO confirms directly
+    // TO confirms directly with final values
     updates.status = "confirmed"
-    updates.confirmed_at = new Date().toISOString()
+    updates.confirmed_at = now
     updates.confirmed_by = user.id
+    updates.player1_wins = player1Wins
+    updates.player2_wins = player2Wins
+    updates.draws = draws
+    updates.winner_id = winnerId
+    if (winnerId) {
+      updates.loser_id = winnerId === match.player1_id ? match.player2_id : match.player1_id
+    }
   } else if (isPlayer1) {
-    // Player 1 is reporting
-    updates.status = match.status === "player2_reported" ? "confirmed" : "player1_reported"
-    updates.player1_reported_at = new Date().toISOString()
-    if (updates.status === "confirmed") {
-      updates.confirmed_at = new Date().toISOString()
+    // Player 1 is reporting - use reported_player1 columns
+    updates.reported_player1_wins = player1Wins
+    updates.reported_player1_draws = draws
+    updates.player1_reported_at = now
+    
+    if (match.status === "player2_reported") {
+      // Player 2 already reported - check if results match and confirm
+      updates.status = "confirmed"
+      updates.confirmed_at = now
+      updates.player1_wins = player1Wins
+      updates.player2_wins = player2Wins
+      updates.draws = draws
+      updates.winner_id = winnerId
+      if (winnerId) {
+        updates.loser_id = winnerId === match.player1_id ? match.player2_id : match.player1_id
+      }
+    } else {
+      updates.status = "player1_reported"
     }
   } else if (isPlayer2) {
-    // Player 2 is reporting
-    updates.status = match.status === "player1_reported" ? "confirmed" : "player2_reported"
-    updates.player2_reported_at = new Date().toISOString()
-    if (updates.status === "confirmed") {
-      updates.confirmed_at = new Date().toISOString()
+    // Player 2 is reporting - use reported_player2 columns
+    updates.reported_player2_wins = player2Wins
+    updates.reported_player2_draws = draws
+    updates.player2_reported_at = now
+    
+    if (match.status === "player1_reported") {
+      // Player 1 already reported - check if results match and confirm
+      updates.status = "confirmed"
+      updates.confirmed_at = now
+      updates.player1_wins = player1Wins
+      updates.player2_wins = player2Wins
+      updates.draws = draws
+      updates.winner_id = winnerId
+      if (winnerId) {
+        updates.loser_id = winnerId === match.player1_id ? match.player2_id : match.player1_id
+      }
+    } else {
+      updates.status = "player2_reported"
     }
   }
 

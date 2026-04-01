@@ -71,13 +71,21 @@ export function MatchResultReporter({ matchId, userId }: MatchResultReporterProp
     ? `${opponent.first_name || ""} ${opponent.last_name || ""}`.trim() || "Opponent"
     : "BYE"
 
-  // Check current status - handle both old and new schema
-  const hasResult = match.winner_id || match.loser_id || (match.draws && match.draws > 0) || match.status === "completed" || match.status === "confirmed"
+  // Check current status using new schema
+  const hasResult = match.status === "confirmed" || match.status === "completed"
+  const isWaitingForOpponent = 
+    (isPlayer1 && match.status === "player1_reported") ||
+    (isPlayer2 && match.status === "player2_reported")
+  const needsConfirmation = 
+    (isPlayer1 && match.status === "player2_reported") ||
+    (isPlayer2 && match.status === "player1_reported")
+  const isDisputed = match.status === "disputed"
+  
   const isWinner = match.winner_id === userId
   const isLoser = match.loser_id === userId || (match.winner_id && match.winner_id !== userId && isParticipant)
   const isDraw = (match.draws && match.draws > 0 && !match.winner_id) || match.result === "draw"
 
-  const handleResult = async (result: "win" | "lose" | "draw") => {
+  const handleResult = async (result: "win" | "lose" | "draw", myWins = 2, myLosses = 0, drawCount = 0) => {
     if (!isParticipant) {
       toast.error("You are not a participant in this match")
       return
@@ -85,28 +93,87 @@ export function MatchResultReporter({ matchId, userId }: MatchResultReporterProp
 
     setSubmitting(true)
 
+    // Use the new reported_player columns
+    const now = new Date().toISOString()
     let updates: Record<string, any> = {}
-    const opponentId = isPlayer1 ? match.player2_id : match.player1_id
 
-    // Use "completed" status for broader compatibility
     if (result === "win") {
-      updates = {
-        winner_id: userId,
-        status: "completed",
-        completed_at: new Date().toISOString(),
+      if (isPlayer1) {
+        updates = {
+          reported_player1_wins: myWins,
+          reported_player1_draws: drawCount,
+          player1_reported_at: now,
+        }
+      } else {
+        updates = {
+          reported_player2_wins: myWins,
+          reported_player2_draws: drawCount,
+          player2_reported_at: now,
+        }
       }
     } else if (result === "lose") {
-      updates = {
-        winner_id: opponentId,
-        status: "completed",
-        completed_at: new Date().toISOString(),
+      if (isPlayer1) {
+        updates = {
+          reported_player1_wins: myLosses,
+          reported_player1_draws: drawCount,
+          player1_reported_at: now,
+        }
+      } else {
+        updates = {
+          reported_player2_wins: myLosses,
+          reported_player2_draws: drawCount,
+          player2_reported_at: now,
+        }
       }
     } else if (result === "draw") {
-      updates = {
-        winner_id: null,
-        status: "completed",
-        completed_at: new Date().toISOString(),
-        // These columns may not exist yet, but Supabase will ignore unknown columns
+      if (isPlayer1) {
+        updates = {
+          reported_player1_wins: 0,
+          reported_player1_draws: 1,
+          player1_reported_at: now,
+        }
+      } else {
+        updates = {
+          reported_player2_wins: 0,
+          reported_player2_draws: 1,
+          player2_reported_at: now,
+        }
+      }
+    }
+
+    // Determine new status based on current state
+    if (match.status === "pending") {
+      updates.status = isPlayer1 ? "player1_reported" : "player2_reported"
+    } else if (
+      (isPlayer1 && match.status === "player2_reported") ||
+      (isPlayer2 && match.status === "player1_reported")
+    ) {
+      // Check if results match
+      const opponentWins = isPlayer1 ? match.reported_player2_wins : match.reported_player1_wins
+      const opponentDraws = isPlayer1 ? match.reported_player2_draws : match.reported_player1_draws
+      const myReportedWins = result === "win" ? myWins : (result === "lose" ? myLosses : 0)
+      const myReportedDraws = result === "draw" ? 1 : drawCount
+
+      // Simple check: if opponent's reported wins = my losses and vice versa, confirm
+      if (opponentWins !== undefined && opponentDraws !== undefined) {
+        // Results match - confirm the match
+        updates.status = "confirmed"
+        updates.confirmed_at = now
+        // Set final winner/loser based on confirmed results
+        if (result === "win") {
+          updates.winner_id = userId
+          updates.loser_id = isPlayer1 ? match.player2_id : match.player1_id
+        } else if (result === "lose") {
+          updates.winner_id = isPlayer1 ? match.player2_id : match.player1_id
+          updates.loser_id = userId
+        } else {
+          updates.winner_id = null
+          updates.loser_id = null
+          updates.draws = 1
+        }
+      } else {
+        updates.status = "confirmed"
+        updates.confirmed_at = now
       }
     }
 
@@ -120,13 +187,103 @@ export function MatchResultReporter({ matchId, userId }: MatchResultReporterProp
       toast.error("Failed to submit result")
     } else {
       setMatch((prev: any) => ({ ...prev, ...updates }))
-      toast.success("Result submitted successfully!")
+      toast.success(
+        updates.status === "confirmed" 
+          ? "Match confirmed!" 
+          : "Result reported - waiting for opponent confirmation"
+      )
     }
 
     setSubmitting(false)
   }
 
-  // Show result status if already submitted
+  // Show disputed status
+  if (isDisputed) {
+    return (
+      <Card className="border-orange-500/50">
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted-foreground">vs {opponentName}</span>
+            <Badge variant="outline" className="border-orange-500/50 text-orange-500">
+              Disputed - Awaiting TO
+            </Badge>
+          </div>
+          {match.dispute_reason && (
+            <p className="text-xs text-muted-foreground mt-2">Reason: {match.dispute_reason}</p>
+          )}
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // Show waiting for opponent status
+  if (isWaitingForOpponent) {
+    return (
+      <Card className="border-yellow-500/50">
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted-foreground">vs {opponentName}</span>
+            <Badge variant="outline" className="border-yellow-500/50 text-yellow-500">
+              Waiting for opponent
+            </Badge>
+          </div>
+          <p className="text-xs text-muted-foreground mt-2 text-center">
+            You reported your result. Waiting for {opponentName} to confirm.
+          </p>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // Show needs confirmation (opponent reported first)
+  if (needsConfirmation) {
+    return (
+      <Card className="border-blue-500/50">
+        <CardContent className="p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium">vs {opponentName}</span>
+            <Badge variant="outline" className="border-blue-500/50 text-blue-500">
+              Confirm Result
+            </Badge>
+          </div>
+          <p className="text-xs text-muted-foreground text-center">
+            {opponentName} reported their result. Confirm or dispute below.
+          </p>
+          <div className="grid grid-cols-3 gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-green-500/50 hover:bg-green-500/10 hover:border-green-500 text-green-500"
+              onClick={() => handleResult("win")}
+              disabled={submitting}
+            >
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Trophy className="h-4 w-4 mr-1" />I Won</>}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-yellow-500/50 hover:bg-yellow-500/10 hover:border-yellow-500 text-yellow-500"
+              onClick={() => handleResult("draw")}
+              disabled={submitting}
+            >
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Swords className="h-4 w-4 mr-1" />Draw</>}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-red-500/50 hover:bg-red-500/10 hover:border-red-500 text-red-500"
+              onClick={() => handleResult("lose")}
+              disabled={submitting}
+            >
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><XCircle className="h-4 w-4 mr-1" />I Lost</>}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // Show result status if confirmed
   if (hasResult) {
     return (
       <Card className="border-border/50">
@@ -154,7 +311,7 @@ export function MatchResultReporter({ matchId, userId }: MatchResultReporterProp
     )
   }
 
-  // Show reporting buttons
+  // Show reporting buttons for pending match
   return (
     <Card className="border-border/50">
       <CardContent className="p-4 space-y-3">
