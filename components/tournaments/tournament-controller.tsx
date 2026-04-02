@@ -62,6 +62,13 @@ import {
   Scale,
   Wifi,
   Radio,
+  Activity,
+  Gauge,
+  CircleCheck,
+  CircleDashed,
+  CircleAlert,
+  Sparkles,
+  FastForward,
 } from "lucide-react"
 import {
   createSwissRound,
@@ -90,6 +97,9 @@ import {
   getTournamentDecklists,
   resolveDispute,
   getDisputedMatches,
+  confirmAllMatchingReports,
+  forceCompleteRound,
+  getRoundStats,
   type PlayerStanding,
 } from "@/lib/tournament-controller-actions"
 import { resetRoundTimer } from "@/lib/timer-actions"
@@ -251,6 +261,17 @@ export function TournamentController({
   const [loadingTickets, setLoadingTickets] = useState(false)
   const [decklists, setDecklists] = useState<any[]>([])
   const [loadingDecklists, setLoadingDecklists] = useState(false)
+  const [roundStats, setRoundStats] = useState<{
+    totalMatches: number
+    confirmedMatches: number
+    pendingMatches: number
+    reportedMatches: number
+    disputedMatches: number
+    byeMatches: number
+    progressPercent: number
+  } | null>(null)
+  const [showAutoAdvanceDialog, setShowAutoAdvanceDialog] = useState(false)
+  const [bulkActionPending, setBulkActionPending] = useState(false)
 
   const activePhase = phases.find(p => p.is_current) || phases[0]
   
@@ -279,6 +300,21 @@ export function TournamentController({
     !["dropped", "disqualified"].includes(r.status)
   ).length
   const matchesRemaining = currentRound?.matches.filter(m => m.status !== "confirmed").length ?? 0
+  
+  // Fetch round stats when current round changes
+  useEffect(() => {
+    if (currentRound?.id) {
+      getRoundStats(currentRound.id).then(stats => {
+        setRoundStats(stats)
+        // Show auto-advance prompt when all matches are complete
+        if (stats.progressPercent === 100 && currentRound.status === "active") {
+          setShowAutoAdvanceDialog(true)
+        }
+      })
+    } else {
+      setRoundStats(null)
+    }
+  }, [currentRound?.id, currentRound?.status, currentRound?.matches.length])
 
   const filteredRegistrations = registrations.filter(r => 
     r.profiles?.display_name?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -416,9 +452,51 @@ export function TournamentController({
         toast.error(result.error)
       } else {
         toast.success("Round completed!")
+        setShowAutoAdvanceDialog(false)
         router.refresh()
       }
     })
+  }
+  
+  // Bulk action: Confirm all matching reports
+  const handleConfirmAllMatching = async () => {
+    if (!currentRound) return
+    setBulkActionPending(true)
+    try {
+      const result = await confirmAllMatchingReports(currentRound.id)
+      if ("error" in result) {
+        toast.error(result.error)
+      } else if (result.confirmedCount === 0) {
+        toast.info("No matching reports to confirm")
+      } else {
+        toast.success(`Confirmed ${result.confirmedCount} matching reports!`)
+        router.refresh()
+      }
+    } finally {
+      setBulkActionPending(false)
+    }
+  }
+  
+  // Bulk action: Force complete all pending matches
+  const handleForceCompleteRound = async () => {
+    if (!currentRound) return
+    const confirmed = window.confirm(
+      "This will mark all pending/reported matches as 0-0-0 draws. Are you sure?"
+    )
+    if (!confirmed) return
+    
+    setBulkActionPending(true)
+    try {
+      const result = await forceCompleteRound(currentRound.id)
+      if ("error" in result) {
+        toast.error(result.error)
+      } else {
+        toast.success(`Force-completed ${result.forcedCount} matches`)
+        router.refresh()
+      }
+    } finally {
+      setBulkActionPending(false)
+    }
   }
 
   const handleReportResult = (matchIdOverride?: string) => {
@@ -874,6 +952,179 @@ const handleAddPlayer = () => {
                       </Button>
                       <Button variant="outline" size="lg" disabled>
                         +5 Min
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+              
+              {/* ROUND CONTROL PANEL - The heart of TO operations */}
+              {currentRound && roundStats && (currentRound.status === "active" || currentRound.status === "paused") && (
+                <Card className="border-2 border-primary/30 bg-gradient-to-br from-primary/5 to-transparent">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/20">
+                          <Activity className="h-5 w-5 text-primary" />
+                        </div>
+                        <div>
+                          <CardTitle className="flex items-center gap-2">
+                            Round {currentRound.round_number}
+                            <Badge variant={currentRound.status === "active" ? "default" : "destructive"}>
+                              {currentRound.status === "active" ? "LIVE" : "PAUSED"}
+                            </Badge>
+                          </CardTitle>
+                          <p className="text-sm text-muted-foreground">Match Control Panel</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-3xl font-bold text-primary">{roundStats.progressPercent}%</p>
+                        <p className="text-xs text-muted-foreground">Complete</p>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {/* Progress Bar */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">Match Progress</span>
+                        <span className="font-medium">{roundStats.confirmedMatches} / {roundStats.totalMatches - roundStats.byeMatches} matches</span>
+                      </div>
+                      <div className="h-3 w-full overflow-hidden rounded-full bg-muted">
+                        <div 
+                          className={cn(
+                            "h-full transition-all duration-500",
+                            roundStats.progressPercent === 100 ? "bg-green-500" : "bg-primary"
+                          )}
+                          style={{ width: `${roundStats.progressPercent}%` }}
+                        />
+                      </div>
+                    </div>
+                    
+                    {/* Status Grid */}
+                    <div className="grid grid-cols-4 gap-3">
+                      <div className="rounded-lg border bg-card p-3 text-center">
+                        <div className="flex items-center justify-center gap-1.5 text-green-600">
+                          <CircleCheck className="h-4 w-4" />
+                          <span className="text-xl font-bold">{roundStats.confirmedMatches}</span>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">Confirmed</p>
+                      </div>
+                      <div className="rounded-lg border bg-card p-3 text-center">
+                        <div className="flex items-center justify-center gap-1.5 text-blue-600">
+                          <CircleDashed className="h-4 w-4" />
+                          <span className="text-xl font-bold">{roundStats.reportedMatches}</span>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">Reported</p>
+                      </div>
+                      <div className="rounded-lg border bg-card p-3 text-center">
+                        <div className="flex items-center justify-center gap-1.5 text-muted-foreground">
+                          <Clock className="h-4 w-4" />
+                          <span className="text-xl font-bold">{roundStats.pendingMatches}</span>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">Pending</p>
+                      </div>
+                      <div className={cn(
+                        "rounded-lg border p-3 text-center",
+                        roundStats.disputedMatches > 0 ? "border-destructive/50 bg-destructive/5" : "bg-card"
+                      )}>
+                        <div className={cn(
+                          "flex items-center justify-center gap-1.5",
+                          roundStats.disputedMatches > 0 ? "text-destructive" : "text-muted-foreground"
+                        )}>
+                          <CircleAlert className="h-4 w-4" />
+                          <span className="text-xl font-bold">{roundStats.disputedMatches}</span>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">Disputed</p>
+                      </div>
+                    </div>
+                    
+                    {/* Alert Banners */}
+                    {roundStats.disputedMatches > 0 && (
+                      <div className="flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-3">
+                        <Scale className="h-5 w-5 text-destructive" />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-destructive">
+                            {roundStats.disputedMatches} match{roundStats.disputedMatches !== 1 ? "es" : ""} need resolution
+                          </p>
+                          <p className="text-xs text-muted-foreground">Review disputed results below</p>
+                        </div>
+                        <Button 
+                          size="sm" 
+                          variant="destructive"
+                          onClick={() => setActiveSection("matches")}
+                        >
+                          Review
+                        </Button>
+                      </div>
+                    )}
+                    
+                    {timeRemaining !== null && timeRemaining <= 0 && roundStats.pendingMatches > 0 && (
+                      <div className="flex items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+                        <Timer className="h-5 w-5 text-amber-600" />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-amber-600">Round time exceeded</p>
+                          <p className="text-xs text-muted-foreground">{roundStats.pendingMatches} matches still pending</p>
+                        </div>
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={handleForceCompleteRound}
+                          disabled={bulkActionPending}
+                        >
+                          Force Complete
+                        </Button>
+                      </div>
+                    )}
+                    
+                    {roundStats.progressPercent === 100 && (
+                      <div className="flex items-center gap-3 rounded-lg border border-green-500/30 bg-green-500/10 p-3">
+                        <Sparkles className="h-5 w-5 text-green-600" />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-green-600">All matches complete!</p>
+                          <p className="text-xs text-muted-foreground">Ready to proceed to next round</p>
+                        </div>
+                        <Button 
+                          size="sm" 
+                          onClick={handleCompleteRound}
+                          disabled={isPending}
+                        >
+                          Complete Round
+                        </Button>
+                      </div>
+                    )}
+                    
+                    {/* Bulk Actions */}
+                    <Separator />
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleConfirmAllMatching}
+                        disabled={bulkActionPending || roundStats.reportedMatches === 0}
+                        className="gap-1.5"
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        Confirm Matching Reports
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleForceCompleteRound}
+                        disabled={bulkActionPending || (roundStats.pendingMatches === 0 && roundStats.reportedMatches === 0)}
+                        className="gap-1.5"
+                      >
+                        <FastForward className="h-3.5 w-3.5" />
+                        Force Complete All
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setActiveSection("matches")}
+                        className="gap-1.5"
+                      >
+                        <List className="h-3.5 w-3.5" />
+                        View All Matches
                       </Button>
                     </div>
                   </CardContent>
@@ -2657,6 +2908,73 @@ const handleAddPlayer = () => {
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowManualPairingDialog(false)}>
               Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Auto-Advance Dialog */}
+      <Dialog open={showAutoAdvanceDialog} onOpenChange={setShowAutoAdvanceDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-green-600" />
+              All Matches Complete!
+            </DialogTitle>
+            <DialogDescription>
+              Round {currentRound?.round_number} has all matches confirmed. Would you like to proceed?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="rounded-lg border bg-muted/50 p-4">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Confirmed Matches</span>
+                <span className="font-bold text-green-600">{roundStats?.confirmedMatches ?? 0}</span>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2">
+              <Button 
+                onClick={() => {
+                  handleCompleteRound()
+                }}
+                disabled={isPending}
+                className="w-full"
+              >
+                <CheckCircle2 className="mr-2 h-4 w-4" />
+                Complete Round & Create Next
+              </Button>
+              <Button 
+                variant="outline"
+                onClick={() => {
+                  if (window.confirm("This will end the tournament and calculate final standings. Are you sure?")) {
+                    startTransition(async () => {
+                      const completeResult = await completeRound(currentRound!.id)
+                      if ("error" in completeResult) {
+                        toast.error(completeResult.error)
+                        return
+                      }
+                      const finishResult = await completeTournament(tournament.id)
+                      if ("error" in finishResult) {
+                        toast.error(finishResult.error)
+                      } else {
+                        toast.success("Tournament completed!")
+                        setShowAutoAdvanceDialog(false)
+                        router.refresh()
+                      }
+                    })
+                  }
+                }}
+                disabled={isPending}
+                className="w-full"
+              >
+                <Trophy className="mr-2 h-4 w-4" />
+                End Tournament (Final Round)
+              </Button>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setShowAutoAdvanceDialog(false)}>
+              Dismiss
             </Button>
           </DialogFooter>
         </DialogContent>

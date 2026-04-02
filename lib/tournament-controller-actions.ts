@@ -1371,7 +1371,7 @@ export async function getRoundPairings(roundId: string) {
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Elimination Bracket Generation
-// ══════════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════���═════
 
 function nextPowerOf2(n: number): number {
   let p = 1
@@ -3245,5 +3245,188 @@ export async function getDisputedMatches(tournamentId: string): Promise<{
       reported_player2_draws: m.reported_player2_draws,
       dispute_reason: m.dispute_reason,
     })) || []
+  }
+}
+
+// ==========================================
+// BULK ACTIONS FOR TO EFFICIENCY
+// ==========================================
+
+// Confirm all matches where both players reported matching results
+export async function confirmAllMatchingReports(roundId: string): Promise<{ success?: boolean; confirmedCount?: number; error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: "Not authenticated" }
+
+  // Get round to verify tournament access
+  const { data: round, error: roundError } = await supabase
+    .from("tournament_rounds")
+    .select("tournament_id")
+    .eq("id", roundId)
+    .single()
+
+  if (roundError || !round) return { error: "Round not found" }
+
+  const auth = await requireTournamentOrganizer(round.tournament_id)
+  if ("error" in auth) return { error: auth.error }
+
+  // Find all matches where:
+  // - status is player1_reported or player2_reported
+  // - both players have reported the same result
+  const { data: matches, error: matchError } = await supabase
+    .from("tournament_matches")
+    .select("id, reported_player1_wins, reported_player2_wins, reported_player1_draws, reported_player2_draws")
+    .eq("round_id", roundId)
+    .in("status", ["player1_reported", "player2_reported"])
+    .not("reported_player1_wins", "is", null)
+    .not("reported_player2_wins", "is", null)
+
+  if (matchError) return { error: matchError.message }
+
+  // Filter to only matching reports
+  const matchingMatches = matches?.filter(m => {
+    // Check if the reports match (P1 says X-Y, P2 says X-Y)
+    const p1ReportedP1Wins = m.reported_player1_wins
+    const p2ReportedP1Wins = m.reported_player2_wins // P2's report of P1's wins
+    const p1Draws = m.reported_player1_draws ?? 0
+    const p2Draws = m.reported_player2_draws ?? 0
+    
+    // Match if both reported the same scores
+    return p1ReportedP1Wins === p2ReportedP1Wins && p1Draws === p2Draws
+  }) || []
+
+  if (matchingMatches.length === 0) {
+    return { success: true, confirmedCount: 0 }
+  }
+
+  // Confirm each match
+  let confirmedCount = 0
+  for (const match of matchingMatches) {
+    const p1Wins = match.reported_player1_wins!
+    const p2Wins = match.reported_player2_wins!
+    const draws = match.reported_player1_draws ?? 0
+    
+    const winnerId = p1Wins > p2Wins ? "player1" : p2Wins > p1Wins ? "player2" : null
+    
+    const { error: updateError } = await supabase
+      .from("tournament_matches")
+      .update({
+        player1_wins: p1Wins,
+        player2_wins: p2Wins,
+        draws,
+        status: "confirmed",
+        confirmed_at: new Date().toISOString(),
+        confirmed_by: user.id,
+      })
+      .eq("id", match.id)
+
+    if (!updateError) confirmedCount++
+  }
+
+  revalidatePath(`/dashboard/tournaments`)
+  return { success: true, confirmedCount }
+}
+
+// Force complete all pending matches in a round (marks them as draws)
+export async function forceCompleteRound(roundId: string): Promise<{ success?: boolean; forcedCount?: number; error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: "Not authenticated" }
+
+  const { data: round } = await supabase
+    .from("tournament_rounds")
+    .select("tournament_id")
+    .eq("id", roundId)
+    .single()
+
+  if (!round) return { error: "Round not found" }
+
+  const auth = await requireTournamentOrganizer(round.tournament_id)
+  if ("error" in auth) return { error: auth.error }
+
+  // Get all non-confirmed, non-bye matches
+  const { data: pendingMatches, error: fetchError } = await supabase
+    .from("tournament_matches")
+    .select("id, is_bye")
+    .eq("round_id", roundId)
+    .not("status", "eq", "confirmed")
+    .eq("is_bye", false)
+
+  if (fetchError) return { error: fetchError.message }
+
+  if (!pendingMatches || pendingMatches.length === 0) {
+    return { success: true, forcedCount: 0 }
+  }
+
+  // Force complete as draws (0-0-0)
+  const { error: updateError } = await supabase
+    .from("tournament_matches")
+    .update({
+      player1_wins: 0,
+      player2_wins: 0,
+      draws: 0,
+      winner_id: null,
+      loser_id: null,
+      status: "confirmed",
+      confirmed_at: new Date().toISOString(),
+      confirmed_by: user.id,
+    })
+    .in("id", pendingMatches.map(m => m.id))
+
+  if (updateError) return { error: updateError.message }
+
+  revalidatePath(`/dashboard/tournaments`)
+  return { success: true, forcedCount: pendingMatches.length }
+}
+
+// Get round statistics for the control panel
+export async function getRoundStats(roundId: string): Promise<{
+  totalMatches: number
+  confirmedMatches: number
+  pendingMatches: number
+  reportedMatches: number
+  disputedMatches: number
+  byeMatches: number
+  progressPercent: number
+}> {
+  const supabase = await createClient()
+
+  const { data: matches } = await supabase
+    .from("tournament_matches")
+    .select("id, status, is_bye")
+    .eq("round_id", roundId)
+
+  if (!matches) {
+    return {
+      totalMatches: 0,
+      confirmedMatches: 0,
+      pendingMatches: 0,
+      reportedMatches: 0,
+      disputedMatches: 0,
+      byeMatches: 0,
+      progressPercent: 0,
+    }
+  }
+
+  const byeMatches = matches.filter(m => m.is_bye).length
+  const nonByeMatches = matches.filter(m => !m.is_bye)
+  const confirmedMatches = nonByeMatches.filter(m => m.status === "confirmed").length
+  const pendingMatches = nonByeMatches.filter(m => m.status === "pending" || m.status === "in_progress").length
+  const reportedMatches = nonByeMatches.filter(m => m.status === "player1_reported" || m.status === "player2_reported").length
+  const disputedMatches = nonByeMatches.filter(m => m.status === "disputed").length
+
+  const totalPlayableMatches = nonByeMatches.length
+  const progressPercent = totalPlayableMatches > 0 
+    ? Math.round((confirmedMatches / totalPlayableMatches) * 100) 
+    : 100
+
+  return {
+    totalMatches: matches.length,
+    confirmedMatches,
+    pendingMatches,
+    reportedMatches,
+    disputedMatches,
+    byeMatches,
+    progressPercent,
   }
 }
