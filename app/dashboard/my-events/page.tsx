@@ -39,7 +39,31 @@ async function getMyEvents(userId: string) {
     .order("created_at", { ascending: false })
     .limit(50)
   
-  const matches = matchData || []
+  // Fetch opponent profiles
+  const allPlayerIds = new Set<string>()
+  matchData?.forEach(m => {
+    if (m.player1_id) allPlayerIds.add(m.player1_id)
+    if (m.player2_id) allPlayerIds.add(m.player2_id)
+  })
+  
+  let profilesMap: Record<string, { id: string; first_name: string | null; last_name: string | null; avatar_url: string | null }> = {}
+  if (allPlayerIds.size > 0) {
+    const { data: profiles } = await adminClient
+      .from("profiles")
+      .select("id, first_name, last_name, avatar_url")
+      .in("id", Array.from(allPlayerIds))
+    
+    profiles?.forEach(p => {
+      profilesMap[p.id] = p
+    })
+  }
+  
+  // Attach profile data to matches
+  const matches = (matchData || []).map(m => ({
+    ...m,
+    player1: m.player1_id ? profilesMap[m.player1_id] : null,
+    player2: m.player2_id ? profilesMap[m.player2_id] : null,
+  }))
 
   // Get registrations for additional tournament info
   const { data: registrationRecords } = await adminClient
@@ -177,12 +201,14 @@ export default async function MyEventsPage() {
   const matchLosses = matches.filter(m => m.winner_id && m.winner_id !== user.id).length
   const matchDraws = matches.filter(m => m.status === "confirmed" && !m.winner_id).length
   
-  // Use match-based stats
-  const totalWins = leaderboardEntries.reduce((sum, e) => sum + (e.total_wins ?? 0), 0)
-  const totalLosses = leaderboardEntries.reduce((sum, e) => sum + (e.total_losses ?? 0), 0)
+  // Use match-based stats (fallback to leaderboard entries if no wins from matches)
+  const totalWins = matchWins > 0 ? matchWins : leaderboardEntries.reduce((sum, e) => sum + (e.total_wins ?? 0), 0)
+  const totalLosses = matchLosses > 0 ? matchLosses : leaderboardEntries.reduce((sum, e) => sum + (e.total_losses ?? 0), 0)
   const totalPoints = leaderboardEntries.reduce((sum, e) => sum + (e.ranking_points ?? 0), 0)
   const tournamentsWon = results.filter(r => r.placement === 1).length
-  const winRate = totalWins + totalLosses > 0 ? Math.round((totalWins / (totalWins + totalLosses)) * 100) : 0
+  const totalMatches = matches.length
+  const eventsEntered = registrations.length
+  const winRate = totalMatches > 0 ? Math.round((totalWins / totalMatches) * 100) : 0
 
   return (
     <div className="container mx-auto py-8 px-4">
