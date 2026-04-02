@@ -517,7 +517,7 @@ export default async function MyEventsPage() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          {match.status === "confirmed" ? (
+                          {match.status === "confirmed" || match.status === "completed" ? (
                             <Badge className={
                               match.is_bye ? "bg-blue-500/20 text-blue-600" :
                               isWinner ? "bg-green-500/20 text-green-600" :
@@ -526,14 +526,23 @@ export default async function MyEventsPage() {
                             }>
                               {match.is_bye ? "BYE" : isWinner ? "WIN" : isDraw ? "DRAW" : "LOSS"}
                             </Badge>
+                          ) : match.status === "disputed" ? (
+                            <Badge variant="destructive">DISPUTED</Badge>
+                          ) : match.status === "player1_reported" || match.status === "player2_reported" ? (
+                            <Badge variant="outline" className="border-yellow-500/50 text-yellow-600">
+                              {(match.status === "player1_reported" && isPlayer1) || 
+                               (match.status === "player2_reported" && !isPlayer1) 
+                                ? "Awaiting Opponent" 
+                                : "Your Report Needed"}
+                            </Badge>
                           ) : (
-                            <Badge variant="outline">{match.status}</Badge>
+                            <Badge variant="outline">Pending</Badge>
                           )}
-                          {match.player1_score !== null && match.player2_score !== null && (
+                          {(match.player1_wins !== null || match.player2_wins !== null) && match.status === "confirmed" && (
                             <span className="text-sm font-mono">
-                              {isPlayer1 ? match.player1_score : match.player2_score}
+                              {isPlayer1 ? match.player1_wins : match.player2_wins}
                               {" - "}
-                              {isPlayer1 ? match.player2_score : match.player1_score}
+                              {isPlayer1 ? match.player2_wins : match.player1_wins}
                             </span>
                           )}
                         </div>

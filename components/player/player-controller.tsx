@@ -444,6 +444,18 @@ function CurrentMatchSection({
         </div>
       )}
 
+      {match.status === "disputed" && (
+        <div className="text-center p-3 bg-destructive/10 rounded-lg border border-destructive/30">
+          <p className="text-destructive font-medium flex items-center justify-center gap-2">
+            <AlertTriangle className="h-4 w-4" />
+            Result Disputed
+          </p>
+          <p className="text-sm text-muted-foreground mt-1">
+            Your reported result differs from your opponent&apos;s. A Tournament Organizer will resolve this.
+          </p>
+        </div>
+      )}
+
       {match.status === "confirmed" && (
         <div className="text-center p-3 bg-green-500/10 rounded-lg border border-green-500/30">
           <p className="text-green-500 font-medium flex items-center justify-center gap-2">

@@ -58,6 +58,8 @@ import {
   Shield,
   ArrowLeftRight,
   Edit2,
+  AlertCircle,
+  Scale,
 } from "lucide-react"
 import {
   createSwissRound,
@@ -84,6 +86,8 @@ import {
   updateMatchPlayers,
   regeneratePairings,
   getTournamentDecklists,
+  resolveDispute,
+  getDisputedMatches,
   type PlayerStanding,
 } from "@/lib/tournament-controller-actions"
 import { resetRoundTimer } from "@/lib/timer-actions"
@@ -1468,28 +1472,73 @@ const handleAddPlayer = () => {
                                         <Dialog>
                                           <DialogTrigger asChild>
                                             <Button 
-                                              variant="outline" 
+                                              variant={match.status === "disputed" ? "destructive" : "outline"}
                                               size="sm"
                                               onClick={() => {
                                                 setSelectedMatch(match.id)
                                                 setMatchResult({
                                                   player1Wins: match.player1_wins ?? 0,
                                                   player2Wins: match.player2_wins ?? 0,
-                                                  draws: 0
+                                                  draws: match.draws ?? 0
                                                 })
                                               }}
                                             >
-                                              <Edit2 className="h-3 w-3 mr-1" />
-                                              Edit
+                                              {match.status === "disputed" ? (
+                                                <>
+                                                  <Scale className="h-3 w-3 mr-1" />
+                                                  Resolve
+                                                </>
+                                              ) : (
+                                                <>
+                                                  <Edit2 className="h-3 w-3 mr-1" />
+                                                  Edit
+                                                </>
+                                              )}
                                             </Button>
                                           </DialogTrigger>
-                                          <DialogContent>
+                                          <DialogContent className={match.status === "disputed" ? "max-w-lg" : ""}>
                                             <DialogHeader>
-                                              <DialogTitle>Edit Match Result</DialogTitle>
+                                              <DialogTitle>
+                                                {match.status === "disputed" ? (
+                                                  <span className="flex items-center gap-2 text-destructive">
+                                                    <AlertCircle className="h-5 w-5" />
+                                                    Resolve Disputed Match
+                                                  </span>
+                                                ) : (
+                                                  "Edit Match Result"
+                                                )}
+                                              </DialogTitle>
                                               <DialogDescription>
                                                 Round {round.round_number}, Table {match.table_number}
+                                                {match.status === "disputed" && match.dispute_reason && (
+                                                  <span className="block mt-2 text-destructive">
+                                                    {match.dispute_reason}
+                                                  </span>
+                                                )}
                                               </DialogDescription>
                                             </DialogHeader>
+                                            
+                                            {/* Show reported results if disputed */}
+                                            {match.status === "disputed" && (
+                                              <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 mb-4">
+                                                <h4 className="font-medium mb-3 text-sm">Player Reports:</h4>
+                                                <div className="grid grid-cols-2 gap-4 text-sm">
+                                                  <div className="space-y-1">
+                                                    <span className="font-medium">{match.player1?.display_name}:</span>
+                                                    <p className="text-muted-foreground">
+                                                      Claims {match.reported_player1_wins ?? "?"} wins, {match.reported_player1_draws ?? 0} draws
+                                                    </p>
+                                                  </div>
+                                                  <div className="space-y-1">
+                                                    <span className="font-medium">{match.player2?.display_name}:</span>
+                                                    <p className="text-muted-foreground">
+                                                      Claims {match.reported_player2_wins ?? "?"} wins, {match.reported_player2_draws ?? 0} draws
+                                                    </p>
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            )}
+                                            
                                             <div className="grid grid-cols-3 gap-4 py-4">
                                               <div className="flex flex-col items-center gap-2">
                                                 <Avatar className="h-12 w-12">
@@ -1533,13 +1582,49 @@ const handleAddPlayer = () => {
                                                 <span className="text-xs text-muted-foreground">Wins</span>
                                               </div>
                                             </div>
+                                            
+                                            {/* Quick resolution buttons for disputed matches */}
+                                            {match.status === "disputed" && (
+                                              <div className="flex gap-2 mb-4">
+                                                <Button
+                                                  variant="outline"
+                                                  size="sm"
+                                                  className="flex-1"
+                                                  onClick={() => {
+                                                    setMatchResult({
+                                                      player1Wins: match.reported_player1_wins ?? 0,
+                                                      player2Wins: match.player2_wins ?? 0,
+                                                      draws: match.reported_player1_draws ?? 0
+                                                    })
+                                                  }}
+                                                >
+                                                  Accept {match.player1?.display_name?.split(" ")[0]}&apos;s Report
+                                                </Button>
+                                                <Button
+                                                  variant="outline"
+                                                  size="sm"
+                                                  className="flex-1"
+                                                  onClick={() => {
+                                                    setMatchResult({
+                                                      player1Wins: match.player1_wins ?? 0,
+                                                      player2Wins: match.reported_player2_wins ?? 0,
+                                                      draws: match.reported_player2_draws ?? 0
+                                                    })
+                                                  }}
+                                                >
+                                                  Accept {match.player2?.display_name?.split(" ")[0]}&apos;s Report
+                                                </Button>
+                                              </div>
+                                            )}
+                                            
                                             <DialogFooter>
                                               <Button 
                                                 onClick={() => handleReportResult(match.id)} 
                                                 disabled={isPending}
+                                                variant={match.status === "disputed" ? "default" : "default"}
                                               >
                                                 <Send className="mr-2 h-4 w-4" />
-                                                Save Result
+                                                {match.status === "disputed" ? "Resolve & Confirm" : "Save Result"}
                                               </Button>
                                             </DialogFooter>
                                           </DialogContent>
