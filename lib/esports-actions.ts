@@ -546,33 +546,120 @@ export async function getPlayerProfile(userId: string) {
     { data: leaderboardEntries },
     { data: tournamentResults },
     { data: teamMemberships },
+    { data: recentMatchesAsP1 },
+    { data: recentMatchesAsP2 },
   ] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", userId).single(),
-    supabase.from("leaderboard_entries").select("*, games(name, slug, category)").eq("user_id", userId),
+    supabase.from("leaderboard_entries").select("*, games(name, slug, category)").eq("user_id", userId).eq("season", "all-time"),
     supabase
       .from("tournament_results")
-      .select("*, tournaments(name, slug, format, games(name))")
+      .select("*, tournaments(name, slug, format, start_date, games(name))")
       .eq("user_id", userId)
-      .order("created_at", { ascending: false }),
+      .order("created_at", { ascending: false })
+      .limit(20),
     supabase
       .from("team_members")
       .select("*, teams(id, name, slug, tag, logo_url)")
       .eq("user_id", userId),
+    // Get recent matches where this user is player1
+    supabase
+      .from("tournament_matches")
+      .select(`
+        id, player1_id, player2_id, winner_id, loser_id, 
+        player1_wins, player2_wins, draws, status, created_at,
+        tournament_rounds(round_number, tournament_phases(name)),
+        tournaments(id, name, slug)
+      `)
+      .eq("player1_id", userId)
+      .eq("status", "confirmed")
+      .order("created_at", { ascending: false })
+      .limit(15),
+    // Get recent matches where this user is player2
+    supabase
+      .from("tournament_matches")
+      .select(`
+        id, player1_id, player2_id, winner_id, loser_id, 
+        player1_wins, player2_wins, draws, status, created_at,
+        tournament_rounds(round_number, tournament_phases(name)),
+        tournaments(id, name, slug)
+      `)
+      .eq("player2_id", userId)
+      .eq("status", "confirmed")
+      .order("created_at", { ascending: false })
+      .limit(15),
   ])
 
   if (!profile) return null
 
+  // Combine and sort matches, then get opponent info
+  const allMatches = [...(recentMatchesAsP1 || []), ...(recentMatchesAsP2 || [])]
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, 20)
+  
+  // Get opponent IDs
+  const opponentIds = allMatches.map(m => 
+    m.player1_id === userId ? m.player2_id : m.player1_id
+  ).filter(Boolean)
+  
+  // Fetch opponent profiles
+  let opponentProfiles: Record<string, { first_name: string | null; last_name: string | null; avatar_url: string | null }> = {}
+  if (opponentIds.length > 0) {
+    const { data: opponents } = await supabase
+      .from("profiles")
+      .select("id, first_name, last_name, avatar_url")
+      .in("id", opponentIds)
+    
+    opponents?.forEach(o => {
+      opponentProfiles[o.id] = o
+    })
+  }
+  
+  // Format matches with opponent info
+  const recentMatches = allMatches.map(match => {
+    const isPlayer1 = match.player1_id === userId
+    const opponentId = isPlayer1 ? match.player2_id : match.player1_id
+    const opponent = opponentProfiles[opponentId]
+    const opponentName = opponent 
+      ? `${opponent.first_name || ""} ${opponent.last_name || ""}`.trim() || "Unknown"
+      : "Unknown"
+    
+    const isWinner = match.winner_id === userId
+    const isLoser = match.loser_id === userId
+    const isDraw = !match.winner_id && !match.loser_id
+    
+    return {
+      id: match.id,
+      opponentId,
+      opponentName,
+      opponentAvatar: opponent?.avatar_url,
+      result: isWinner ? "win" : isLoser ? "loss" : "draw",
+      myWins: isPlayer1 ? match.player1_wins : match.player2_wins,
+      opponentWins: isPlayer1 ? match.player2_wins : match.player1_wins,
+      draws: match.draws,
+      roundNumber: (match.tournament_rounds as any)?.round_number,
+      phaseName: (match.tournament_rounds as any)?.tournament_phases?.name,
+      tournament: match.tournaments,
+      createdAt: match.created_at,
+    }
+  })
+
   const totalWins = leaderboardEntries?.reduce((sum, e) => sum + e.total_wins, 0) ?? 0
   const totalLosses = leaderboardEntries?.reduce((sum, e) => sum + e.total_losses, 0) ?? 0
+  const totalDraws = leaderboardEntries?.reduce((sum, e) => sum + (e.total_draws ?? 0), 0) ?? 0
   const totalTournaments = leaderboardEntries?.reduce((sum, e) => sum + e.tournaments_played, 0) ?? 0
   const totalRankingPoints = leaderboardEntries?.reduce((sum, e) => sum + e.ranking_points, 0) ?? 0
+  const bestPlacement = leaderboardEntries?.reduce((best, e) => 
+    e.best_placement && (!best || e.best_placement < best) ? e.best_placement : best, 
+    null as number | null
+  )
 
   return {
     ...profile,
     leaderboardEntries: leaderboardEntries ?? [],
     tournamentResults: tournamentResults ?? [],
+    recentMatches,
     teams: teamMemberships?.map((m) => ({ ...m.teams, memberRole: m.role })) ?? [],
-    stats: { totalWins, totalLosses, totalTournaments, totalRankingPoints },
+    stats: { totalWins, totalLosses, totalDraws, totalTournaments, totalRankingPoints, bestPlacement },
   }
 }
 
