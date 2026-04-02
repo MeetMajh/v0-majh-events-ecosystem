@@ -467,8 +467,11 @@ export async function reportMatchResult(matchId: string, winnerId: string, score
 
 // ── Leaderboards ──
 
-export async function getLeaderboard(gameSlug?: string) {
+export async function getLeaderboard(gameSlug?: string, season?: string) {
   const supabase = await createClient()
+  
+  // Default to all-time if no season specified
+  const seasonFilter = season || "all-time"
 
   if (gameSlug) {
     const { data: game } = await supabase.from("games").select("id").eq("slug", gameSlug).single()
@@ -476,22 +479,61 @@ export async function getLeaderboard(gameSlug?: string) {
 
     const { data } = await supabase
       .from("leaderboard_entries")
-      .select("*, profiles(id, first_name, last_name, avatar_url), games(name, slug)")
+      .select("*, profiles(id, first_name, last_name, avatar_url, username), games(name, slug)")
       .eq("game_id", game.id)
+      .eq("season", seasonFilter)
       .order("ranking_points", { ascending: false })
       .limit(100)
 
     return data ?? []
   }
 
-  // Global leaderboard: aggregate across games
+  // Global leaderboard: aggregate across games for the specified season
   const { data } = await supabase
     .from("leaderboard_entries")
-    .select("*, profiles(id, first_name, last_name, avatar_url), games(name, slug)")
+    .select("*, profiles(id, first_name, last_name, avatar_url, username), games(name, slug)")
+    .eq("season", seasonFilter)
     .order("ranking_points", { ascending: false })
     .limit(100)
 
   return data ?? []
+}
+
+// Get available seasons
+export async function getSeasons() {
+  const supabase = await createClient()
+  
+  const { data } = await supabase
+    .from("leaderboard_entries")
+    .select("season")
+    .order("season", { ascending: false })
+  
+  // Get unique seasons
+  const uniqueSeasons = [...new Set(data?.map(d => d.season) || [])]
+  
+  return uniqueSeasons.map(s => ({
+    value: s,
+    label: s === "all-time" ? "All Time" : formatSeasonLabel(s),
+    isCurrent: s.includes(getCurrentSeasonId()),
+  }))
+}
+
+// Helper to format season labels
+function formatSeasonLabel(season: string): string {
+  if (season === "all-time") return "All Time"
+  // Format: "season-2024-Q1" -> "Q1 2024"
+  const match = season.match(/season-(\d{4})-Q(\d)/)
+  if (match) {
+    return `Q${match[2]} ${match[1]}`
+  }
+  return season
+}
+
+// Get current season ID
+function getCurrentSeasonId(): string {
+  const now = new Date()
+  const quarter = Math.ceil((now.getMonth() + 1) / 3)
+  return `season-${now.getFullYear()}-Q${quarter}`
 }
 
 // ── Player Profile ──
