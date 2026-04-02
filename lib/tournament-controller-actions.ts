@@ -593,15 +593,39 @@ export async function reportMatchResult(
     updates.player1_reported_at = now
     
     if (match.status === "player2_reported") {
-      // Player 2 already reported - check if results match and confirm
-      updates.status = "confirmed"
-      updates.confirmed_at = now
-      updates.player1_wins = player1Wins
-      updates.player2_wins = player2Wins
-      updates.draws = draws
-      updates.winner_id = winnerId
-      if (winnerId) {
-        updates.loser_id = winnerId === match.player1_id ? match.player2_id : match.player1_id
+      // Player 2 already reported - check if results match
+      // Player 1 reports: player1Wins (my wins), player2Wins (opponent wins)
+      // Player 2 reported: reported_player2_wins (their wins = my losses)
+      const p2ReportedTheirWins = match.reported_player2_wins ?? 0
+      const p2ReportedTheirDraws = match.reported_player2_draws ?? 0
+      
+      // Results match if: Player 1's claimed wins == Player 2's claimed losses
+      // and Player 1's claimed losses == Player 2's claimed wins
+      const resultsMatch = (player1Wins === (match.player2_wins ?? p2ReportedTheirWins) || 
+                           player1Wins === p2ReportedTheirWins) &&
+                          (player2Wins === p2ReportedTheirWins || p2ReportedTheirWins === player2Wins) &&
+                          draws === p2ReportedTheirDraws
+      
+      // Simpler check: both players agree on the same result
+      const p1ClaimsWin = player1Wins > player2Wins
+      const p2ClaimsWin = p2ReportedTheirWins > (match.reported_player1_wins ?? player1Wins)
+      const bothClaimDraw = player1Wins === player2Wins && p2ReportedTheirWins === player1Wins
+      
+      if (p1ClaimsWin === p2ClaimsWin || bothClaimDraw || resultsMatch) {
+        // Results agree - confirm
+        updates.status = "confirmed"
+        updates.confirmed_at = now
+        updates.player1_wins = player1Wins
+        updates.player2_wins = player2Wins
+        updates.draws = draws
+        updates.winner_id = winnerId
+        if (winnerId) {
+          updates.loser_id = winnerId === match.player1_id ? match.player2_id : match.player1_id
+        }
+      } else {
+        // Results disagree - mark as disputed
+        updates.status = "disputed"
+        updates.dispute_reason = `Result mismatch: Player 1 reports ${player1Wins}-${player2Wins}, Player 2 reported ${p2ReportedTheirWins} wins`
       }
     } else {
       updates.status = "player1_reported"
@@ -613,15 +637,34 @@ export async function reportMatchResult(
     updates.player2_reported_at = now
     
     if (match.status === "player1_reported") {
-      // Player 1 already reported - check if results match and confirm
-      updates.status = "confirmed"
-      updates.confirmed_at = now
-      updates.player1_wins = player1Wins
-      updates.player2_wins = player2Wins
-      updates.draws = draws
-      updates.winner_id = winnerId
-      if (winnerId) {
-        updates.loser_id = winnerId === match.player1_id ? match.player2_id : match.player1_id
+      // Player 1 already reported - check if results match
+      const p1ReportedTheirWins = match.reported_player1_wins ?? 0
+      const p1ReportedTheirDraws = match.reported_player1_draws ?? 0
+      
+      // Results match if both players agree on who won
+      const p1ClaimsWin = p1ReportedTheirWins > (match.reported_player2_wins ?? player2Wins)
+      const p2ClaimsWin = player2Wins > player1Wins
+      const bothClaimDraw = p1ReportedTheirWins === player2Wins && player1Wins === player2Wins
+      
+      // Check if reported results are consistent
+      const resultsMatch = p1ReportedTheirWins === player1Wins && 
+                          draws === p1ReportedTheirDraws
+      
+      if ((!p1ClaimsWin && !p2ClaimsWin) || bothClaimDraw || resultsMatch) {
+        // Results agree - confirm
+        updates.status = "confirmed"
+        updates.confirmed_at = now
+        updates.player1_wins = player1Wins
+        updates.player2_wins = player2Wins
+        updates.draws = draws
+        updates.winner_id = winnerId
+        if (winnerId) {
+          updates.loser_id = winnerId === match.player1_id ? match.player2_id : match.player1_id
+        }
+      } else {
+        // Results disagree - mark as disputed
+        updates.status = "disputed"
+        updates.dispute_reason = `Result mismatch: Player 1 reported ${p1ReportedTheirWins} wins, Player 2 reports ${player2Wins}-${player1Wins}`
       }
     } else {
       updates.status = "player2_reported"
@@ -2256,7 +2299,7 @@ export async function getTournamentDecklists(tournamentId: string) {
 
 // ═══════════════════════════════════════════════════════════════════════���══════
 // Registration Codes & Preregistrations
-// ═════════════════════════════════════════════��������══════���═══════════════════════
+// ═════════════════════════════════════════════��������══════���════════════��══════════
 
 export async function createRegistrationCode(
   tournamentId: string,
@@ -2945,4 +2988,262 @@ export async function deleteAnnouncement(announcementId: string) {
   if (error) return { error: error.message }
 
   return { success: true }
+}
+
+// ==========================================
+// DISPUTE RESOLUTION
+// ==========================================
+
+export async function resolveDispute(
+  matchId: string,
+  resolution: "player1" | "player2" | "custom",
+  customResult?: { player1Wins: number; player2Wins: number; draws: number }
+): Promise<{ success?: boolean; error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: "Not authenticated" }
+
+  // Get match details
+  const { data: match } = await supabase
+    .from("tournament_matches")
+    .select("*, tournament_rounds(phase_id, tournament_phases(win_points, draw_points, loss_points))")
+    .eq("id", matchId)
+    .single()
+
+  if (!match) return { error: "Match not found" }
+  if (match.status !== "disputed") return { error: "Match is not disputed" }
+
+  // Verify TO authorization
+  const auth = await requireTournamentOrganizer(match.tournament_id)
+  if ("error" in auth) return { error: auth.error }
+
+  // Determine final result based on resolution type
+  let player1Wins: number
+  let player2Wins: number
+  let draws: number
+
+  if (resolution === "player1") {
+    // Accept Player 1's report
+    player1Wins = match.reported_player1_wins ?? 0
+    player2Wins = match.player2_wins ?? 0
+    draws = match.reported_player1_draws ?? 0
+  } else if (resolution === "player2") {
+    // Accept Player 2's report
+    player1Wins = match.player1_wins ?? 0
+    player2Wins = match.reported_player2_wins ?? 0
+    draws = match.reported_player2_draws ?? 0
+  } else if (resolution === "custom" && customResult) {
+    // Use TO's custom result
+    player1Wins = customResult.player1Wins
+    player2Wins = customResult.player2Wins
+    draws = customResult.draws
+  } else {
+    return { error: "Invalid resolution parameters" }
+  }
+
+  // Determine winner
+  let winnerId: string | null = null
+  let loserId: string | null = null
+  if (player1Wins > player2Wins) {
+    winnerId = match.player1_id
+    loserId = match.player2_id
+  } else if (player2Wins > player1Wins) {
+    winnerId = match.player2_id
+    loserId = match.player1_id
+  }
+
+  const now = new Date().toISOString()
+
+  // Update match with resolved result
+  const { error } = await supabase
+    .from("tournament_matches")
+    .update({
+      status: "confirmed",
+      player1_wins: player1Wins,
+      player2_wins: player2Wins,
+      draws: draws,
+      winner_id: winnerId,
+      loser_id: loserId,
+      confirmed_at: now,
+      confirmed_by: user.id,
+      dispute_reason: `Resolved by TO: ${resolution}`,
+      updated_at: now,
+    })
+    .eq("id", matchId)
+
+  if (error) return { error: error.message }
+
+  // Update player stats (same logic as reportMatchResult)
+  try {
+    const phaseId = match.tournament_rounds?.phase_id
+    const winPoints = match.tournament_rounds?.tournament_phases?.win_points ?? 3
+    const drawPoints = match.tournament_rounds?.tournament_phases?.draw_points ?? 1
+    const lossPoints = match.tournament_rounds?.tournament_phases?.loss_points ?? 0
+
+    // Update player 1 stats
+    if (match.player1_id && phaseId) {
+      const p1Won = winnerId === match.player1_id
+      const isDraw = winnerId === null
+      const p1Points = p1Won ? winPoints : (isDraw ? drawPoints : lossPoints)
+      
+      const { data: existing1 } = await supabase
+        .from("tournament_player_stats")
+        .select("id, match_wins, match_losses, match_draws, game_wins, game_losses, game_draws, points")
+        .eq("tournament_id", match.tournament_id)
+        .eq("phase_id", phaseId)
+        .eq("player_id", match.player1_id)
+        .single()
+      
+      if (existing1) {
+        await supabase.from("tournament_player_stats").update({
+          match_wins: (existing1.match_wins || 0) + (p1Won ? 1 : 0),
+          match_losses: (existing1.match_losses || 0) + (!p1Won && !isDraw ? 1 : 0),
+          match_draws: (existing1.match_draws || 0) + (isDraw ? 1 : 0),
+          game_wins: (existing1.game_wins || 0) + player1Wins,
+          game_losses: (existing1.game_losses || 0) + player2Wins,
+          game_draws: (existing1.game_draws || 0) + draws,
+          points: (existing1.points || 0) + p1Points,
+        }).eq("id", existing1.id)
+      } else {
+        await supabase.from("tournament_player_stats").insert({
+          tournament_id: match.tournament_id,
+          phase_id: phaseId,
+          player_id: match.player1_id,
+          match_wins: p1Won ? 1 : 0,
+          match_losses: !p1Won && !isDraw ? 1 : 0,
+          match_draws: isDraw ? 1 : 0,
+          game_wins: player1Wins,
+          game_losses: player2Wins,
+          game_draws: draws,
+          points: p1Points,
+        })
+      }
+    }
+
+    // Update player 2 stats
+    if (match.player2_id && phaseId) {
+      const p2Won = winnerId === match.player2_id
+      const isDraw = winnerId === null
+      const p2Points = p2Won ? winPoints : (isDraw ? drawPoints : lossPoints)
+      
+      const { data: existing2 } = await supabase
+        .from("tournament_player_stats")
+        .select("id, match_wins, match_losses, match_draws, game_wins, game_losses, game_draws, points")
+        .eq("tournament_id", match.tournament_id)
+        .eq("phase_id", phaseId)
+        .eq("player_id", match.player2_id)
+        .single()
+      
+      if (existing2) {
+        await supabase.from("tournament_player_stats").update({
+          match_wins: (existing2.match_wins || 0) + (p2Won ? 1 : 0),
+          match_losses: (existing2.match_losses || 0) + (!p2Won && !isDraw ? 1 : 0),
+          match_draws: (existing2.match_draws || 0) + (isDraw ? 1 : 0),
+          game_wins: (existing2.game_wins || 0) + player2Wins,
+          game_losses: (existing2.game_losses || 0) + player1Wins,
+          game_draws: (existing2.game_draws || 0) + draws,
+          points: (existing2.points || 0) + p2Points,
+        }).eq("id", existing2.id)
+      } else {
+        await supabase.from("tournament_player_stats").insert({
+          tournament_id: match.tournament_id,
+          phase_id: phaseId,
+          player_id: match.player2_id,
+          match_wins: p2Won ? 1 : 0,
+          match_losses: !p2Won && !isDraw ? 1 : 0,
+          match_draws: isDraw ? 1 : 0,
+          game_wins: player2Wins,
+          game_losses: player1Wins,
+          game_draws: draws,
+          points: p2Points,
+        })
+      }
+    }
+  } catch (statsError) {
+    console.error("Error updating player stats after dispute resolution:", statsError)
+  }
+
+  return { success: true }
+}
+
+// Get disputed matches for a tournament
+export async function getDisputedMatches(tournamentId: string): Promise<{ 
+  matches?: Array<{
+    id: string
+    round_number: number
+    table_number: number
+    player1_id: string
+    player2_id: string
+    player1_name: string
+    player2_name: string
+    reported_player1_wins: number | null
+    reported_player2_wins: number | null
+    reported_player1_draws: number | null
+    reported_player2_draws: number | null
+    dispute_reason: string | null
+  }>
+  error?: string 
+}> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: "Not authenticated" }
+
+  // Verify TO authorization
+  const auth = await requireTournamentOrganizer(tournamentId)
+  if ("error" in auth) return { error: auth.error }
+
+  const { data: matches, error } = await supabase
+    .from("tournament_matches")
+    .select(`
+      id,
+      table_number,
+      player1_id,
+      player2_id,
+      reported_player1_wins,
+      reported_player2_wins,
+      reported_player1_draws,
+      reported_player2_draws,
+      dispute_reason,
+      tournament_rounds!inner(round_number)
+    `)
+    .eq("tournament_id", tournamentId)
+    .eq("status", "disputed")
+
+  if (error) return { error: error.message }
+
+  // Get player names
+  const playerIds = new Set<string>()
+  matches?.forEach(m => {
+    if (m.player1_id) playerIds.add(m.player1_id)
+    if (m.player2_id) playerIds.add(m.player2_id)
+  })
+
+  let profilesMap: Record<string, string> = {}
+  if (playerIds.size > 0) {
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, first_name, last_name")
+      .in("id", Array.from(playerIds))
+    
+    profiles?.forEach(p => {
+      profilesMap[p.id] = `${p.first_name || ""} ${p.last_name || ""}`.trim() || "Unknown"
+    })
+  }
+
+  return {
+    matches: matches?.map(m => ({
+      id: m.id,
+      round_number: (m.tournament_rounds as { round_number: number })?.round_number ?? 0,
+      table_number: m.table_number ?? 0,
+      player1_id: m.player1_id,
+      player2_id: m.player2_id,
+      player1_name: profilesMap[m.player1_id] || "Unknown",
+      player2_name: profilesMap[m.player2_id] || "Unknown",
+      reported_player1_wins: m.reported_player1_wins,
+      reported_player2_wins: m.reported_player2_wins,
+      reported_player1_draws: m.reported_player1_draws,
+      reported_player2_draws: m.reported_player2_draws,
+      dispute_reason: m.dispute_reason,
+    })) || []
+  }
 }
