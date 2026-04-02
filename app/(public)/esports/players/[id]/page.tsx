@@ -1,10 +1,11 @@
 import { notFound } from "next/navigation"
 import Link from "next/link"
 import { getPlayerProfile } from "@/lib/esports-actions"
+import { cn } from "@/lib/utils"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Trophy, Swords, BarChart3, Users, Target, Medal, CalendarDays, TrendingUp, Gamepad2 } from "lucide-react"
+import { Trophy, Swords, BarChart3, Users, Target, Medal, CalendarDays, TrendingUp, Gamepad2, CheckCircle2, XCircle, MinusCircle, Clock } from "lucide-react"
 import { format } from "date-fns"
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
@@ -19,8 +20,9 @@ export default async function PlayerProfilePage({ params }: { params: Promise<{ 
   const player = await getPlayerProfile(id)
   if (!player) notFound()
 
-  const winRate = player.stats.totalWins + player.stats.totalLosses > 0
-    ? Math.round((player.stats.totalWins / (player.stats.totalWins + player.stats.totalLosses)) * 100)
+  const totalMatches = player.stats.totalWins + player.stats.totalLosses + (player.stats.totalDraws ?? 0)
+  const winRate = totalMatches > 0
+    ? Math.round((player.stats.totalWins / totalMatches) * 100)
     : 0
 
   return (
@@ -69,7 +71,7 @@ export default async function PlayerProfilePage({ params }: { params: Promise<{ 
       </div>
 
       {/* Stats */}
-      <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="mb-8 grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
         <Card className="border-border bg-card">
           <CardContent className="flex items-center gap-3 p-4">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
@@ -90,6 +92,12 @@ export default async function PlayerProfilePage({ params }: { params: Promise<{ 
               <p className="text-2xl font-bold">
                 <span className="text-green-600">{player.stats.totalWins}</span>
                 <span className="text-muted-foreground"> - </span>
+                {player.stats.totalDraws > 0 && (
+                  <>
+                    <span className="text-yellow-500">{player.stats.totalDraws}</span>
+                    <span className="text-muted-foreground"> - </span>
+                  </>
+                )}
                 <span className="text-red-500">{player.stats.totalLosses}</span>
               </p>
               <p className="text-xs text-muted-foreground">Match Record</p>
@@ -136,6 +144,24 @@ export default async function PlayerProfilePage({ params }: { params: Promise<{ 
             </div>
           </CardContent>
         </Card>
+        {player.stats.bestPlacement && (
+          <Card className="border-border bg-card">
+            <CardContent className="flex items-center gap-3 p-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-500/10">
+                <Medal className="h-5 w-5 text-purple-500" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-foreground">
+                  {player.stats.bestPlacement === 1 ? "1st" : 
+                   player.stats.bestPlacement === 2 ? "2nd" : 
+                   player.stats.bestPlacement === 3 ? "3rd" : 
+                   `${player.stats.bestPlacement}th`}
+                </p>
+                <p className="text-xs text-muted-foreground">Best Finish</p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Game Rankings */}
@@ -202,6 +228,86 @@ export default async function PlayerProfilePage({ params }: { params: Promise<{ 
                 </Card>
               )
             })}
+          </div>
+        </section>
+      )}
+
+      {/* Recent Matches */}
+      {player.recentMatches && player.recentMatches.length > 0 && (
+        <section className="mb-8">
+          <h2 className="mb-4 text-lg font-bold text-foreground flex items-center gap-2">
+            <Swords className="h-5 w-5 text-primary" />
+            Recent Matches
+          </h2>
+          <div className="space-y-2">
+            {player.recentMatches.slice(0, 10).map((match: any) => (
+              <div 
+                key={match.id} 
+                className="flex items-center gap-3 rounded-lg border border-border bg-card p-3 transition-colors hover:bg-muted/20"
+              >
+                {/* Result indicator */}
+                <div className={cn(
+                  "flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
+                  match.result === "win" && "bg-green-500/10",
+                  match.result === "loss" && "bg-red-500/10",
+                  match.result === "draw" && "bg-yellow-500/10"
+                )}>
+                  {match.result === "win" && <CheckCircle2 className="h-5 w-5 text-green-600" />}
+                  {match.result === "loss" && <XCircle className="h-5 w-5 text-red-500" />}
+                  {match.result === "draw" && <MinusCircle className="h-5 w-5 text-yellow-500" />}
+                </div>
+                
+                {/* Match details */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-medium text-foreground">vs</span>
+                    <Link 
+                      href={`/esports/players/${match.opponentId}`}
+                      className="font-medium text-foreground hover:text-primary transition-colors truncate"
+                    >
+                      {match.opponentName}
+                    </Link>
+                    <Badge variant="outline" className="text-[10px]">
+                      {match.result === "win" ? "WIN" : match.result === "loss" ? "LOSS" : "DRAW"}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
+                    {match.tournament && (
+                      <Link 
+                        href={`/esports/tournaments/${match.tournament.slug}`}
+                        className="hover:text-foreground transition-colors truncate"
+                      >
+                        {match.tournament.name}
+                      </Link>
+                    )}
+                    {match.roundNumber && (
+                      <span className="text-muted-foreground/60">
+                        • Round {match.roundNumber}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                
+                {/* Score */}
+                <div className="text-right shrink-0">
+                  <p className="font-mono text-sm font-bold">
+                    <span className={match.result === "win" ? "text-green-600" : "text-muted-foreground"}>
+                      {match.myWins ?? 0}
+                    </span>
+                    <span className="text-muted-foreground"> - </span>
+                    <span className={match.result === "loss" ? "text-red-500" : "text-muted-foreground"}>
+                      {match.opponentWins ?? 0}
+                    </span>
+                  </p>
+                  {match.createdAt && (
+                    <p className="text-[10px] text-muted-foreground flex items-center justify-end gap-1">
+                      <Clock className="h-2.5 w-2.5" />
+                      {format(new Date(match.createdAt), "MMM d")}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         </section>
       )}

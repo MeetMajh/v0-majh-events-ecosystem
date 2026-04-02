@@ -8,20 +8,26 @@ type LeaderboardEntry = {
   id: string
   total_wins: number
   total_losses: number
+  total_draws?: number
   tournaments_played: number
   tournaments_won: number
   ranking_points: number
+  best_placement?: number
+  avg_placement?: number
+  peak_points?: number
   previous_rank?: number
-  profiles: { id: string; display_name: string; username?: string | null; avatar_url: string | null } | null
+  season?: string
+  profiles: { id: string; display_name?: string; first_name?: string; last_name?: string; username?: string | null; avatar_url: string | null } | null
   games?: { name: string; slug: string; icon_url?: string } | null
 }
 
 // Helper to get display name, preferring username if available
-function getPlayerDisplayName(profile: { display_name?: string; username?: string | null; first_name?: string; last_name?: string } | null): string {
+function getPlayerDisplayName(profile: { display_name?: string; username?: string | null; first_name?: string | null; last_name?: string | null } | null): string {
   if (!profile) return "Unknown"
   if (profile.username) return profile.username
   if (profile.display_name) return profile.display_name
-  if (profile.first_name || profile.last_name) return `${profile.first_name || ""} ${profile.last_name || ""}`.trim()
+  const fullName = `${profile.first_name || ""} ${profile.last_name || ""}`.trim()
+  if (fullName) return fullName
   return "Unknown"
 }
 
@@ -176,11 +182,26 @@ export function LeaderboardTable({
                     <span className="text-xs text-muted-foreground w-8">{winRate}%</span>
                   </div>
                 </td>
-                <td className="hidden px-4 py-3 text-center text-sm text-muted-foreground lg:table-cell">
-                  {entry.tournaments_played}
+                <td className="hidden px-4 py-3 text-center lg:table-cell">
+                  <div className="flex flex-col items-center gap-0.5">
+                    <span className="text-sm font-medium">{entry.tournaments_played}</span>
+                    {entry.best_placement && entry.best_placement <= 3 && (
+                      <span className="flex items-center gap-0.5 text-[10px] text-amber-600">
+                        <Trophy className="h-2.5 w-2.5" />
+                        Best: {entry.best_placement === 1 ? "1st" : entry.best_placement === 2 ? "2nd" : "3rd"}
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <span className="text-lg font-bold text-primary">{entry.ranking_points.toLocaleString()}</span>
+                  <div className="flex flex-col items-end gap-0.5">
+                    <span className="text-lg font-bold text-primary">{entry.ranking_points.toLocaleString()}</span>
+                    {entry.peak_points && entry.peak_points > entry.ranking_points && (
+                      <span className="text-[10px] text-muted-foreground">
+                        Peak: {entry.peak_points.toLocaleString()}
+                      </span>
+                    )}
+                  </div>
                 </td>
               </tr>
             )
