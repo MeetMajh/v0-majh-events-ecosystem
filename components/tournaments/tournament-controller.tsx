@@ -60,6 +60,8 @@ import {
   Edit2,
   AlertCircle,
   Scale,
+  Wifi,
+  Radio,
 } from "lucide-react"
 import {
   createSwissRound,
@@ -94,6 +96,7 @@ import { resetRoundTimer } from "@/lib/timer-actions"
 import { getTournamentIssues, updateIssueStatus, createIssue } from "@/lib/tournament-issue-actions"
 import { ISSUE_CATEGORIES } from "@/lib/tournament-issue-constants"
 import type { TournamentStatus } from "@/lib/tournament-controller-actions"
+import { useTournamentRealtime } from "@/hooks/use-tournament-realtime"
 
 interface TournamentControllerProps {
   tournament: {
@@ -250,6 +253,24 @@ export function TournamentController({
   const [loadingDecklists, setLoadingDecklists] = useState(false)
 
   const activePhase = phases.find(p => p.is_current) || phases[0]
+  
+  // Realtime subscriptions for live tournament updates
+  const isLive = tournament.status === "in_progress"
+  const { isConnected, lastUpdate } = useTournamentRealtime({
+    tournamentId: tournament.id,
+    autoRefresh: isLive,
+    onMatchUpdate: (match) => {
+      // Show toast when a match result is reported
+      if (match.status === "player1_reported" || match.status === "player2_reported") {
+        toast.info("A player has reported a match result", { duration: 3000 })
+      } else if (match.status === "disputed") {
+        toast.warning("A match dispute has been raised!", { duration: 5000 })
+      } else if (match.status === "confirmed") {
+        toast.success("Match result confirmed", { duration: 2000 })
+      }
+    },
+  })
+  
   const checkedInCount = registrations.filter(r => r.status === "checked_in").length
   const registeredCount = registrations.filter(r => 
     ["registered", "checked_in"].includes(r.status)
@@ -623,7 +644,23 @@ const handleAddPlayer = () => {
               </div>
             </div>
             
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
+              {/* Live Connection Indicator */}
+              {isLive && (
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/30">
+                  <span className="relative flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+                  </span>
+                  <span className="text-xs font-medium text-primary">LIVE</span>
+                  {isConnected ? (
+                    <Wifi className="h-3 w-3 text-green-500" />
+                  ) : (
+                    <Wifi className="h-3 w-3 text-muted-foreground animate-pulse" />
+                  )}
+                </div>
+              )}
+              
               {/* Status Dropdown */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>

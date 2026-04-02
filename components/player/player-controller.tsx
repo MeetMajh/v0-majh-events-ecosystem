@@ -1,11 +1,12 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useState, useTransition, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { format, formatDistanceToNow } from "date-fns"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { getPlayerDisplayName } from "@/lib/player-utils"
+import { useTournamentRealtime, usePlayerMatchRealtime } from "@/hooks/use-tournament-realtime"
 
 // UI Components
 import { Card, CardContent } from "@/components/ui/card"
@@ -33,6 +34,7 @@ import {
   CheckCircle2,
   Clock,
   AlertCircle,
+  AlertTriangle,
   Video,
   LogOut,
   Send,
@@ -42,6 +44,9 @@ import {
   MapPin,
   Info,
   ExternalLink,
+  Wifi,
+  Radio,
+  Bell,
 } from "lucide-react"
 
 // Actions
@@ -109,6 +114,23 @@ export function PlayerController({
   const isReadOnly = isCompleted
   const hasDropped = registration.status === "dropped"
   
+  // Realtime subscriptions for live tournaments
+  const { isConnected: tournamentConnected, lastUpdate } = useTournamentRealtime({
+    tournamentId: tournament.id,
+    autoRefresh: isLive,
+    onAnnouncementUpdate: (announcement) => {
+      // Show toast for new announcements
+      toast.info(`New Announcement: ${announcement.title || "Check announcements"}`, {
+        duration: 5000,
+      })
+    },
+  })
+  
+  // Also subscribe to the specific current match for immediate updates
+  const { isConnected: matchConnected } = usePlayerMatchRealtime({
+    matchId: currentMatch?.id ?? null,
+  })
+  
   // Find player's current standing
   const myStanding = standings.find(s => s.player_id === playerId)
   const myPoints = myStanding?.match_points ?? 0
@@ -138,12 +160,41 @@ export function PlayerController({
         </p>
       </div>
 
-      {/* Connection Status */}
-      <div className="flex items-center gap-2 text-sm py-2 px-3 bg-card rounded-lg border">
-        <div className="h-2.5 w-2.5 rounded-full bg-green-500" />
-        <span>MAJH Events Connection</span>
-        <Info className="h-3.5 w-3.5 text-muted-foreground ml-1" />
-      </div>
+      {/* Live Connection Status */}
+      {isLive ? (
+        <div className="flex items-center justify-between text-sm py-2 px-3 bg-primary/5 rounded-lg border border-primary/30">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-primary" />
+            </span>
+            <span className="font-medium text-primary">Live Tournament</span>
+          </div>
+          <div className="flex items-center gap-3">
+            {(tournamentConnected || matchConnected) ? (
+              <div className="flex items-center gap-1 text-green-600">
+                <Wifi className="h-3 w-3" />
+                <span className="text-xs">Connected</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1 text-muted-foreground">
+                <Wifi className="h-3 w-3" />
+                <span className="text-xs">Connecting...</span>
+              </div>
+            )}
+            {lastUpdate && (
+              <span className="text-xs text-muted-foreground">
+                Updated {format(lastUpdate, "h:mm:ss a")}
+              </span>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 text-sm py-2 px-3 bg-card rounded-lg border">
+          <div className="h-2.5 w-2.5 rounded-full bg-green-500" />
+          <span>MAJH Events Connection</span>
+        </div>
+      )}
 
       {/* Decklist Warning Banner */}
       {tournament.decklist_required && !decklist && !isReadOnly && (

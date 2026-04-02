@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useState, useTransition, useCallback } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
@@ -12,8 +12,9 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Shield, Users, Trophy, ScrollText, ListOrdered, Swords, Send, Timer, CheckCircle2, LayoutList } from "lucide-react"
+import { Shield, Users, Trophy, ScrollText, ListOrdered, Swords, Send, Timer, CheckCircle2, LayoutList, Radio, Wifi } from "lucide-react"
 import { format } from "date-fns"
+import { useTournamentRealtime } from "@/hooks/use-tournament-realtime"
 
 type TabKey = "bracket" | "rounds" | "standings" | "pairings" | "participants" | "rules" | "results"
 
@@ -56,6 +57,13 @@ export function TournamentTabs({
   const [activeTab, setActiveTab] = useState<TabKey>(
     tournament.status === "in_progress" ? "standings" : "bracket"
   )
+  
+  // Enable realtime updates for in-progress tournaments
+  const isLive = tournament.status === "in_progress"
+  const { isConnected, lastUpdate } = useTournamentRealtime({
+    tournamentId: tournament.id,
+    autoRefresh: isLive, // Only auto-refresh for active tournaments
+  })
 
   const showResults = tournament.status === "completed"
   const showPairings = tournament.status === "in_progress" && currentRound
@@ -71,6 +79,35 @@ export function TournamentTabs({
 
   return (
     <div>
+      {/* Live indicator for active tournaments */}
+      {isLive && (
+        <div className="mb-4 flex items-center justify-between rounded-lg border border-primary/30 bg-primary/5 px-4 py-2">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-primary" />
+            </span>
+            <span className="text-sm font-medium text-primary">Live Tournament</span>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            {isConnected ? (
+              <>
+                <Wifi className="h-3 w-3 text-green-500" />
+                <span>Connected</span>
+              </>
+            ) : (
+              <>
+                <Wifi className="h-3 w-3 text-muted-foreground" />
+                <span>Connecting...</span>
+              </>
+            )}
+            {lastUpdate && (
+              <span className="ml-2">Updated {format(lastUpdate, "h:mm:ss a")}</span>
+            )}
+          </div>
+        </div>
+      )}
+      
       <div className="mb-6 flex gap-1 overflow-x-auto rounded-lg border border-border bg-muted/30 p-1">
         {filteredTabs.map((tab) => (
           <button
