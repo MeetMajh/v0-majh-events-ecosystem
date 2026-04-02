@@ -93,8 +93,7 @@ async function getMyEvents(userId: string) {
     const { data: tournamentData } = await adminClient
       .from("tournaments")
       .select(`
-        id, name, slug, status, start_date, end_date, location, venue_name,
-        games (id, name, category, icon_url)
+        id, name, slug, status, start_date, end_date, game_id
       `)
       .in("id", tournamentIdsFromMatches)
       .order("start_date", { ascending: false })
@@ -118,8 +117,7 @@ async function getMyEvents(userId: string) {
     .select(`
       *,
       tournaments (
-        id, name, slug, status, start_date, end_date, location, venue_name,
-        games (id, name, category, icon_url)
+        id, name, slug, status, start_date, end_date, game_id
       )
     `)
     .eq("user_id", userId)
