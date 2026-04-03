@@ -82,16 +82,16 @@ export default function MediaBrowsePage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <div className="border-b bg-gradient-to-b from-primary/5 to-background">
+      <div className="glass-panel-darker border-b border-border/30">
         <div className="mx-auto max-w-7xl px-4 py-8">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-sm font-semibold text-primary">
+              <div className="badge-featured mb-3 inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-semibold">
                 <Play className="h-4 w-4" />
                 MAJH CLIPS
               </div>
-              <h1 className="text-4xl font-bold tracking-tight">Media Hub</h1>
-              <p className="mt-2 text-lg text-muted-foreground">
+              <h1 className="esports-heading text-4xl text-foreground">Media Hub</h1>
+              <p className="mt-2 text-muted-foreground">
                 Watch clips, highlights, and gameplay from the community
               </p>
             </div>
@@ -113,10 +113,10 @@ export default function MediaBrowsePage() {
       <div className="mx-auto max-w-7xl px-4 py-8">
         {/* Featured carousel */}
         {featuredMedia.length > 0 && (
-          <section className="mb-8">
+          <section className="mb-8 glass-panel rounded-xl p-6 glow-featured">
             <div className="mb-4 flex items-center gap-2">
-              <Trophy className="h-5 w-5 text-amber-500" />
-              <h2 className="text-lg font-semibold">Featured Clips</h2>
+              <Trophy className="h-5 w-5 text-amber-500 animate-pulse-glow" />
+              <h2 className="esports-subheading text-muted-foreground">Featured Clips</h2>
             </div>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {featuredMedia.slice(0, 3).map((media) => (
@@ -129,7 +129,7 @@ export default function MediaBrowsePage() {
         {/* Main content with tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <TabsList>
+            <TabsList className="bg-background/50 backdrop-blur-sm">
               <TabsTrigger value="trending" className="gap-1.5">
                 <Flame className="h-4 w-4" />
                 Trending
@@ -182,7 +182,7 @@ export default function MediaBrowsePage() {
             <>
               <TabsContent value="trending" className="mt-0">
                 {trendingMedia.length === 0 ? (
-                  <Card className="border-dashed">
+                  <Card className="glass-panel border-0 border-dashed">
                     <CardContent className="flex flex-col items-center justify-center py-12">
                       <TrendingUp className="mb-4 h-12 w-12 text-muted-foreground/30" />
                       <p className="text-lg font-medium">No trending clips yet</p>
@@ -208,7 +208,7 @@ export default function MediaBrowsePage() {
               
               <TabsContent value="recent" className="mt-0">
                 {recentMedia.length === 0 ? (
-                  <Card className="border-dashed">
+                  <Card className="glass-panel border-0 border-dashed">
                     <CardContent className="flex flex-col items-center justify-center py-12">
                       <Clock className="mb-4 h-12 w-12 text-muted-foreground/30" />
                       <p className="text-lg font-medium">No clips yet</p>
@@ -226,9 +226,9 @@ export default function MediaBrowsePage() {
         </Tabs>
         
         {/* Guidelines */}
-        <Card className="mt-8">
+        <Card className="glass-panel border-0 mt-8">
           <CardHeader>
-            <CardTitle className="text-base">Community Guidelines</CardTitle>
+            <CardTitle className="esports-subheading text-muted-foreground">Community Guidelines</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
