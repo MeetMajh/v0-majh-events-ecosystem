@@ -248,28 +248,43 @@ $$ LANGUAGE plpgsql;
 ALTER TABLE match_game_results ENABLE ROW LEVEL SECURITY;
 ALTER TABLE auto_feature_config ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Anyone can view game results" ON match_game_results FOR SELECT USING (true);
-CREATE POLICY "TOs can manage game results" ON match_game_results FOR ALL USING (true);
-
-CREATE POLICY "Anyone can view auto feature config" ON auto_feature_config FOR SELECT USING (true);
-CREATE POLICY "TOs can manage auto feature config" ON auto_feature_config FOR ALL USING (
-  tournament_id IS NULL OR
-  EXISTS (
-    SELECT 1 FROM tournaments t
-    WHERE t.id = auto_feature_config.tournament_id
-    AND (
-      t.created_by = auth.uid()
-      OR EXISTS (
-        SELECT 1 FROM staff_roles sr
-        WHERE sr.user_id = auth.uid()
-        AND sr.role IN ('owner', 'manager', 'organizer')
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Anyone can view game results' AND tablename = 'match_game_results') THEN
+    CREATE POLICY "Anyone can view game results" ON match_game_results FOR SELECT USING (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'TOs can manage game results' AND tablename = 'match_game_results') THEN
+    CREATE POLICY "TOs can manage game results" ON match_game_results FOR ALL USING (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Anyone can view auto feature config' AND tablename = 'auto_feature_config') THEN
+    CREATE POLICY "Anyone can view auto feature config" ON auto_feature_config FOR SELECT USING (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'TOs can manage auto feature config' AND tablename = 'auto_feature_config') THEN
+    CREATE POLICY "TOs can manage auto feature config" ON auto_feature_config FOR ALL USING (
+      tournament_id IS NULL OR
+      EXISTS (
+        SELECT 1 FROM tournaments t
+        WHERE t.id = auto_feature_config.tournament_id
+        AND (
+          t.created_by = auth.uid()
+          OR EXISTS (
+            SELECT 1 FROM staff_roles sr
+            WHERE sr.user_id = auth.uid()
+            AND sr.role IN ('owner', 'manager', 'organizer')
+          )
+        )
       )
-    )
-  )
-);
+    );
+  END IF;
+END $$;
 
 -- ==========================================
--- 7. ENABLE REALTIME
+-- 7. ENABLE REALTIME (ignore if already added)
 -- ==========================================
 
-ALTER PUBLICATION supabase_realtime ADD TABLE match_game_results;
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE match_game_results;
+EXCEPTION WHEN duplicate_object THEN
+  NULL;
+END $$;
