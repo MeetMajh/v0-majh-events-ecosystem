@@ -27,10 +27,11 @@ const STATUS_STYLES: Record<string, { label: string; className: string }> = {
 export function TournamentCard({ tournament }: { tournament: Tournament }) {
   const status = STATUS_STYLES[tournament.status] ?? STATUS_STYLES.draft
   const participantCount = tournament.tournament_participants?.[0]?.count ?? 0
+  const isLive = tournament.status === "in_progress"
 
   return (
     <Link href={`/esports/tournaments/${tournament.slug}`} className="group block">
-      <div className="rounded-xl border border-border bg-card p-5 transition-all hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5">
+      <div className={`esports-card glass-panel rounded-xl border-0 p-5 ${isLive ? "glow-live ring-1 ring-destructive/30" : ""}`}>
         <div className="mb-3 flex items-start justify-between gap-2">
           <div className="flex items-center gap-2">
             {tournament.games && (
@@ -52,11 +53,11 @@ export function TournamentCard({ tournament }: { tournament: Tournament }) {
           )}
         </div>
 
-        <h3 className="mb-1 text-balance font-semibold text-foreground group-hover:text-primary transition-colors">
+        <h3 className="mb-1 text-balance font-semibold text-foreground group-hover:text-primary transition-colors line-clamp-2">
           {tournament.name}
         </h3>
 
-        <p className="mb-4 text-xs text-muted-foreground">
+        <p className="esports-subheading mb-4 text-muted-foreground">
           {FORMAT_LABELS[tournament.format as TournamentFormat] ?? tournament.format}
         </p>
 

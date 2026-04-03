@@ -54,7 +54,7 @@ export function TrendingMatchCard({ match, rank, variant = "default" }: Trending
   if (variant === "compact") {
     return (
       <Link href={`/match/${match.id}/watch`}>
-        <Card className="group flex items-center gap-3 p-3 transition-all hover:bg-accent/50 hover:shadow-md">
+        <Card className="esports-card glass-panel border-0 group flex items-center gap-3 p-3">
           {rank && (
             <div className="flex h-6 w-6 items-center justify-center rounded-full bg-muted text-xs font-bold">
               {rank}
@@ -110,9 +110,12 @@ export function TrendingMatchCard({ match, rank, variant = "default" }: Trending
   if (variant === "featured") {
     return (
       <Link href={`/match/${match.id}/watch`}>
-        <Card className="group relative overflow-hidden transition-all hover:shadow-xl">
+        <Card className={cn(
+          "esports-card glass-panel border-0 group relative overflow-hidden",
+          isLive && "glow-live"
+        )}>
           {/* Background gradient */}
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-destructive/10" />
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-destructive/5" />
           
           {/* Content */}
           <div className="relative p-6">
@@ -120,8 +123,8 @@ export function TrendingMatchCard({ match, rank, variant = "default" }: Trending
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 {isLive && (
-                  <Badge variant="destructive" className="gap-1">
-                    <span className="h-2 w-2 animate-pulse rounded-full bg-white" />
+                  <Badge className="badge-live gap-1">
+                    <span className="h-2 w-2 rounded-full bg-white" />
                     LIVE
                   </Badge>
                 )}

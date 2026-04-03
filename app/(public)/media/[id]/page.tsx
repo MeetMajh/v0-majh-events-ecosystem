@@ -245,7 +245,7 @@ export default function MediaWatchPage() {
             
             {/* Title & Actions */}
             <div>
-              <h1 className="text-2xl font-bold">{media.title}</h1>
+              <h1 className="esports-heading text-2xl">{media.title}</h1>
               
               <div className="mt-3 flex flex-wrap items-center justify-between gap-4">
                 <div className="flex items-center gap-4 text-sm text-muted-foreground">
@@ -318,7 +318,7 @@ export default function MediaWatchPage() {
             </div>
             
             {/* Player info */}
-            <Card>
+            <Card className="glass-panel border-0">
               <CardContent className="p-4">
                 <div className="flex items-start justify-between">
                   <Link href={`/players/${media.player_id}`} className="flex items-center gap-3">
@@ -385,10 +385,10 @@ export default function MediaWatchPage() {
             </Card>
             
             {/* Comments */}
-            <Card>
+            <Card className="glass-panel border-0">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <MessageSquare className="h-5 w-5" />
+                <CardTitle className="esports-subheading text-muted-foreground flex items-center gap-2">
+                  <MessageSquare className="h-4 w-4" />
                   {comments.length} Comments
                 </CardTitle>
               </CardHeader>
@@ -469,9 +469,9 @@ export default function MediaWatchPage() {
           {/* Sidebar */}
           <div className="space-y-4">
             {/* Quick reactions */}
-            <Card>
+            <Card className="glass-panel border-0">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Quick Reactions</CardTitle>
+                <CardTitle className="esports-subheading text-muted-foreground">Quick Reactions</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex flex-wrap gap-2">
@@ -504,9 +504,9 @@ export default function MediaWatchPage() {
             
             {/* More from player */}
             {relatedMedia.length > 0 && (
-              <Card>
+              <Card className="glass-panel border-0">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm">More from {media.player?.first_name}</CardTitle>
+                  <CardTitle className="esports-subheading text-muted-foreground">More from {media.player?.first_name}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {relatedMedia.slice(0, 4).map((item) => (

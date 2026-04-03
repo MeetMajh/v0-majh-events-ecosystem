@@ -86,7 +86,7 @@ export function MediaCard({
   if (variant === "compact") {
     return (
       <Link href={`/media/${media.id}`}>
-        <Card className="group overflow-hidden transition-all hover:bg-accent/50">
+        <Card className="esports-card glass-panel border-0 group overflow-hidden">
           <div className="flex gap-3 p-2">
             {/* Thumbnail */}
             <div className="relative aspect-video w-32 flex-shrink-0 overflow-hidden rounded-md bg-muted">
@@ -133,7 +133,7 @@ export function MediaCard({
     return (
       <Link href={`/media/${media.id}`}>
         <Card
-          className="group relative overflow-hidden"
+          className="esports-card glass-panel border-0 group relative overflow-hidden"
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
         >
@@ -226,7 +226,7 @@ export function MediaCard({
   // Default variant
   return (
     <Card
-      className="group relative overflow-hidden"
+      className="esports-card glass-panel border-0 group relative overflow-hidden"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
