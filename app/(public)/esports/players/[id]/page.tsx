@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Trophy, Swords, BarChart3, Users, Target, Medal, CalendarDays, TrendingUp, Gamepad2, CheckCircle2, XCircle, MinusCircle, Clock } from "lucide-react"
 import { format } from "date-fns"
+import { PlayerMediaSection } from "@/components/media/player-media-section"
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -163,6 +164,9 @@ export default async function PlayerProfilePage({ params }: { params: Promise<{ 
           </Card>
         )}
       </div>
+
+      {/* Media Section */}
+      <PlayerMediaSection playerId={id} playerName={player.display_name} />
 
       {/* Game Rankings */}
       {player.leaderboardEntries.length > 0 && (
