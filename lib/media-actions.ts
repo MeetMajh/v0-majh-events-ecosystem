@@ -49,6 +49,58 @@ export interface PlayerMedia {
 }
 
 // ==========================================
+// FILE UPLOAD
+// ==========================================
+
+export async function uploadMediaFile(
+  file: File
+): Promise<{ url?: string; storagePath?: string; error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  if (!user) return { error: "Must be logged in to upload" }
+  
+  // Validate file type
+  const allowedTypes = ["video/mp4", "video/webm", "video/quicktime", "video/x-m4v"]
+  if (!allowedTypes.includes(file.type)) {
+    return { error: "Invalid file type. Supported: MP4, WebM, MOV" }
+  }
+  
+  // Validate file size (100MB max)
+  const maxSize = 100 * 1024 * 1024
+  if (file.size > maxSize) {
+    return { error: "File too large. Maximum size is 100MB" }
+  }
+  
+  // Generate unique file path
+  const fileExt = file.name.split(".").pop()?.toLowerCase() || "mp4"
+  const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${fileExt}`
+  const filePath = `${user.id}/${fileName}`
+  
+  // Upload to Supabase Storage
+  const { error: uploadError } = await supabase.storage
+    .from("player-media")
+    .upload(filePath, file, {
+      cacheControl: "3600",
+      upsert: false,
+    })
+  
+  if (uploadError) {
+    return { error: `Upload failed: ${uploadError.message}` }
+  }
+  
+  // Get public URL
+  const { data: urlData } = supabase.storage
+    .from("player-media")
+    .getPublicUrl(filePath)
+  
+  return { 
+    url: urlData.publicUrl, 
+    storagePath: filePath 
+  }
+}
+
+// ==========================================
 // MEDIA CRUD
 // ==========================================
 
