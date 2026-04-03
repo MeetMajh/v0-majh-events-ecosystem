@@ -240,6 +240,23 @@
   letter-spacing: -0.02em;
 }
 
+/* Mobile Safe Area for iOS */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.safe-area-top {
+  padding-top: env(safe-area-inset-top, 0);
+}
+
+/* Mobile-first touch targets */
+@media (max-width: 768px) {
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
 /* Esports Typography */
 .esports-heading {
   font-weight: 800;

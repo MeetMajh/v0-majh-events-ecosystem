@@ -122,11 +122,15 @@ function ClipView({
     const timeSinceLastTap = now - lastTapRef.current
     
     if (timeSinceLastTap < 300) {
-      // Double tap - like
+      // Double tap - like with haptic feedback
       if (!isLiked) {
         setIsLiked(true)
         setLikeCount(prev => prev + 1)
         setShowDoubleTapHeart(true)
+        // Haptic feedback burst for like
+        if (typeof navigator !== "undefined" && navigator.vibrate) {
+          navigator.vibrate([30, 50, 30])
+        }
         addMediaReaction(clip.id, "like").catch(() => {
           setIsLiked(false)
           setLikeCount(prev => prev - 1)
@@ -462,12 +466,16 @@ export default function ClipsFeedPage() {
     }
   }
 
-  // Navigate to next/prev clip
+  // Navigate to next/prev clip with haptic feedback
   const paginate = useCallback((newDirection: number) => {
     const newIndex = currentIndex + newDirection
     if (newIndex >= 0 && newIndex < clips.length) {
       setDirection(newDirection)
       setCurrentIndex(newIndex)
+      // Haptic feedback for native feel
+      if (typeof navigator !== "undefined" && navigator.vibrate) {
+        navigator.vibrate(10)
+      }
     }
   }, [currentIndex, clips.length])
 
