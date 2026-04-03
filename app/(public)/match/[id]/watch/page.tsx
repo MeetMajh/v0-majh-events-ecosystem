@@ -441,7 +441,7 @@ export default function MatchWatchPage({ params }: { params: Promise<{ id: strin
 
           {/* Match Info Bar */}
           {!isFullscreen && (
-            <div className="mt-4 rounded-2xl border border-border bg-card p-6">
+            <div className="glass-panel mt-4 rounded-xl p-6">
               <div className="flex items-center justify-between">
                 {/* Player 1 */}
                 <div className="flex items-center gap-4">
@@ -464,7 +464,7 @@ export default function MatchWatchPage({ params }: { params: Promise<{ id: strin
 
                 {/* Score */}
                 <div className="text-center">
-                  <div className="flex items-center gap-6">
+                  <div className="score-display flex items-center gap-6">
                     <span className={cn(
                       "text-5xl font-bold",
                       match.player1_wins > match.player2_wins ? "text-primary" : "text-foreground"

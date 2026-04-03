@@ -252,7 +252,7 @@ export default function CasterDashboardPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <header className="glass-panel-darker sticky top-0 z-50 border-b border-border/30">
         <div className="container flex h-14 items-center justify-between">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="sm" asChild>
@@ -264,7 +264,7 @@ export default function CasterDashboardPage() {
             <Separator orientation="vertical" className="h-6" />
             <div>
               <h1 className="text-sm font-semibold">{tournament.name}</h1>
-              <p className="text-xs text-muted-foreground">Caster Dashboard</p>
+              <p className="esports-subheading text-muted-foreground">Control Room</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -292,12 +292,12 @@ export default function CasterDashboardPage() {
           {/* Main Content - Left 2 columns */}
           <div className="lg:col-span-2 space-y-6">
             {/* Feature Matches */}
-            <Card>
+            <Card className="glass-panel border-0">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Star className="h-5 w-5 text-yellow-500" />
-                    <CardTitle>Feature Matches</CardTitle>
+                    <Star className="h-5 w-5 text-yellow-500 animate-pulse-glow" />
+                    <CardTitle className="esports-heading text-base">Feature Matches</CardTitle>
                   </div>
                   <Button variant="ghost" size="sm" onClick={fetchData}>
                     <RefreshCw className="h-4 w-4" />
@@ -315,10 +315,10 @@ export default function CasterDashboardPage() {
                       <div
                         key={match.id}
                         className={cn(
-                          "rounded-lg border p-4 transition-colors cursor-pointer",
+                          "esports-card glass-panel rounded-lg border-0 p-4 cursor-pointer",
                           selectedMatch?.id === match.id
-                            ? "border-primary bg-primary/5"
-                            : "hover:border-primary/50"
+                            ? "ring-2 ring-primary bg-primary/10"
+                            : ""
                         )}
                         onClick={() => setSelectedMatch(match)}
                       >
@@ -334,11 +334,11 @@ export default function CasterDashboardPage() {
                                   {getPlayerRecord(match.player1_id)}
                                 </p>
                               </div>
-                              <div className="flex items-center gap-2 rounded bg-muted px-3 py-1">
-                                <span className="text-lg font-bold">{match.player1_wins ?? 0}</span>
-                                <span className="text-muted-foreground">-</span>
-                                <span className="text-lg font-bold">{match.player2_wins ?? 0}</span>
-                              </div>
+<div className="score-display flex items-center gap-2 rounded bg-background/50 px-3 py-1">
+                                                <span className="text-lg font-bold">{match.player1_wins ?? 0}</span>
+                                                <span className="text-muted-foreground">-</span>
+                                                <span className="text-lg font-bold">{match.player2_wins ?? 0}</span>
+                                              </div>
                               <div>
                                 <p className="font-medium">{getPlayerName(match.player2_id)}</p>
                                 <p className="text-xs text-muted-foreground">

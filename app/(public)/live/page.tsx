@@ -296,23 +296,23 @@ export default function MajhLivePage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Hero Header */}
-      <div className="border-b border-border bg-gradient-to-b from-destructive/5 to-background">
+      <div className="glass-panel-darker border-b border-border/30">
         <div className="mx-auto max-w-7xl px-4 py-8">
           <div className="flex items-center justify-between">
             <div>
-              <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-destructive/30 bg-destructive/10 px-4 py-1.5 text-sm font-semibold text-destructive">
-                <Radio className="h-4 w-4 animate-pulse" />
+              <div className="badge-live mb-3 inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-semibold">
+                <Radio className="h-4 w-4" />
                 MAJH LIVE
               </div>
-              <h1 className="text-4xl font-bold tracking-tight text-foreground">Live Hub</h1>
-              <p className="mt-2 text-lg text-muted-foreground">
+              <h1 className="esports-heading text-4xl text-foreground">Live Hub</h1>
+              <p className="mt-2 text-muted-foreground">
                 Watch competitive matches and tournaments in real-time
               </p>
             </div>
             <div className="flex items-center gap-3">
               <Badge variant="outline" className={cn(
-                "gap-1.5",
-                connected ? "border-green-500/50 text-green-500" : "border-destructive/50 text-destructive"
+                "gap-1.5 backdrop-blur-sm",
+                connected ? "border-green-500/50 text-green-500 bg-green-500/10" : "border-destructive/50 text-destructive bg-destructive/10"
               )}>
                 {connected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
                 {connected ? "Connected" : "Reconnecting..."}
@@ -347,12 +347,12 @@ export default function MajhLivePage() {
           <div className="space-y-8">
             {/* Hot Now - Featured Trending Match */}
             {trendingMatches.length > 0 && trendingMatches[0].trendingBadge && (
-              <div>
+              <div className="glass-panel rounded-xl p-6 glow-trending">
                 <div className="mb-4 flex items-center gap-2">
-                  <Flame className="h-5 w-5 text-orange-500" />
-                  <h2 className="text-lg font-semibold">Hot Now</h2>
+                  <Flame className="h-5 w-5 text-orange-500 animate-pulse-glow" />
+                  <h2 className="esports-subheading text-muted-foreground">Hot Now</h2>
                   {trendingMatches[0].viewerVelocity > 0 && (
-                    <Badge variant="outline" className="gap-1 text-emerald-500 border-emerald-500/30">
+                    <Badge className="badge-trending gap-1">
                       <ArrowUp className="h-3 w-3" />
                       +{trendingMatches[0].viewerVelocity} viewers
                     </Badge>
@@ -366,9 +366,9 @@ export default function MajhLivePage() {
             {/* Main Content - Feature Stream */}
             <div className="lg:col-span-2">
               {selectedMatch ? (
-                <div className="overflow-hidden rounded-2xl border border-primary/30 bg-card">
+                <div className="esports-card glass-panel overflow-hidden rounded-xl border-0">
                   {/* Stream Player */}
-                  <div className="relative aspect-video bg-black">
+                  <div className="video-container">
                     {selectedMatch.streamUrl || selectedMatch.streamEmbedUrl ? (
                       <iframe
                         src={selectedMatch.streamEmbedUrl || getEmbedUrl(selectedMatch.streamUrl!, selectedMatch.streamPlatform || "custom")}
@@ -526,8 +526,9 @@ export default function MajhLivePage() {
 
             {/* Sidebar - Live Channels */}
             <div className="space-y-6">
+              <div className="glass-panel rounded-xl p-4">
               <Tabs value={activeTab} onValueChange={setActiveTab}>
-<TabsList className="w-full grid grid-cols-4">
+<TabsList className="w-full grid grid-cols-4 bg-background/50">
 <TabsTrigger value="trending" className="gap-1.5">
   <Flame className="h-3.5 w-3.5" />
   Hot
@@ -732,6 +733,7 @@ export default function MajhLivePage() {
                   )}
                 </TabsContent>
               </Tabs>
+              </div>
             </div>
           </div>
           </div>
