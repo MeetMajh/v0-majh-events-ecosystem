@@ -6,17 +6,18 @@ import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { BracketView } from "@/components/esports/bracket-view"
+import { VODGrid } from "@/components/esports/vod-card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Shield, Users, Trophy, ScrollText, ListOrdered, Swords, Send, Timer, CheckCircle2, LayoutList, Radio, Wifi } from "lucide-react"
+import { Shield, Users, Trophy, ScrollText, ListOrdered, Swords, Send, Timer, CheckCircle2, LayoutList, Radio, Wifi, Play } from "lucide-react"
 import { format } from "date-fns"
 import { useTournamentRealtime } from "@/hooks/use-tournament-realtime"
 
-type TabKey = "bracket" | "rounds" | "standings" | "pairings" | "participants" | "rules" | "results"
+type TabKey = "bracket" | "rounds" | "standings" | "pairings" | "participants" | "rules" | "results" | "vods"
 
 // Helper to get display name, preferring username if available
 function getPlayerDisplayName(profile: { display_name?: string; username?: string | null; first_name?: string; last_name?: string } | null): string {
@@ -35,6 +36,7 @@ const TABS: { key: TabKey; label: string; icon: any }[] = [
   { key: "participants", label: "Participants", icon: Users },
   { key: "rules", label: "Rules", icon: ScrollText },
   { key: "results", label: "Results", icon: Shield },
+  { key: "vods", label: "VODs", icon: Play },
 ]
 
 export function TournamentTabs({
@@ -45,6 +47,7 @@ export function TournamentTabs({
   currentRound,
   allRounds,
   currentUserId,
+  vods,
 }: {
   tournament: any
   matches: any[]
@@ -53,6 +56,7 @@ export function TournamentTabs({
   currentRound?: any
   allRounds?: any[]
   currentUserId?: string
+  vods?: any[]
 }) {
   const [activeTab, setActiveTab] = useState<TabKey>(
     tournament.status === "in_progress" ? "standings" : "bracket"
@@ -159,10 +163,14 @@ export function TournamentTabs({
         <RulesView rules={tournament.rules_text} />
       )}
 
-      {activeTab === "results" && showResults && (
-        <ResultsView tournamentId={tournament.id} standings={standings ?? []} />
-      )}
-    </div>
+{activeTab === "results" && showResults && (
+  <ResultsView tournamentId={tournament.id} standings={standings ?? []} />
+  )}
+  
+  {activeTab === "vods" && (
+    <VODGrid vods={vods || []} emptyMessage="No VODs have been added for this tournament yet" />
+  )}
+  </div>
   )
 }
 
