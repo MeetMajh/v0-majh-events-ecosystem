@@ -1371,7 +1371,7 @@ export async function getRoundPairings(roundId: string) {
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Elimination Bracket Generation
-// ════════════════════════════════════════════════════════════════════════�������═════
+// ════════════════════════════════════════════════════════════════════════���������═════
 
 function nextPowerOf2(n: number): number {
   let p = 1
@@ -1869,7 +1869,7 @@ export async function adminCheckInPlayer(tournamentId: string, playerId: string,
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Round Timer Controls
-// ═══════════════════════════════════════════════════════��═��════════════════════
+// ═══════════════════════════════════════════════════════���═��════════════════════
 
 export async function pauseRound(tournamentId: string, roundId: string) {
   const auth = await requireTournamentOrganizer(tournamentId)
@@ -4104,4 +4104,589 @@ export async function getVodTimestamps(vodId: string) {
     .order("timestamp_seconds", { ascending: true })
 
   return data || []
+}
+
+// ==========================================
+// ENGAGEMENT SYSTEM
+// ==========================================
+
+// Track viewer session
+export async function trackViewerSession(
+  matchId: string,
+  sessionId: string
+): Promise<{ sessionId?: string; error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  // Check for existing active session
+  const { data: existing } = await supabase
+    .from("match_viewer_sessions")
+    .select("id")
+    .eq("match_id", matchId)
+    .eq("session_id", sessionId)
+    .is("ended_at", null)
+    .single()
+
+  if (existing) {
+    // Update last ping
+    await supabase
+      .from("match_viewer_sessions")
+      .update({ last_ping_at: new Date().toISOString() })
+      .eq("id", existing.id)
+    return { sessionId: existing.id }
+  }
+
+  // Create new session
+  const { data: session, error } = await supabase
+    .from("match_viewer_sessions")
+    .insert({
+      match_id: matchId,
+      user_id: user?.id || null,
+      session_id: sessionId,
+    })
+    .select("id")
+    .single()
+
+  if (error) return { error: error.message }
+  return { sessionId: session.id }
+}
+
+// End viewer session
+export async function endViewerSession(
+  matchId: string,
+  sessionId: string
+): Promise<{ success?: boolean; error?: string }> {
+  const supabase = await createClient()
+
+  const { error } = await supabase
+    .from("match_viewer_sessions")
+    .update({ 
+      ended_at: new Date().toISOString(),
+    })
+    .eq("match_id", matchId)
+    .eq("session_id", sessionId)
+    .is("ended_at", null)
+
+  if (error) return { error: error.message }
+  return { success: true }
+}
+
+// Get viewer count for a match
+export async function getMatchViewerCount(matchId: string): Promise<number> {
+  const supabase = await createClient()
+  
+  const cutoff = new Date(Date.now() - 60000).toISOString() // 60 seconds ago
+
+  const { count } = await supabase
+    .from("match_viewer_sessions")
+    .select("*", { count: "exact", head: true })
+    .eq("match_id", matchId)
+    .is("ended_at", null)
+    .gte("last_ping_at", cutoff)
+
+  return count || 0
+}
+
+// Add reaction to a match
+export async function addMatchReaction(
+  matchId: string,
+  reactionType: "fire" | "shocked" | "clap" | "sad" | "laugh",
+  sessionId: string
+): Promise<{ success?: boolean; error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  const { error } = await supabase
+    .from("match_reactions")
+    .insert({
+      match_id: matchId,
+      user_id: user?.id || null,
+      session_id: sessionId,
+      reaction_type: reactionType,
+    })
+
+  if (error) return { error: error.message }
+  return { success: true }
+}
+
+// Get reaction counts for a match
+export async function getMatchReactionCounts(matchId: string) {
+  const supabase = await createClient()
+
+  const { data } = await supabase
+    .from("match_reaction_counts")
+    .select("*")
+    .eq("match_id", matchId)
+    .single()
+
+  return data || {
+    fire_count: 0,
+    shocked_count: 0,
+    clap_count: 0,
+    sad_count: 0,
+    laugh_count: 0,
+    total_count: 0,
+  }
+}
+
+// Send chat message
+export async function sendChatMessage(
+  matchId: string,
+  message: string
+): Promise<{ success?: boolean; messageId?: string; error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  if (!user) return { error: "Must be logged in to chat" }
+
+  // Get user profile
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("first_name, last_name, avatar_url")
+    .eq("id", user.id)
+    .single()
+
+  const displayName = profile 
+    ? `${profile.first_name || ""} ${profile.last_name || ""}`.trim() || "Anonymous"
+    : "Anonymous"
+
+  // Check if user is a caster/moderator for this match
+  const { data: match } = await supabase
+    .from("tournament_matches")
+    .select("round_id, tournament_rounds(tournament_id)")
+    .eq("id", matchId)
+    .single()
+
+  let isCaster = false
+  let isModerator = false
+  
+  if (match) {
+    const tournamentId = (match.tournament_rounds as any)?.tournament_id
+    if (tournamentId) {
+      const { data: staff } = await supabase
+        .from("staff_roles")
+        .select("role")
+        .eq("user_id", user.id)
+        .single()
+      
+      if (staff?.role) {
+        isModerator = ["owner", "manager", "organizer"].includes(staff.role)
+        isCaster = staff.role === "caster" || isModerator
+      }
+    }
+  }
+
+  const { data: msg, error } = await supabase
+    .from("match_chat_messages")
+    .insert({
+      match_id: matchId,
+      user_id: user.id,
+      display_name: displayName,
+      avatar_url: profile?.avatar_url || null,
+      message: message.slice(0, 500),
+      is_caster: isCaster,
+      is_moderator: isModerator,
+    })
+    .select("id")
+    .single()
+
+  if (error) return { error: error.message }
+  return { success: true, messageId: msg.id }
+}
+
+// Get chat messages for a match
+export async function getMatchChatMessages(matchId: string, limit: number = 50) {
+  const supabase = await createClient()
+
+  const { data } = await supabase
+    .from("match_chat_messages")
+    .select("*")
+    .eq("match_id", matchId)
+    .eq("is_deleted", false)
+    .order("created_at", { ascending: false })
+    .limit(limit)
+
+  return (data || []).reverse()
+}
+
+// Follow a player
+export async function followPlayer(playerId: string): Promise<{ success?: boolean; error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  if (!user) return { error: "Must be logged in to follow" }
+  if (user.id === playerId) return { error: "Cannot follow yourself" }
+
+  const { error } = await supabase
+    .from("player_follows")
+    .insert({
+      follower_id: user.id,
+      player_id: playerId,
+    })
+
+  if (error) {
+    if (error.code === "23505") return { error: "Already following this player" }
+    return { error: error.message }
+  }
+
+  revalidatePath(`/players`)
+  return { success: true }
+}
+
+// Unfollow a player
+export async function unfollowPlayer(playerId: string): Promise<{ success?: boolean; error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  if (!user) return { error: "Must be logged in" }
+
+  const { error } = await supabase
+    .from("player_follows")
+    .delete()
+    .eq("follower_id", user.id)
+    .eq("player_id", playerId)
+
+  if (error) return { error: error.message }
+
+  revalidatePath(`/players`)
+  return { success: true }
+}
+
+// Check if following a player
+export async function isFollowingPlayer(playerId: string): Promise<boolean> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  if (!user) return false
+
+  const { data } = await supabase
+    .from("player_follows")
+    .select("id")
+    .eq("follower_id", user.id)
+    .eq("player_id", playerId)
+    .single()
+
+  return !!data
+}
+
+// Get followed players
+export async function getFollowedPlayers() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  if (!user) return []
+
+  const { data } = await supabase
+    .from("player_follows")
+    .select(`
+      player_id,
+      profiles!player_follows_player_id_fkey(
+        id, first_name, last_name, avatar_url, follower_count
+      )
+    `)
+    .eq("follower_id", user.id)
+    .order("created_at", { ascending: false })
+
+  return data?.map(d => d.profiles) || []
+}
+
+// Get trending matches
+export async function getTrendingMatches(limit: number = 10) {
+  const supabase = await createClient()
+
+  // Get live feature matches with engagement data
+  const { data: matches } = await supabase
+    .from("tournament_matches")
+    .select(`
+      id, player1_id, player2_id, player1_wins, player2_wins, draws,
+      status, table_number, is_feature_match, stream_url, stream_platform,
+      viewer_count, total_reactions, peak_viewer_count,
+      tournament_rounds(
+        round_number,
+        tournament_phases(
+          tournaments(id, name, slug, games(name, slug))
+        )
+      )
+    `)
+    .eq("is_feature_match", true)
+    .in("status", ["pending", "in_progress", "player1_reported", "player2_reported"])
+    .order("viewer_count", { ascending: false })
+    .limit(limit)
+
+  if (!matches) return []
+
+  // Get player profiles
+  const playerIds = new Set<string>()
+  matches.forEach(m => {
+    if (m.player1_id) playerIds.add(m.player1_id)
+    if (m.player2_id) playerIds.add(m.player2_id)
+  })
+
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("id, first_name, last_name, avatar_url")
+    .in("id", Array.from(playerIds))
+
+  const profileMap = new Map(profiles?.map(p => [p.id, p]) || [])
+
+  return matches.map(m => {
+    const tournament = (m.tournament_rounds as any)?.tournament_phases?.tournaments
+    return {
+      id: m.id,
+      player1: profileMap.get(m.player1_id!) || null,
+      player2: profileMap.get(m.player2_id!) || null,
+      player1Wins: m.player1_wins,
+      player2Wins: m.player2_wins,
+      status: m.status,
+      streamUrl: m.stream_url,
+      streamPlatform: m.stream_platform,
+      viewerCount: m.viewer_count || 0,
+      totalReactions: m.total_reactions || 0,
+      roundNumber: (m.tournament_rounds as any)?.round_number,
+      tournament: tournament ? {
+        id: tournament.id,
+        name: tournament.name,
+        slug: tournament.slug,
+        gameName: tournament.games?.name,
+      } : null,
+    }
+  })
+}
+
+// ==========================================
+// VIEWER ENGAGEMENT SYSTEM
+// ==========================================
+
+export type ReactionType = "hype" | "gg" | "clutch" | "sadge" | "pog" | "lul" | "fire" | "skull"
+
+// Send a reaction to a match
+export async function sendMatchReaction(
+  matchId: string,
+  reactionType: ReactionType,
+  sessionId?: string
+): Promise<{ success?: boolean; error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  const { error } = await supabase
+    .from("match_reactions")
+    .insert({
+      match_id: matchId,
+      user_id: user?.id || null,
+      reaction_type: reactionType,
+      session_id: sessionId || null,
+    })
+
+  if (error) return { error: error.message }
+  return { success: true }
+}
+
+// Get recent reactions for a match
+export async function getMatchReactions(matchId: string, limit: number = 50) {
+  const supabase = await createClient()
+
+  const { data } = await supabase
+    .from("match_reactions")
+    .select("id, reaction_type, created_at")
+    .eq("match_id", matchId)
+    .order("created_at", { ascending: false })
+    .limit(limit)
+
+  return data || []
+}
+
+// Get reaction counts for a match
+export async function getReactionCounts(matchId: string) {
+  const supabase = await createClient()
+
+  const { data } = await supabase
+    .from("match_reactions")
+    .select("reaction_type")
+    .eq("match_id", matchId)
+
+  const counts: Record<string, number> = {}
+  data?.forEach((r) => {
+    counts[r.reaction_type] = (counts[r.reaction_type] || 0) + 1
+  })
+
+  return counts
+}
+
+// Make a prediction
+export async function makeMatchPrediction(
+  matchId: string,
+  predictedWinnerId: string,
+  predictedScore?: string,
+  confidence?: number
+): Promise<{ success?: boolean; error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: "Sign in to make predictions" }
+
+  // Check if match has already started
+  const { data: match } = await supabase
+    .from("tournament_matches")
+    .select("status")
+    .eq("id", matchId)
+    .single()
+
+  if (match?.status !== "pending") {
+    return { error: "Match has already started" }
+  }
+
+  const { error } = await supabase
+    .from("match_predictions")
+    .upsert({
+      match_id: matchId,
+      user_id: user.id,
+      predicted_winner_id: predictedWinnerId,
+      predicted_score: predictedScore || null,
+      confidence: confidence || 50,
+    }, { onConflict: "match_id,user_id" })
+
+  if (error) return { error: error.message }
+  return { success: true }
+}
+
+// Get predictions for a match
+export async function getMatchPredictions(matchId: string) {
+  const supabase = await createClient()
+
+  const { data } = await supabase
+    .from("match_predictions")
+    .select(`
+      *,
+      user:profiles(id, first_name, last_name, avatar_url),
+      predicted_winner:profiles!match_predictions_predicted_winner_id_fkey(id, first_name, last_name)
+    `)
+    .eq("match_id", matchId)
+    .order("created_at", { ascending: false })
+
+  return data || []
+}
+
+// Get user's prediction for a match
+export async function getUserPrediction(matchId: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return null
+
+  const { data } = await supabase
+    .from("match_predictions")
+    .select("*")
+    .eq("match_id", matchId)
+    .eq("user_id", user.id)
+    .single()
+
+  return data
+}
+
+// Update viewer presence (heartbeat)
+export async function updateViewerPresence(
+  matchId: string,
+  sessionId?: string
+): Promise<{ viewerCount?: number; error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  // Upsert viewer presence
+  if (user) {
+    await supabase
+      .from("match_viewers")
+      .upsert({
+        match_id: matchId,
+        user_id: user.id,
+        session_id: null,
+        last_seen_at: new Date().toISOString(),
+      }, { onConflict: "match_id,user_id" })
+  } else if (sessionId) {
+    await supabase
+      .from("match_viewers")
+      .upsert({
+        match_id: matchId,
+        user_id: null,
+        session_id: sessionId,
+        last_seen_at: new Date().toISOString(),
+      }, { onConflict: "match_id,session_id" })
+  }
+
+  // Get current viewer count
+  const { count } = await supabase
+    .from("match_viewers")
+    .select("*", { count: "exact", head: true })
+    .eq("match_id", matchId)
+    .gte("last_seen_at", new Date(Date.now() - 2 * 60 * 1000).toISOString())
+
+  // Update peak viewers if needed
+  if (count) {
+    await supabase.rpc("update_peak_viewers", { p_match_id: matchId, p_count: count })
+  }
+
+  return { viewerCount: count || 0 }
+}
+
+// Get current viewer count
+export async function getMatchViewerCount(matchId: string): Promise<number> {
+  const supabase = await createClient()
+
+  const { count } = await supabase
+    .from("match_viewers")
+    .select("*", { count: "exact", head: true })
+    .eq("match_id", matchId)
+    .gte("last_seen_at", new Date(Date.now() - 2 * 60 * 1000).toISOString())
+
+  return count || 0
+}
+
+// Get prediction leaderboard
+export async function getPredictionLeaderboard(limit: number = 10) {
+  const supabase = await createClient()
+
+  const { data } = await supabase
+    .from("profiles")
+    .select("id, first_name, last_name, avatar_url, prediction_points, predictions_correct, predictions_total")
+    .gt("predictions_total", 0)
+    .order("prediction_points", { ascending: false })
+    .limit(limit)
+
+  return data || []
+}
+
+// Get match engagement stats
+export async function getMatchEngagement(matchId: string) {
+  const supabase = await createClient()
+
+  const [
+    { count: viewerCount },
+    { count: reactionCount },
+    { count: predictionCount },
+    { data: match }
+  ] = await Promise.all([
+    supabase
+      .from("match_viewers")
+      .select("*", { count: "exact", head: true })
+      .eq("match_id", matchId)
+      .gte("last_seen_at", new Date(Date.now() - 2 * 60 * 1000).toISOString()),
+    supabase
+      .from("match_reactions")
+      .select("*", { count: "exact", head: true })
+      .eq("match_id", matchId),
+    supabase
+      .from("match_predictions")
+      .select("*", { count: "exact", head: true })
+      .eq("match_id", matchId),
+    supabase
+      .from("tournament_matches")
+      .select("hype_score, peak_viewers")
+      .eq("id", matchId)
+      .single()
+  ])
+
+  return {
+    viewers: viewerCount || 0,
+    reactions: reactionCount || 0,
+    predictions: predictionCount || 0,
+    hypeScore: match?.hype_score || 0,
+    peakViewers: match?.peak_viewers || 0,
+  }
 }

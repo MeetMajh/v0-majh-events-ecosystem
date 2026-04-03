@@ -23,7 +23,10 @@ import {
   Gamepad2,
   Tv,
   Hash,
+  Flame,
 } from "lucide-react"
+import { ReactionsBar, ReactionFeed } from "@/components/esports/reactions-bar"
+import { ViewerCount } from "@/components/esports/viewer-presence"
 
 interface FeatureMatch {
   id: string
