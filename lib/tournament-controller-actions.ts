@@ -1371,7 +1371,7 @@ export async function getRoundPairings(roundId: string) {
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Elimination Bracket Generation
-// ════════════════════════════════════════════════════════════════════════���������═════
+// ════════════════════════════════════════════════════════════════════════�����������═════
 
 function nextPowerOf2(n: number): number {
   let p = 1
@@ -4474,14 +4474,18 @@ export interface TrendingMatch {
   viewerVelocity: number
   trendingScore: number
   trendingBadge: TrendingBadge | null
+  momentumBadge: MomentumBadge | null
+  momentumStreak: number
+  leadChanges: number
+  isDecidingGame: boolean
   roundNumber: number | null
   tournament: {
-    id: string
-    name: string
-    slug: string
-    gameName: string | null
+  id: string
+  name: string
+  slug: string
+  gameName: string | null
   } | null
-}
+  }
 
 // Get trending matches with full metrics
 export async function getTrendingMatchesWithMetrics(limit: number = 10): Promise<TrendingMatch[]> {
@@ -4494,6 +4498,7 @@ export async function getTrendingMatchesWithMetrics(limit: number = 10): Promise
       status, stream_url, stream_platform,
       viewer_count, reactions_per_minute, chat_per_minute, viewer_velocity,
       trending_score, trending_badge,
+      momentum_badge, momentum_streak, lead_changes, is_deciding_game,
       tournament_rounds(
         round_number,
         tournament_phases(
@@ -4539,6 +4544,10 @@ export async function getTrendingMatchesWithMetrics(limit: number = 10): Promise
       viewerVelocity: m.viewer_velocity || 0,
       trendingScore: Number(m.trending_score) || 0,
       trendingBadge: m.trending_badge as TrendingBadge | null,
+      momentumBadge: (m as any).momentum_badge as MomentumBadge | null,
+      momentumStreak: (m as any).momentum_streak || 0,
+      leadChanges: (m as any).lead_changes || 0,
+      isDecidingGame: (m as any).is_deciding_game || false,
       roundNumber: (m.tournament_rounds as any)?.round_number || null,
       tournament: tournament ? {
         id: tournament.id,
@@ -4622,6 +4631,182 @@ export async function getLiveStats() {
     liveMatches: liveMatches || 0,
     liveTournaments: liveTournaments || 0,
   }
+}
+
+// ==========================================
+// MOMENTUM SYSTEM
+// ==========================================
+
+export type MomentumBadge = "on_fire" | "comeback" | "clutch_game" | "final_game" | "upset_brewing" | "dominant"
+
+export interface MatchMomentum {
+  momentumPlayerId: string | null
+  momentumStreak: number
+  leadChanges: number
+  comebackPlayerId: string | null
+  maxDeficitOvercome: number
+  isDecidingGame: boolean
+  momentumBadge: MomentumBadge | null
+}
+
+// Record a game result and recalculate momentum
+export async function recordGameResult(
+  matchId: string,
+  gameNumber: number,
+  winnerId: string
+): Promise<{ success?: boolean; momentum?: MatchMomentum; error?: string }> {
+  const supabase = await createClient()
+  
+  // Get current match state
+  const { data: match } = await supabase
+    .from("tournament_matches")
+    .select("player1_id, player2_id, player1_wins, player2_wins")
+    .eq("id", matchId)
+    .single()
+  
+  if (!match) return { error: "Match not found" }
+  
+  // Calculate new scores
+  const player1Score = winnerId === match.player1_id 
+    ? (match.player1_wins || 0) + 1 
+    : (match.player1_wins || 0)
+  const player2Score = winnerId === match.player2_id 
+    ? (match.player2_wins || 0) + 1 
+    : (match.player2_wins || 0)
+  
+  // Insert game result
+  const { error: insertError } = await supabase
+    .from("match_game_results")
+    .upsert({
+      match_id: matchId,
+      game_number: gameNumber,
+      winner_id: winnerId,
+      player1_score: player1Score,
+      player2_score: player2Score,
+    }, { onConflict: "match_id,game_number" })
+  
+  if (insertError) return { error: insertError.message }
+  
+  // Recalculate momentum
+  const { error: momentumError } = await supabase.rpc("calculate_match_momentum", { p_match_id: matchId })
+  if (momentumError) console.error("Momentum calculation error:", momentumError)
+  
+  // Check for auto-feature
+  await supabase.rpc("check_auto_feature_match", { p_match_id: matchId })
+  
+  // Get updated momentum
+  const { data: updated } = await supabase
+    .from("tournament_matches")
+    .select("momentum_player_id, momentum_streak, lead_changes, comeback_player_id, max_deficit_overcome, is_deciding_game, momentum_badge")
+    .eq("id", matchId)
+    .single()
+  
+  revalidatePath(`/esports/tournaments`)
+  
+  return {
+    success: true,
+    momentum: updated ? {
+      momentumPlayerId: updated.momentum_player_id,
+      momentumStreak: updated.momentum_streak || 0,
+      leadChanges: updated.lead_changes || 0,
+      comebackPlayerId: updated.comeback_player_id,
+      maxDeficitOvercome: updated.max_deficit_overcome || 0,
+      isDecidingGame: updated.is_deciding_game || false,
+      momentumBadge: updated.momentum_badge as MomentumBadge | null,
+    } : undefined,
+  }
+}
+
+// Get match momentum data
+export async function getMatchMomentum(matchId: string): Promise<MatchMomentum | null> {
+  const supabase = await createClient()
+  
+  const { data } = await supabase
+    .from("tournament_matches")
+    .select(`
+      momentum_player_id, momentum_streak, lead_changes, 
+      comeback_player_id, max_deficit_overcome, is_deciding_game, momentum_badge,
+      momentum_player:profiles!tournament_matches_momentum_player_id_fkey(id, first_name, last_name),
+      comeback_player:profiles!tournament_matches_comeback_player_id_fkey(id, first_name, last_name)
+    `)
+    .eq("id", matchId)
+    .single()
+  
+  if (!data) return null
+  
+  return {
+    momentumPlayerId: data.momentum_player_id,
+    momentumStreak: data.momentum_streak || 0,
+    leadChanges: data.lead_changes || 0,
+    comebackPlayerId: data.comeback_player_id,
+    maxDeficitOvercome: data.max_deficit_overcome || 0,
+    isDecidingGame: data.is_deciding_game || false,
+    momentumBadge: data.momentum_badge as MomentumBadge | null,
+  }
+}
+
+// Get game history for a match
+export async function getMatchGameHistory(matchId: string) {
+  const supabase = await createClient()
+  
+  const { data } = await supabase
+    .from("match_game_results")
+    .select(`
+      *,
+      winner:profiles!match_game_results_winner_id_fkey(id, first_name, last_name, avatar_url)
+    `)
+    .eq("match_id", matchId)
+    .order("game_number", { ascending: true })
+  
+  return data || []
+}
+
+// Get auto-feature config for a tournament
+export async function getAutoFeatureConfig(tournamentId?: string) {
+  const supabase = await createClient()
+  
+  const { data } = await supabase
+    .from("auto_feature_config")
+    .select("*")
+    .or(`tournament_id.eq.${tournamentId},tournament_id.is.null`)
+    .order("tournament_id", { nullsFirst: false })
+    .limit(1)
+    .single()
+  
+  return data
+}
+
+// Update auto-feature config
+export async function updateAutoFeatureConfig(
+  tournamentId: string | null,
+  config: {
+    enabled?: boolean
+    trendingScoreThreshold?: number
+    viewerThreshold?: number
+    reactionRateThreshold?: number
+    maxAutoFeatures?: number
+    notifyOnAutoFeature?: boolean
+  }
+): Promise<{ success?: boolean; error?: string }> {
+  const supabase = await createClient()
+  
+  const updateData: Record<string, any> = { updated_at: new Date().toISOString() }
+  if (config.enabled !== undefined) updateData.enabled = config.enabled
+  if (config.trendingScoreThreshold !== undefined) updateData.trending_score_threshold = config.trendingScoreThreshold
+  if (config.viewerThreshold !== undefined) updateData.viewer_threshold = config.viewerThreshold
+  if (config.reactionRateThreshold !== undefined) updateData.reaction_rate_threshold = config.reactionRateThreshold
+  if (config.maxAutoFeatures !== undefined) updateData.max_auto_features = config.maxAutoFeatures
+  if (config.notifyOnAutoFeature !== undefined) updateData.notify_on_auto_feature = config.notifyOnAutoFeature
+  
+  const { error } = await supabase
+    .from("auto_feature_config")
+    .upsert({
+      tournament_id: tournamentId,
+      ...updateData,
+    }, { onConflict: "tournament_id" })
+  
+  if (error) return { error: error.message }
+  return { success: true }
 }
 
 // ==========================================

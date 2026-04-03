@@ -15,7 +15,8 @@ import {
   Trophy,
   ArrowUp,
 } from "lucide-react"
-import type { TrendingMatch, TrendingBadge } from "@/lib/tournament-controller-actions"
+import type { TrendingMatch, TrendingBadge, MomentumBadge as MomentumBadgeType } from "@/lib/tournament-controller-actions"
+import { MomentumBadge } from "@/components/esports/momentum-badge"
 
 const BADGE_CONFIG: Record<TrendingBadge, { label: string; icon: any; className: string }> = {
   hot: { label: "HOT", icon: Flame, className: "bg-orange-500/90 text-white" },
@@ -92,7 +93,10 @@ export function TrendingMatchCard({ match, rank, variant = "default" }: Trending
             )}
           </div>
 
-          {badge && (
+          {match.momentumBadge && (
+            <MomentumBadge badge={match.momentumBadge} size="sm" showTooltip={false} animate={false} />
+          )}
+          {badge && !match.momentumBadge && (
             <Badge className={cn("h-5 px-1.5 text-[10px]", badge.className)}>
               {BadgeIcon && <BadgeIcon className="mr-0.5 h-3 w-3" />}
               {badge.label}
@@ -126,6 +130,12 @@ export function TrendingMatchCard({ match, rank, variant = "default" }: Trending
                     {BadgeIcon && <BadgeIcon className="h-3.5 w-3.5" />}
                     {badge.label}
                   </Badge>
+                )}
+                {match.momentumBadge && (
+                  <MomentumBadge badge={match.momentumBadge} size="sm" />
+                )}
+                {match.isDecidingGame && !match.momentumBadge && (
+                  <Badge variant="destructive" className="animate-pulse">MATCH POINT</Badge>
                 )}
               </div>
               {match.tournament && (
@@ -167,11 +177,17 @@ export function TrendingMatchCard({ match, rank, variant = "default" }: Trending
             </div>
 
             {/* Stats bar */}
-            <div className="mt-4 flex items-center justify-center gap-6 border-t pt-4 text-sm text-muted-foreground">
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-4 border-t pt-4 text-sm text-muted-foreground">
               <span className="flex items-center gap-1.5">
                 <Eye className="h-4 w-4" />
                 {match.viewerCount} watching
               </span>
+              {match.leadChanges > 0 && (
+                <span className="flex items-center gap-1.5">
+                  <Zap className="h-4 w-4 text-yellow-500" />
+                  {match.leadChanges} lead changes
+                </span>
+              )}
               {match.reactionsPerMinute > 0 && (
                 <span className="flex items-center gap-1.5">
                   <Flame className="h-4 w-4 text-orange-500" />
