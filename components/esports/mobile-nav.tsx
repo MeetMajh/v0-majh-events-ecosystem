@@ -15,9 +15,16 @@ const tabs = [
   { href: "/profile", icon: User, label: "Profile" },
 ]
 
+// Routes that use full-screen immersive UI
+const IMMERSIVE_ROUTES = ["/clips", "/match/"]
+
 export function MobileNav() {
   const pathname = usePathname()
   const { count: notificationCount } = useNotificationCount()
+
+  // Hide on immersive routes
+  const isImmersive = IMMERSIVE_ROUTES.some(route => pathname.startsWith(route))
+  if (isImmersive) return null
 
   // Haptic feedback on tap
   const triggerHaptic = () => {
@@ -89,5 +96,9 @@ export function MobileNav() {
 
 // Spacer to prevent content from being hidden behind mobile nav
 export function MobileNavSpacer() {
+  const pathname = usePathname()
+  const isImmersive = IMMERSIVE_ROUTES.some(route => pathname.startsWith(route))
+  if (isImmersive) return null
+  
   return <div className="h-16 md:hidden" />
 }

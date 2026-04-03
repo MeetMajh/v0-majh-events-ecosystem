@@ -34,9 +34,11 @@ import {
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { uploadMediaFile, createMedia } from "@/lib/media-actions"
+import { getGames } from "@/lib/esports-actions"
 import { MobileNavSpacer } from "@/components/esports/mobile-nav"
 
 type Step = "upload" | "edit" | "details" | "posting"
+type Game = { id: string; name: string; slug: string }
 
 export default function CreateClipPage() {
   const router = useRouter()
@@ -53,8 +55,14 @@ export default function CreateClipPage() {
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
+  const [games, setGames] = useState<Game[]>([])
   const videoRef = useRef<HTMLVideoElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Fetch games on mount
+  useEffect(() => {
+    getGames().then((data) => setGames(data || []))
+  }, [])
 
   // Create object URL when file changes
   useEffect(() => {
@@ -432,9 +440,14 @@ export default function CreateClipPage() {
                     </div>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="mahjong">Mahjong</SelectItem>
-                    <SelectItem value="riichi">Riichi Mahjong</SelectItem>
-                    <SelectItem value="mcr">MCR</SelectItem>
+                    {games.map((game) => (
+                      <SelectItem key={game.id} value={game.id}>
+                        {game.name}
+                      </SelectItem>
+                    ))}
+                    {games.length === 0 && (
+                      <SelectItem value="" disabled>Loading games...</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
