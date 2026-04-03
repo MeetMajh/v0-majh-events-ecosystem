@@ -76,12 +76,23 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
--- 6. Function to auto-generate embed URL on insert/update
+-- 6. Function to auto-generate embed URL on insert/update for matches/tournaments
 CREATE OR REPLACE FUNCTION auto_generate_embed_url()
 RETURNS TRIGGER AS $$
 BEGIN
   IF NEW.stream_url IS NOT NULL AND NEW.stream_platform IS NOT NULL THEN
     NEW.stream_embed_url := get_stream_embed_url(NEW.stream_url, NEW.stream_platform);
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function for tournament_streams (uses 'platform' column)
+CREATE OR REPLACE FUNCTION auto_generate_stream_embed_url()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.stream_url IS NOT NULL AND NEW.platform IS NOT NULL THEN
+    NEW.embed_url := get_stream_embed_url(NEW.stream_url, NEW.platform);
   END IF;
   RETURN NEW;
 END;
@@ -105,7 +116,7 @@ CREATE TRIGGER auto_embed_url_streams
   BEFORE INSERT OR UPDATE OF stream_url, platform ON tournament_streams
   FOR EACH ROW
   WHEN (NEW.stream_url IS NOT NULL)
-  EXECUTE FUNCTION auto_generate_embed_url();
+  EXECUTE FUNCTION auto_generate_stream_embed_url();
 
 -- 7. Enable RLS on tournament_streams
 ALTER TABLE tournament_streams ENABLE ROW LEVEL SECURITY;
