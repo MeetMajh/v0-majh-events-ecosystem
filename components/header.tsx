@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { Logo } from "@/components/logo"
 import { Button } from "@/components/ui/button"
 import { HeaderMobileMenu } from "@/components/header-mobile-menu"
+import { NotificationBell } from "@/components/notifications/notification-bell"
 
 const NAV_ITEMS = [
   { label: "Esports", href: "/esports" },
@@ -35,9 +36,12 @@ export async function Header() {
         </div>
         <div className="hidden items-center gap-3 md:flex">
           {user ? (
-            <Button asChild size="sm">
-              <Link href="/dashboard">Dashboard</Link>
-            </Button>
+            <>
+              <NotificationBell />
+              <Button asChild size="sm">
+                <Link href="/dashboard">Dashboard</Link>
+              </Button>
+            </>
           ) : (
             <>
               <Button variant="ghost" size="sm" asChild>
