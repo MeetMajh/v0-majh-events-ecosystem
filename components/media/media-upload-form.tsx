@@ -37,7 +37,7 @@ import {
   Play,
   Image as ImageIcon,
 } from "lucide-react"
-import { createMedia } from "@/lib/media-actions"
+import { createMedia, uploadMediaFile } from "@/lib/media-actions"
 import { extractVideoId, generateThumbnailUrl, type MediaType, type SourceType } from "@/lib/media-utils"
 import { createClient } from "@/lib/supabase/client"
 import Image from "next/image"
@@ -78,6 +78,10 @@ export function MediaUploadForm({
   const [tournamentId] = useState(defaultTournamentId || "")
   const [matchId] = useState(defaultMatchId || "")
   const [visibility, setVisibility] = useState<"public" | "unlisted" | "private">("public")
+  
+  // File upload state
+  const [file, setFile] = useState<File | null>(null)
+  const [uploadProgress, setUploadProgress] = useState(0)
   
   // URL validation
   const [urlValid, setUrlValid] = useState<boolean | null>(null)
@@ -125,20 +129,45 @@ export function MediaUploadForm({
     e.preventDefault()
     setError(null)
     setLoading(true)
+    setUploadProgress(0)
     
     try {
+      let finalVideoUrl = videoUrl
+      let storagePath: string | undefined
+      
+      // Handle file upload
+      if (uploadMethod === "upload" && file) {
+        setUploadProgress(10)
+        const uploadResult = await uploadMediaFile(file)
+        
+        if (uploadResult.error) {
+          setError(uploadResult.error)
+          setLoading(false)
+          return
+        }
+        
+        finalVideoUrl = uploadResult.url || ""
+        storagePath = uploadResult.storagePath
+        setUploadProgress(50)
+      }
+      
+      setUploadProgress(70)
+      
       const result = await createMedia({
         title,
         description: description || undefined,
         mediaType,
         sourceType: uploadMethod === "url" ? (detectedPlatform as SourceType || "external") : "upload",
-        videoUrl: uploadMethod === "url" ? videoUrl : undefined,
+        videoUrl: finalVideoUrl || undefined,
+        storagePath,
         gameId: gameId || undefined,
         tournamentId: tournamentId || undefined,
         matchId: matchId || undefined,
         visibility,
         thumbnailUrl: thumbnailPreview || undefined,
       })
+      
+      setUploadProgress(100)
       
       if (result.error) {
         setError(result.error)
@@ -154,7 +183,7 @@ export function MediaUploadForm({
           router.push(`/media/${result.media.id}`)
         }
       }, 1500)
-    } catch (err) {
+    } catch {
       setError("An unexpected error occurred")
     } finally {
       setLoading(false)
@@ -173,6 +202,8 @@ export function MediaUploadForm({
     setUrlValid(null)
     setDetectedPlatform(null)
     setThumbnailPreview(null)
+    setFile(null)
+    setUploadProgress(0)
   }
   
   const getPlatformIcon = () => {
@@ -223,9 +254,9 @@ export function MediaUploadForm({
                   <Link2 className="h-4 w-4" />
                   Video URL
                 </TabsTrigger>
-                <TabsTrigger value="upload" className="gap-2" disabled>
+                <TabsTrigger value="upload" className="gap-2">
                   <Upload className="h-4 w-4" />
-                  Upload (Coming Soon)
+                  Upload File
                 </TabsTrigger>
               </TabsList>
               
@@ -284,14 +315,64 @@ export function MediaUploadForm({
                 )}
               </TabsContent>
               
-              <TabsContent value="upload" className="mt-4">
-                <Card className="border-dashed">
-                  <CardContent className="flex flex-col items-center justify-center py-12">
-                    <Upload className="mb-4 h-12 w-12 text-muted-foreground" />
-                    <p className="text-muted-foreground">Upload feature coming soon</p>
-                    <p className="text-sm text-muted-foreground">
-                      For now, please use YouTube, Twitch, or Kick links
-                    </p>
+              <TabsContent value="upload" className="mt-4 space-y-4">
+                <Card className="border-dashed glass-panel border-0">
+                  <CardContent className="py-8">
+                    {file ? (
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-4">
+                          <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-primary/10">
+                            <Play className="h-8 w-8 text-primary" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium truncate">{file.name}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {(file.size / (1024 * 1024)).toFixed(2)} MB
+                            </p>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setFile(null)}
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                        {uploadProgress > 0 && uploadProgress < 100 && (
+                          <div className="space-y-2">
+                            <div className="h-2 overflow-hidden rounded-full bg-muted">
+                              <div 
+                                className="h-full bg-primary transition-all duration-300"
+                                style={{ width: `${uploadProgress}%` }}
+                              />
+                            </div>
+                            <p className="text-xs text-muted-foreground text-center">
+                              Uploading... {uploadProgress}%
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <label className="flex cursor-pointer flex-col items-center justify-center">
+                        <input
+                          type="file"
+                          accept="video/mp4,video/webm,video/quicktime"
+                          className="hidden"
+                          onChange={(e) => {
+                            const selectedFile = e.target.files?.[0]
+                            if (selectedFile) {
+                              setFile(selectedFile)
+                            }
+                          }}
+                        />
+                        <Upload className="mb-4 h-12 w-12 text-muted-foreground" />
+                        <p className="font-medium">Drop your video here or click to browse</p>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          MP4, WebM, MOV up to 100MB
+                        </p>
+                      </label>
+                    )}
                   </CardContent>
                 </Card>
               </TabsContent>
@@ -390,7 +471,7 @@ export function MediaUploadForm({
               </Button>
               <Button 
                 type="submit" 
-                disabled={loading || !title || !gameId || (uploadMethod === "url" && !urlValid)}
+                disabled={loading || !title || !gameId || (uploadMethod === "url" && !urlValid) || (uploadMethod === "upload" && !file)}
               >
                 {loading ? (
                   <>
