@@ -416,8 +416,19 @@ CREATE TRIGGER trigger_media_report_flag
   EXECUTE FUNCTION trigger_auto_flag_media();
 
 -- ==========================================
--- 12. ENABLE REALTIME
+-- 12. ENABLE REALTIME (ignore if already added)
 -- ==========================================
 
-ALTER PUBLICATION supabase_realtime ADD TABLE media_comments;
-ALTER PUBLICATION supabase_realtime ADD TABLE media_reactions;
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE media_comments;
+EXCEPTION WHEN duplicate_object THEN
+  NULL;
+END $$;
+
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE media_reactions;
+EXCEPTION WHEN duplicate_object THEN
+  NULL;
+END $$;
