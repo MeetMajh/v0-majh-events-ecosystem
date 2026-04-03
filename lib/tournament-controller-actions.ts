@@ -1371,7 +1371,7 @@ export async function getRoundPairings(roundId: string) {
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Elimination Bracket Generation
-// ════════════════════════════════════════════════════════════════════════���═════
+// ════════════════════════════════════════════════════════════════════════�����═════
 
 function nextPowerOf2(n: number): number {
   let p = 1
@@ -3883,8 +3883,7 @@ export async function updateOverlayConfig(
   return { success: true }
 }
 
-// Get overlay URL for a match
-export function getOverlayUrl(matchId: string, baseUrl?: string): string {
-  const base = baseUrl || (typeof window !== "undefined" ? window.location.origin : "https://majhevents.com")
-  return `${base}/overlay/match/${matchId}`
+// Get overlay URL for a match (client-side helper - requires baseUrl to be passed)
+export function getOverlayUrl(matchId: string, baseUrl: string): string {
+  return `${baseUrl}/overlay/match/${matchId}`
 }
