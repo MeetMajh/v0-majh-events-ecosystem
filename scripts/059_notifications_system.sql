@@ -250,38 +250,55 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- ==========================================
 
 -- Notify when match becomes featured (player goes live)
+-- Note: This trigger will only work after player_follows table exists
 CREATE OR REPLACE FUNCTION notify_on_feature_match()
 RETURNS TRIGGER AS $$
+DECLARE
+  v_player1_name TEXT;
+  v_player2_name TEXT;
 BEGIN
   -- Only trigger when is_feature_match changes to true
   IF NEW.is_feature_match = true AND (OLD.is_feature_match IS NULL OR OLD.is_feature_match = false) THEN
-    -- Notify followers of player 1
-    IF NEW.player1_id IS NOT NULL THEN
-      PERFORM notify_player_followers(
-        NEW.player1_id,
-        'followed_player_live',
-        'Player is live!',
-        (SELECT first_name || ' ' || last_name FROM profiles WHERE id = NEW.player1_id) || ' is now streaming a match',
-        '/match/' || NEW.id || '/watch',
-        NEW.id,
-        NULL
-      );
-    END IF;
-    
-    -- Notify followers of player 2
-    IF NEW.player2_id IS NOT NULL THEN
-      PERFORM notify_player_followers(
-        NEW.player2_id,
-        'followed_player_live',
-        'Player is live!',
-        (SELECT first_name || ' ' || last_name FROM profiles WHERE id = NEW.player2_id) || ' is now streaming a match',
-        '/match/' || NEW.id || '/watch',
-        NEW.id,
-        NULL
-      );
+    -- Check if player_follows table exists before trying to notify
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'player_follows') THEN
+      -- Get player names
+      SELECT COALESCE(first_name || ' ' || last_name, 'Player') INTO v_player1_name 
+      FROM profiles WHERE id = NEW.player1_id;
+      
+      SELECT COALESCE(first_name || ' ' || last_name, 'Player') INTO v_player2_name 
+      FROM profiles WHERE id = NEW.player2_id;
+      
+      -- Notify followers of player 1
+      IF NEW.player1_id IS NOT NULL THEN
+        PERFORM notify_player_followers(
+          NEW.player1_id,
+          'followed_player_live',
+          'Player is live!',
+          v_player1_name || ' is now streaming a match',
+          '/match/' || NEW.id || '/watch',
+          NEW.id,
+          NULL
+        );
+      END IF;
+      
+      -- Notify followers of player 2
+      IF NEW.player2_id IS NOT NULL THEN
+        PERFORM notify_player_followers(
+          NEW.player2_id,
+          'followed_player_live',
+          'Player is live!',
+          v_player2_name || ' is now streaming a match',
+          '/match/' || NEW.id || '/watch',
+          NEW.id,
+          NULL
+        );
+      END IF;
     END IF;
   END IF;
   
+  RETURN NEW;
+EXCEPTION WHEN OTHERS THEN
+  -- Don't fail the match update if notification fails
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
