@@ -818,3 +818,61 @@ export async function getFlaggedMedia(limit: number = 50): Promise<PlayerMedia[]
   
   return (data || []) as PlayerMedia[]
 }
+
+// ==========================================
+// PLAYER FOLLOW SYSTEM
+// ==========================================
+
+export async function followPlayer(playerId: string): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  if (!user) return { success: false, error: "Must be logged in" }
+  if (user.id === playerId) return { success: false, error: "Cannot follow yourself" }
+  
+  const { error } = await supabase
+    .from("player_follows")
+    .insert({
+      follower_id: user.id,
+      player_id: playerId,
+    })
+  
+  if (error) {
+    if (error.code === "23505") return { success: true } // Already following
+    return { success: false, error: error.message }
+  }
+  
+  return { success: true }
+}
+
+export async function unfollowPlayer(playerId: string): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  if (!user) return { success: false, error: "Must be logged in" }
+  
+  const { error } = await supabase
+    .from("player_follows")
+    .delete()
+    .eq("follower_id", user.id)
+    .eq("player_id", playerId)
+  
+  if (error) return { success: false, error: error.message }
+  return { success: true }
+}
+
+export async function checkIfFollowing(playerId: string): Promise<boolean> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  if (!user) return false
+  
+  const { data } = await supabase
+    .from("player_follows")
+    .select("id")
+    .eq("follower_id", user.id)
+    .eq("player_id", playerId)
+    .single()
+  
+  return !!data
+}
