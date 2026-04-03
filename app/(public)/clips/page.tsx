@@ -32,7 +32,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { getMediaFeed, reactToMedia, type PlayerMedia } from "@/lib/media-actions"
+import { getMediaFeed, addMediaReaction, type PlayerMedia } from "@/lib/media-actions"
 
 // Format view count
 function formatViews(count: number): string {
@@ -93,8 +93,8 @@ function ClipCard({
     setIsLiked(!isLiked)
     setLikeCount(prev => isLiked ? prev - 1 : prev + 1)
     try {
-      await reactToMedia(clip.id, "like")
-    } catch (e) {
+      await addMediaReaction(clip.id, "like")
+    } catch {
       // Revert on error
       setIsLiked(isLiked)
       setLikeCount(likeCount)
