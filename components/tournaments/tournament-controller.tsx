@@ -107,7 +107,6 @@ import {
   setFeatureMatch,
   getFeatureMatches,
   setMatchLive,
-  getOverlayUrl,
   type PlayerStanding,
 } from "@/lib/tournament-controller-actions"
 import { resetRoundTimer } from "@/lib/timer-actions"
@@ -1640,7 +1639,7 @@ const handleAddPlayer = () => {
                                     variant="ghost"
                                     className="h-8 w-8 p-0"
                                     onClick={() => {
-                                      const url = getOverlayUrl(match.id, window.location.origin)
+                                      const url = `${window.location.origin}/overlay/match/${match.id}`
                                       navigator.clipboard.writeText(url)
                                       toast.success("Overlay URL copied!")
                                     }}
@@ -1653,7 +1652,7 @@ const handleAddPlayer = () => {
                                     variant="ghost"
                                     className="h-8 w-8 p-0"
                                     onClick={() => {
-                                      const url = getOverlayUrl(match.id, window.location.origin)
+                                      const url = `${window.location.origin}/overlay/match/${match.id}`
                                       window.open(url, "_blank")
                                     }}
                                     title="Preview overlay"

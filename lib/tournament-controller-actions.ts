@@ -1371,7 +1371,7 @@ export async function getRoundPairings(roundId: string) {
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Elimination Bracket Generation
-// ════════════════════════════════════════════════════════════════════════�����═════
+// ════════════════════════════════════════════════════════════════════════�������═════
 
 function nextPowerOf2(n: number): number {
   let p = 1
@@ -1869,7 +1869,7 @@ export async function adminCheckInPlayer(tournamentId: string, playerId: string,
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Round Timer Controls
-// ═══════════════════════════════════════════════════════��══════════════════════
+// ═══════════════════════════════════════════════════════��═��════════════════════
 
 export async function pauseRound(tournamentId: string, roundId: string) {
   const auth = await requireTournamentOrganizer(tournamentId)
@@ -3881,9 +3881,4 @@ export async function updateOverlayConfig(
 
   revalidatePath(`/dashboard/tournaments`)
   return { success: true }
-}
-
-// Get overlay URL for a match (client-side helper - requires baseUrl to be passed)
-export function getOverlayUrl(matchId: string, baseUrl: string): string {
-  return `${baseUrl}/overlay/match/${matchId}`
 }
