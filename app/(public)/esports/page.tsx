@@ -3,7 +3,7 @@ import Image from "next/image"
 import { Suspense } from "react"
 import { Button } from "@/components/ui/button"
 import { IMAGES } from "@/lib/images"
-import { Gamepad2, Trophy, BarChart3, Users, ArrowRight, Zap, Globe, Radio } from "lucide-react"
+import { Gamepad2, Trophy, BarChart3, Users, ArrowRight, Zap, Globe, Radio, Film } from "lucide-react"
 import { getGames, getTournaments, getLeaderboard } from "@/lib/esports-actions"
 import { getLiveFeatureMatches } from "@/lib/tournament-controller-actions"
 import { TournamentCard } from "@/components/esports/tournament-card"
@@ -19,8 +19,8 @@ export const metadata = {
 const FEATURES = [
   { icon: Trophy, title: "Tournaments", description: "Multi-format brackets from single elimination to compass draws", href: "/esports/tournaments" },
   { icon: BarChart3, title: "Leaderboards", description: "Track your global ranking across all games and categories", href: "/esports/leaderboards" },
+  { icon: Film, title: "Clips", description: "Watch and share highlights, clutch plays, and tournament moments", href: "/media" },
   { icon: Users, title: "Teams", description: "Form or join a team and compete together in organized play", href: "/esports/teams" },
-  { icon: Zap, title: "Rewards", description: "Earn points from competition and redeem across the MAJH ecosystem", href: "/dashboard/rewards" },
 ]
 
 export default async function EsportsPage() {
