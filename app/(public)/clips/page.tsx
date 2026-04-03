@@ -32,7 +32,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { getMediaFeed, addMediaReaction, type PlayerMedia } from "@/lib/media-actions"
+import { getMediaFeed, addMediaReaction, trackMediaView, followPlayer, unfollowPlayer, checkIfFollowing, type PlayerMedia } from "@/lib/media-actions"
 
 // Format view count
 function formatViews(count: number): string {
@@ -56,9 +56,27 @@ function ClipCard({
   const [isPlaying, setIsPlaying] = useState(false)
   const [isLiked, setIsLiked] = useState(false)
   const [likeCount, setLikeCount] = useState(clip.like_count)
-  const [showOverlay, setShowOverlay] = useState(true)
+  const [isFollowing, setIsFollowing] = useState(false)
+  const [showDoubleTapHeart, setShowDoubleTapHeart] = useState(false)
+  const [viewTracked, setViewTracked] = useState(false)
+  const lastTapRef = useRef(0)
   const videoRef = useRef<HTMLVideoElement>(null)
   const { ref: inViewRef, inView } = useInView({ threshold: 0.7 })
+
+  // Check if following on mount
+  useEffect(() => {
+    checkIfFollowing(clip.player_id).then(setIsFollowing)
+  }, [clip.player_id])
+
+  // Track view when active for 3+ seconds
+  useEffect(() => {
+    if (!isActive || viewTracked) return
+    const timer = setTimeout(() => {
+      trackMediaView(clip.id)
+      setViewTracked(true)
+    }, 3000)
+    return () => clearTimeout(timer)
+  }, [isActive, viewTracked, clip.id])
 
   // Auto-play when in view
   useEffect(() => {
@@ -89,6 +107,44 @@ function ClipCard({
     }
   }
 
+  // Double-tap to like
+  const handleTap = () => {
+    const now = Date.now()
+    const timeSinceLastTap = now - lastTapRef.current
+    
+    if (timeSinceLastTap < 300) {
+      // Double tap - like
+      if (!isLiked) {
+        setIsLiked(true)
+        setLikeCount(prev => prev + 1)
+        setShowDoubleTapHeart(true)
+        addMediaReaction(clip.id, "like").catch(() => {
+          setIsLiked(false)
+          setLikeCount(prev => prev - 1)
+        })
+        setTimeout(() => setShowDoubleTapHeart(false), 1000)
+      }
+    } else {
+      // Single tap - toggle play
+      handleTogglePlay()
+    }
+    
+    lastTapRef.current = now
+  }
+
+  // Follow/unfollow handler
+  const handleFollow = async () => {
+    if (isFollowing) {
+      setIsFollowing(false)
+      const result = await unfollowPlayer(clip.player_id)
+      if (!result.success) setIsFollowing(true)
+    } else {
+      setIsFollowing(true)
+      const result = await followPlayer(clip.player_id)
+      if (!result.success) setIsFollowing(false)
+    }
+  }
+
   const handleLike = async () => {
     setIsLiked(!isLiked)
     setLikeCount(prev => isLiked ? prev - 1 : prev + 1)
@@ -116,7 +172,7 @@ function ClipCard({
     <div 
       ref={inViewRef}
       className="relative h-[100dvh] w-full snap-start snap-always bg-black"
-      onClick={handleTogglePlay}
+      onClick={handleTap}
     >
       {/* Video or Thumbnail */}
       {clip.embed_url || clip.video_url ? (
@@ -187,24 +243,44 @@ function ClipCard({
         </div>
       )}
 
+      {/* Double-tap heart animation */}
+      {showDoubleTapHeart && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-30">
+          <Heart className="h-32 w-32 text-red-500 fill-red-500 animate-ping" />
+        </div>
+      )}
+
       {/* Right sidebar - Actions */}
       <div className="absolute right-3 bottom-32 z-10 flex flex-col items-center gap-5">
-        {/* Player avatar */}
-        <Link 
-          href={`/esports/players/${clip.player_id}`}
-          onClick={(e) => e.stopPropagation()}
-          className="relative"
-        >
-          <Avatar className="h-12 w-12 ring-2 ring-white">
-            <AvatarImage src={clip.player?.avatar_url || undefined} />
-            <AvatarFallback className="bg-primary text-primary-foreground">
-              {clip.player?.first_name?.[0] || "?"}
-            </AvatarFallback>
-          </Avatar>
-          <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 rounded-full bg-primary p-0.5">
-            <span className="text-[10px] text-white font-bold">+</span>
-          </div>
-        </Link>
+        {/* Player avatar with follow button */}
+        <div className="relative">
+          <Link 
+            href={`/esports/players/${clip.player_id}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Avatar className="h-12 w-12 ring-2 ring-white">
+              <AvatarImage src={clip.player?.avatar_url || undefined} />
+              <AvatarFallback className="bg-primary text-primary-foreground">
+                {clip.player?.first_name?.[0] || "?"}
+              </AvatarFallback>
+            </Avatar>
+          </Link>
+          {!isFollowing ? (
+            <button
+              className="absolute -bottom-1 left-1/2 -translate-x-1/2 rounded-full bg-primary p-0.5 w-5 h-5 flex items-center justify-center"
+              onClick={(e) => {
+                e.stopPropagation()
+                handleFollow()
+              }}
+            >
+              <span className="text-[10px] text-white font-bold">+</span>
+            </button>
+          ) : (
+            <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 rounded-full bg-green-500 p-0.5 w-5 h-5 flex items-center justify-center">
+              <span className="text-[10px] text-white font-bold">✓</span>
+            </div>
+          )}
+        </div>
 
         {/* Like */}
         <button 
@@ -323,7 +399,7 @@ export default function ClipsFeedPage() {
   const [clips, setClips] = useState<PlayerMedia[]>([])
   const [loading, setLoading] = useState(true)
   const [hasMore, setHasMore] = useState(true)
-  const [page, setPage] = useState(0)
+  const [cursor, setCursor] = useState<string | null>(null)
   const [activeIndex, setActiveIndex] = useState(0)
   const [isMuted, setIsMuted] = useState(true)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -344,19 +420,18 @@ export default function ClipsFeedPage() {
   const loadClips = async () => {
     setLoading(true)
     try {
-      const result = await getMediaFeed({
-        type: "clip",
-        sort: "trending",
-        limit: 10,
-        offset: page * 10,
-      })
+      const result = await getMediaFeed(
+        cursor ?? undefined,
+        10,
+        "trending"
+      )
       
-      if (result.media.length < 10) {
+      if (!result.nextCursor) {
         setHasMore(false)
       }
       
       setClips(prev => [...prev, ...result.media])
-      setPage(prev => prev + 1)
+      setCursor(result.nextCursor)
     } catch (e) {
       console.error("Failed to load clips:", e)
     } finally {
