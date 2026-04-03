@@ -37,7 +37,8 @@ import {
   Play,
   Image as ImageIcon,
 } from "lucide-react"
-import { createMedia, extractVideoId, generateThumbnailUrl, type MediaType, type SourceType } from "@/lib/media-actions"
+import { createMedia } from "@/lib/media-actions"
+import { extractVideoId, generateThumbnailUrl, type MediaType, type SourceType } from "@/lib/media-utils"
 import { createClient } from "@/lib/supabase/client"
 import Image from "next/image"
 

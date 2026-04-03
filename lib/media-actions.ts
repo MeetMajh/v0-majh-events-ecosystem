@@ -2,13 +2,15 @@
 
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
+import { generateEmbedUrl, generateThumbnailUrl, checkContentViolations, isAllowedUrl } from "@/lib/media-utils"
+
+// Re-export types from media-utils for convenience
+export type { MediaType, SourceType } from "@/lib/media-utils"
 
 // ==========================================
 // TYPES
 // ==========================================
 
-export type MediaType = "clip" | "vod" | "highlight" | "full_match" | "tutorial"
-export type SourceType = "upload" | "youtube" | "twitch" | "kick" | "external"
 export type Visibility = "public" | "unlisted" | "private" | "followers_only"
 export type ModerationStatus = "pending" | "approved" | "rejected" | "flagged"
 export type ReactionType = "like" | "dislike" | "fire" | "shocked" | "clap" | "sad" | "laugh" | "pog" | "gg"
@@ -18,8 +20,8 @@ export interface PlayerMedia {
   player_id: string
   title: string
   description: string | null
-  media_type: MediaType
-  source_type: SourceType
+  media_type: string
+  source_type: string
   video_url: string | null
   embed_url: string | null
   storage_path: string | null
@@ -44,107 +46,6 @@ export interface PlayerMedia {
   }
   game?: { id: string; name: string; slug: string } | null
   tournament?: { id: string; name: string; slug: string } | null
-}
-
-// ==========================================
-// URL VALIDATION & EMBED GENERATION
-// ==========================================
-
-const YOUTUBE_REGEX = /(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/
-const TWITCH_CLIP_REGEX = /clips\.twitch\.tv\/([a-zA-Z0-9_-]+)/
-const TWITCH_VIDEO_REGEX = /twitch\.tv\/videos\/(\d+)/
-const KICK_REGEX = /kick\.com\/(?:video\/)?([a-zA-Z0-9_-]+)/
-
-export function extractVideoId(url: string): { platform: SourceType; videoId: string } | null {
-  const youtubeMatch = url.match(YOUTUBE_REGEX)
-  if (youtubeMatch) return { platform: "youtube", videoId: youtubeMatch[1] }
-  
-  const twitchClipMatch = url.match(TWITCH_CLIP_REGEX)
-  if (twitchClipMatch) return { platform: "twitch", videoId: twitchClipMatch[1] }
-  
-  const twitchVideoMatch = url.match(TWITCH_VIDEO_REGEX)
-  if (twitchVideoMatch) return { platform: "twitch", videoId: twitchVideoMatch[1] }
-  
-  const kickMatch = url.match(KICK_REGEX)
-  if (kickMatch) return { platform: "kick", videoId: kickMatch[1] }
-  
-  return null
-}
-
-export function generateEmbedUrl(url: string): string | null {
-  const extracted = extractVideoId(url)
-  if (!extracted) return null
-  
-  switch (extracted.platform) {
-    case "youtube":
-      return `https://www.youtube.com/embed/${extracted.videoId}`
-    case "twitch":
-      if (url.includes("clips.twitch.tv")) {
-        return `https://clips.twitch.tv/embed?clip=${extracted.videoId}&parent=${process.env.NEXT_PUBLIC_APP_URL?.replace(/https?:\/\//, "") || "localhost"}`
-      }
-      return `https://player.twitch.tv/?video=${extracted.videoId}&parent=${process.env.NEXT_PUBLIC_APP_URL?.replace(/https?:\/\//, "") || "localhost"}`
-    case "kick":
-      return url // Kick doesn't have a standard embed format
-    default:
-      return null
-  }
-}
-
-export function generateThumbnailUrl(url: string): string | null {
-  const extracted = extractVideoId(url)
-  if (!extracted) return null
-  
-  switch (extracted.platform) {
-    case "youtube":
-      return `https://img.youtube.com/vi/${extracted.videoId}/maxresdefault.jpg`
-    default:
-      return null
-  }
-}
-
-// ==========================================
-// CONTENT MODERATION
-// ==========================================
-
-const BLOCKED_WORDS = [
-  // Add blocked words/patterns here
-]
-
-export function checkContentViolations(title: string, description?: string): string[] {
-  const violations: string[] = []
-  const content = `${title} ${description || ""}`.toLowerCase()
-  
-  // Check for blocked words
-  for (const word of BLOCKED_WORDS) {
-    if (content.includes(word.toLowerCase())) {
-      violations.push(`Contains prohibited content: ${word}`)
-    }
-  }
-  
-  // Check title length
-  if (title.length < 3) violations.push("Title too short (minimum 3 characters)")
-  if (title.length > 200) violations.push("Title too long (maximum 200 characters)")
-  
-  // Check for spam patterns
-  if (/(.)\1{5,}/.test(title)) violations.push("Title contains spam patterns")
-  if (/[A-Z]{10,}/.test(title)) violations.push("Excessive capitalization")
-  
-  return violations
-}
-
-export function isAllowedUrl(url: string): boolean {
-  const allowedDomains = [
-    "youtube.com", "youtu.be",
-    "twitch.tv", "clips.twitch.tv",
-    "kick.com"
-  ]
-  
-  try {
-    const urlObj = new URL(url)
-    return allowedDomains.some(domain => urlObj.hostname.includes(domain))
-  } catch {
-    return false
-  }
 }
 
 // ==========================================

@@ -31,7 +31,8 @@ import {
   Trophy,
   Gamepad2,
 } from "lucide-react"
-import type { PlayerMedia, MediaType } from "@/lib/media-actions"
+import type { PlayerMedia } from "@/lib/media-actions"
+import type { MediaType } from "@/lib/media-utils"
 
 interface MediaCardProps {
   media: PlayerMedia

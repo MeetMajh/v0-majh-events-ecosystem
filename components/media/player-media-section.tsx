@@ -7,7 +7,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Loader2, Play, Film, Clock, Flame, Upload, ChevronRight } from "lucide-react"
 import { MediaCard, MediaGrid } from "@/components/media/media-card"
 import { MediaUploadForm } from "@/components/media/media-upload-form"
-import { getPlayerMedia, type PlayerMedia, type MediaType } from "@/lib/media-actions"
+import { getPlayerMedia, type PlayerMedia } from "@/lib/media-actions"
+import type { MediaType } from "@/lib/media-utils"
 import { createClient } from "@/lib/supabase/client"
 
 interface PlayerMediaSectionProps {
