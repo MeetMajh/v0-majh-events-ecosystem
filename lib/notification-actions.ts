@@ -454,6 +454,27 @@ export async function notifyPlayerLive(playerId: string, matchId: string) {
   )
 }
 
+// New clip uploaded - notify followers
+export async function notifyNewClip(playerId: string, clipId: string, clipTitle: string) {
+  const supabase = await createClient()
+  
+  const { data: player } = await supabase
+    .from("profiles")
+    .select("first_name, last_name")
+    .eq("id", playerId)
+    .single()
+
+  const playerName = player ? `${player.first_name || ""} ${player.last_name || ""}`.trim() : "A player"
+
+  return notifyPlayerFollowers(
+    playerId,
+    "followed_player_match", // Reusing existing type
+    `${playerName} uploaded a new clip`,
+    clipTitle,
+    `/media/${clipId}`
+  )
+}
+
 // Trending match alert
 export async function notifyTrendingMatch(matchId: string, userIds: string[]) {
   const supabase = await createClient()
