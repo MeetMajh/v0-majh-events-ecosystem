@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
+import { motion, AnimatePresence } from "framer-motion"
+import { formatDistanceToNow } from "date-fns"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -28,6 +30,7 @@ import {
   Clock,
   Settings,
   X,
+  Play,
 } from "lucide-react"
 import {
   getNotifications,
@@ -347,5 +350,305 @@ export function NotificationBellCompact() {
         )}
       </Button>
     </Link>
+  )
+}
+
+// ==========================================
+// DISCORD-STYLE FULL PANEL VERSION
+// ==========================================
+
+// Group notifications by time (Discord-style)
+function groupNotifications(notifications: Notification[]) {
+  const groups: { label: string; notifications: Notification[] }[] = []
+  const now = new Date()
+  
+  const today: Notification[] = []
+  const yesterday: Notification[] = []
+  const thisWeek: Notification[] = []
+  const older: Notification[] = []
+  
+  notifications.forEach((n) => {
+    const created = new Date(n.created_at)
+    const diffMs = now.getTime() - created.getTime()
+    const diffHours = diffMs / (1000 * 60 * 60)
+    const diffDays = diffMs / (1000 * 60 * 60 * 24)
+    
+    if (diffHours < 24) {
+      today.push(n)
+    } else if (diffDays < 2) {
+      yesterday.push(n)
+    } else if (diffDays < 7) {
+      thisWeek.push(n)
+    } else {
+      older.push(n)
+    }
+  })
+  
+  if (today.length > 0) groups.push({ label: "Today", notifications: today })
+  if (yesterday.length > 0) groups.push({ label: "Yesterday", notifications: yesterday })
+  if (thisWeek.length > 0) groups.push({ label: "This Week", notifications: thisWeek })
+  if (older.length > 0) groups.push({ label: "Earlier", notifications: older })
+  
+  return groups
+}
+
+// Discord-style notification panel (slide-out)
+export function NotificationPanel({ 
+  isOpen, 
+  onClose 
+}: { 
+  isOpen: boolean
+  onClose: () => void 
+}) {
+  const [notifications, setNotifications] = useState<Notification[]>([])
+  const [loading, setLoading] = useState(true)
+  
+  useEffect(() => {
+    if (isOpen) {
+      setLoading(true)
+      getNotifications({ limit: 50 }).then((data) => {
+        setNotifications(data)
+        setLoading(false)
+      })
+    }
+  }, [isOpen])
+  
+  // Real-time subscription
+  useEffect(() => {
+    const supabase = createClient()
+    
+    const channel = supabase
+      .channel("notifications-panel")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "notifications" },
+        (payload) => {
+          setNotifications((prev) => [payload.new as Notification, ...prev])
+        }
+      )
+      .subscribe()
+    
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [])
+  
+  const handleRead = async (id: string) => {
+    setNotifications(prev => 
+      prev.map(n => n.id === id ? { ...n, is_read: true } : n)
+    )
+    await markAsRead(id)
+  }
+  
+  const handleMarkAllRead = async () => {
+    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })))
+    await markAllAsRead()
+  }
+  
+  const unreadCount = notifications.filter(n => !n.is_read).length
+  const groups = groupNotifications(notifications)
+  
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <>
+          {/* Backdrop */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-40"
+            onClick={onClose}
+          />
+          
+          {/* Panel */}
+          <motion.div
+            initial={{ x: "100%" }}
+            animate={{ x: 0 }}
+            exit={{ x: "100%" }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            className="fixed right-0 top-0 bottom-0 w-full max-w-md glass-panel-darker border-l border-border/50 z-50 flex flex-col"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-border/50">
+              <div className="flex items-center gap-2">
+                <Bell className="h-5 w-5" />
+                <h2 className="font-semibold">Notifications</h2>
+                {unreadCount > 0 && (
+                  <Badge className="bg-primary text-primary-foreground">
+                    {unreadCount}
+                  </Badge>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {unreadCount > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs"
+                    onClick={handleMarkAllRead}
+                  >
+                    <CheckCheck className="h-4 w-4 mr-1" />
+                    Mark all read
+                  </Button>
+                )}
+                <Button variant="ghost" size="icon" onClick={onClose}>
+                  <X className="h-5 w-5" />
+                </Button>
+              </div>
+            </div>
+            
+            {/* Content */}
+            <ScrollArea className="flex-1 esports-scrollbar">
+              {loading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full" />
+                </div>
+              ) : notifications.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center px-4">
+                  <Bell className="h-12 w-12 text-muted-foreground/30 mb-4" />
+                  <p className="font-medium">No notifications yet</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {"We'll notify you about matches, clips, and more"}
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  {groups.map((group) => (
+                    <div key={group.label}>
+                      <div className="px-4 py-2 bg-muted/20 border-b border-border/30 sticky top-0">
+                        <span className="esports-subheading text-muted-foreground">
+                          {group.label}
+                        </span>
+                      </div>
+                      <div className="divide-y divide-border/30">
+                        {group.notifications.map((notification) => {
+                          const Icon = typeIcons[notification.type] || Bell
+                          const iconColor = typeColors[notification.type] || "text-muted-foreground"
+                          
+                          const content = (
+                            <motion.div
+                              initial={{ opacity: 0, x: -10 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              className={cn(
+                                "flex gap-3 p-4 cursor-pointer transition-colors",
+                                notification.is_read 
+                                  ? "hover:bg-muted/20" 
+                                  : "bg-primary/5 hover:bg-primary/10"
+                              )}
+                              onClick={() => {
+                                if (!notification.is_read) handleRead(notification.id)
+                                if (notification.link) onClose()
+                              }}
+                            >
+                              <div className={cn("mt-0.5", iconColor)}>
+                                <Icon className="h-5 w-5" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className={cn(
+                                  "text-sm",
+                                  !notification.is_read && "font-medium"
+                                )}>
+                                  {notification.title}
+                                </p>
+                                {notification.body && (
+                                  <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
+                                    {notification.body}
+                                  </p>
+                                )}
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })}
+                                </p>
+                              </div>
+                              {!notification.is_read && (
+                                <div className="w-2 h-2 rounded-full bg-primary mt-2 shrink-0" />
+                              )}
+                            </motion.div>
+                          )
+                          
+                          return notification.link ? (
+                            <Link key={notification.id} href={notification.link}>
+                              {content}
+                            </Link>
+                          ) : (
+                            <div key={notification.id}>{content}</div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </ScrollArea>
+            
+            {/* Footer */}
+            <div className="border-t border-border/50 p-4">
+              <Link href="/settings/notifications" onClick={onClose}>
+                <Button variant="outline" className="w-full glass-panel border-0">
+                  <Settings className="h-4 w-4 mr-2" />
+                  Notification Settings
+                </Button>
+              </Link>
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  )
+}
+
+// Bell with Discord-style panel
+export function NotificationBellWithPanel() {
+  const [isOpen, setIsOpen] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
+  
+  useEffect(() => {
+    getUnreadCount().then(setUnreadCount)
+    
+    // Poll for updates
+    const interval = setInterval(() => {
+      getUnreadCount().then(setUnreadCount)
+    }, 30000)
+    return () => clearInterval(interval)
+  }, [])
+  
+  // Real-time updates
+  useEffect(() => {
+    const supabase = createClient()
+    
+    const channel = supabase
+      .channel("notification-count-panel")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "notifications" },
+        () => {
+          setUnreadCount(prev => prev + 1)
+        }
+      )
+      .subscribe()
+    
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [])
+  
+  return (
+    <>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="relative"
+        onClick={() => setIsOpen(true)}
+      >
+        <Bell className="h-5 w-5" />
+        {unreadCount > 0 && (
+          <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-medium animate-pulse">
+            {unreadCount > 99 ? "99+" : unreadCount}
+          </span>
+        )}
+      </Button>
+      
+      <NotificationPanel isOpen={isOpen} onClose={() => setIsOpen(false)} />
+    </>
   )
 }

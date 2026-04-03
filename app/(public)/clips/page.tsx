@@ -41,9 +41,11 @@ function formatViews(count: number): string {
   return count.toString()
 }
 
-// Swipe threshold for navigation
-const SWIPE_THRESHOLD = 100
-const SWIPE_VELOCITY = 500
+// Swipe physics constants (TikTok-level feel)
+const SWIPE_THRESHOLD = 120        // Minimum distance for swipe
+const VELOCITY_THRESHOLD = 500     // Minimum velocity for swipe
+const FLICK_VELOCITY = 1200        // Fast flick = instant navigate
+const RUBBER_BAND_ELASTIC = 0.2    // Resistance when dragging past bounds
 
 // Single clip view in the swipe feed
 function ClipView({ 
@@ -469,22 +471,32 @@ export default function ClipsFeedPage() {
     }
   }, [currentIndex, clips.length])
 
-  // Handle drag end for swipe navigation
+  // Handle drag end for swipe navigation with velocity-based physics
   const handleDragEnd = (_: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     const { offset, velocity } = info
+    const absVelocity = Math.abs(velocity.y)
     
-    // Swipe up = next clip
-    if (offset.y < -SWIPE_THRESHOLD || velocity.y < -SWIPE_VELOCITY) {
+    // Fast flick = instant navigation (native feel)
+    if (absVelocity > FLICK_VELOCITY) {
+      if (velocity.y < 0 && currentIndex < clips.length - 1) {
+        paginate(1)
+      } else if (velocity.y > 0 && currentIndex > 0) {
+        paginate(-1)
+      }
+      return
+    }
+    
+    // Velocity-based swipe (primary navigation)
+    if (velocity.y < -VELOCITY_THRESHOLD || offset.y < -SWIPE_THRESHOLD) {
       if (currentIndex < clips.length - 1) {
         paginate(1)
       }
-    }
-    // Swipe down = previous clip
-    else if (offset.y > SWIPE_THRESHOLD || velocity.y > SWIPE_VELOCITY) {
+    } else if (velocity.y > VELOCITY_THRESHOLD || offset.y > SWIPE_THRESHOLD) {
       if (currentIndex > 0) {
         paginate(-1)
       }
     }
+    // Otherwise snap back (rubber band effect handles this via dragConstraints)
   }
 
   // Keyboard navigation
@@ -503,20 +515,30 @@ export default function ClipsFeedPage() {
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [paginate])
 
-  // Slide animation variants
+  // Slide animation variants with spring physics
   const slideVariants = {
     enter: (direction: number) => ({
-      y: direction > 0 ? "100%" : "-100%",
+      y: direction > 0 ? 300 : -300,
       opacity: 0,
+      scale: 0.95,
     }),
     center: {
       y: 0,
       opacity: 1,
+      scale: 1,
     },
     exit: (direction: number) => ({
-      y: direction > 0 ? "-100%" : "100%",
+      y: direction > 0 ? -300 : 300,
       opacity: 0,
+      scale: 0.95,
     }),
+  }
+
+  // Spring transition for native feel
+  const springTransition = {
+    type: "spring",
+    stiffness: 300,
+    damping: 30,
   }
 
   const currentClip = clips[currentIndex]
@@ -551,12 +573,13 @@ export default function ClipsFeedPage() {
             animate="center"
             exit="exit"
             transition={{
-              y: { type: "spring", stiffness: 300, damping: 30 },
+              ...springTransition,
               opacity: { duration: 0.2 },
+              scale: { duration: 0.2 },
             }}
             drag="y"
             dragConstraints={{ top: 0, bottom: 0 }}
-            dragElastic={0.2}
+            dragElastic={RUBBER_BAND_ELASTIC}
             onDragEnd={handleDragEnd}
             className="absolute inset-0 cursor-grab active:cursor-grabbing"
           >

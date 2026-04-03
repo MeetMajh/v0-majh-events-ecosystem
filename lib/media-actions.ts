@@ -2,10 +2,11 @@
 
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
-import { generateEmbedUrl, generateThumbnailUrl, checkContentViolations, isAllowedUrl, type MediaType, type SourceType } from "@/lib/media-utils"
+import { generateEmbedUrl, generateThumbnailUrl, checkContentViolations, isAllowedUrl } from "@/lib/media-utils"
 
-// Re-export types from media-utils for convenience
-export type { MediaType, SourceType }
+// Define types locally to avoid server action bundling issues with type re-exports
+export type MediaType = "clip" | "vod" | "highlight" | "full_match" | "tutorial"
+export type SourceType = "upload" | "youtube" | "twitch" | "kick" | "external"
 
 // ==========================================
 // TYPES
