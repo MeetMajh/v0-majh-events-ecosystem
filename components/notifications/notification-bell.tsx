@@ -1,0 +1,351 @@
+"use client"
+
+import { useState, useEffect, useCallback } from "react"
+import Link from "next/link"
+import { createClient } from "@/lib/supabase/client"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { cn } from "@/lib/utils"
+import {
+  Bell,
+  Check,
+  CheckCheck,
+  Trash2,
+  Gamepad2,
+  Trophy,
+  Users,
+  Flame,
+  Star,
+  AlertCircle,
+  Radio,
+  Clock,
+  Settings,
+  X,
+} from "lucide-react"
+import {
+  getNotifications,
+  getUnreadCount,
+  markAsRead,
+  markAllAsRead,
+  dismissNotification,
+  type Notification,
+  type NotificationType,
+} from "@/lib/notification-actions"
+
+// Icon mapping for notification types
+const typeIcons: Record<NotificationType, typeof Bell> = {
+  match_ready: Gamepad2,
+  match_starting: Clock,
+  match_result: Trophy,
+  tournament_starting: Trophy,
+  round_starting: Radio,
+  followed_player_live: Radio,
+  followed_player_match: Users,
+  trending_match: Flame,
+  achievement_earned: Star,
+  staff_alert: AlertCircle,
+  system: Bell,
+}
+
+const typeColors: Record<NotificationType, string> = {
+  match_ready: "text-primary",
+  match_starting: "text-orange-500",
+  match_result: "text-yellow-500",
+  tournament_starting: "text-primary",
+  round_starting: "text-blue-500",
+  followed_player_live: "text-destructive",
+  followed_player_match: "text-purple-500",
+  trending_match: "text-orange-500",
+  achievement_earned: "text-yellow-500",
+  staff_alert: "text-destructive",
+  system: "text-muted-foreground",
+}
+
+function formatTimeAgo(date: string): string {
+  const now = new Date()
+  const then = new Date(date)
+  const seconds = Math.floor((now.getTime() - then.getTime()) / 1000)
+
+  if (seconds < 60) return "just now"
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`
+  if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`
+  return then.toLocaleDateString()
+}
+
+interface NotificationItemProps {
+  notification: Notification
+  onRead: (id: string) => void
+  onDismiss: (id: string) => void
+}
+
+function NotificationItem({ notification, onRead, onDismiss }: NotificationItemProps) {
+  const Icon = typeIcons[notification.type] || Bell
+  const iconColor = typeColors[notification.type] || "text-muted-foreground"
+
+  const handleClick = () => {
+    if (!notification.is_read) {
+      onRead(notification.id)
+    }
+  }
+
+  return (
+    <div
+      className={cn(
+        "group relative flex gap-3 p-3 transition-colors hover:bg-muted/50",
+        !notification.is_read && "bg-primary/5"
+      )}
+    >
+      {/* Unread indicator */}
+      {!notification.is_read && (
+        <div className="absolute left-1 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-primary" />
+      )}
+
+      {/* Icon */}
+      <div className={cn("mt-0.5 flex-shrink-0", iconColor)}>
+        <Icon className="h-5 w-5" />
+      </div>
+
+      {/* Content */}
+      <div className="min-w-0 flex-1">
+        {notification.link ? (
+          <Link
+            href={notification.link}
+            onClick={handleClick}
+            className="block"
+          >
+            <p className={cn(
+              "text-sm font-medium leading-tight",
+              !notification.is_read && "text-foreground",
+              notification.is_read && "text-muted-foreground"
+            )}>
+              {notification.title}
+            </p>
+            {notification.body && (
+              <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">
+                {notification.body}
+              </p>
+            )}
+          </Link>
+        ) : (
+          <>
+            <p className={cn(
+              "text-sm font-medium leading-tight",
+              !notification.is_read && "text-foreground",
+              notification.is_read && "text-muted-foreground"
+            )}>
+              {notification.title}
+            </p>
+            {notification.body && (
+              <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">
+                {notification.body}
+              </p>
+            )}
+          </>
+        )}
+        <p className="mt-1 text-[10px] text-muted-foreground">
+          {formatTimeAgo(notification.created_at)}
+        </p>
+      </div>
+
+      {/* Actions */}
+      <div className="flex-shrink-0 opacity-0 transition-opacity group-hover:opacity-100">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6"
+          onClick={(e) => {
+            e.stopPropagation()
+            onDismiss(notification.id)
+          }}
+        >
+          <X className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+export function NotificationBell() {
+  const [notifications, setNotifications] = useState<Notification[]>([])
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [isOpen, setIsOpen] = useState(false)
+
+  const fetchNotifications = useCallback(async () => {
+    const [notifs, count] = await Promise.all([
+      getNotifications({ limit: 20 }),
+      getUnreadCount(),
+    ])
+    setNotifications(notifs)
+    setUnreadCount(count)
+    setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    fetchNotifications()
+  }, [fetchNotifications])
+
+  // Subscribe to realtime notifications
+  useEffect(() => {
+    const supabase = createClient()
+
+    const channel = supabase
+      .channel("notifications")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "notifications",
+        },
+        (payload) => {
+          const newNotification = payload.new as Notification
+          setNotifications((prev) => [newNotification, ...prev.slice(0, 19)])
+          setUnreadCount((prev) => prev + 1)
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [])
+
+  const handleRead = async (id: string) => {
+    await markAsRead(id)
+    setNotifications((prev) =>
+      prev.map((n) =>
+        n.id === id ? { ...n, is_read: true, read_at: new Date().toISOString() } : n
+      )
+    )
+    setUnreadCount((prev) => Math.max(0, prev - 1))
+  }
+
+  const handleDismiss = async (id: string) => {
+    await dismissNotification(id)
+    setNotifications((prev) => prev.filter((n) => n.id !== id))
+    const notification = notifications.find((n) => n.id === id)
+    if (notification && !notification.is_read) {
+      setUnreadCount((prev) => Math.max(0, prev - 1))
+    }
+  }
+
+  const handleMarkAllRead = async () => {
+    await markAllAsRead()
+    setNotifications((prev) =>
+      prev.map((n) => ({ ...n, is_read: true, read_at: new Date().toISOString() }))
+    )
+    setUnreadCount(0)
+  }
+
+  return (
+    <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" className="relative">
+          <Bell className="h-5 w-5" />
+          {unreadCount > 0 && (
+            <Badge
+              className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-[10px] font-bold text-destructive-foreground"
+            >
+              {unreadCount > 99 ? "99+" : unreadCount}
+            </Badge>
+          )}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-80 p-0">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b px-4 py-3">
+          <h3 className="font-semibold">Notifications</h3>
+          <div className="flex items-center gap-1">
+            {unreadCount > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1.5 text-xs"
+                onClick={handleMarkAllRead}
+              >
+                <CheckCheck className="h-3.5 w-3.5" />
+                Mark all read
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Notifications List */}
+        <ScrollArea className="h-[400px]">
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            </div>
+          ) : notifications.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <Bell className="mb-3 h-10 w-10 text-muted-foreground/30" />
+              <p className="text-sm text-muted-foreground">No notifications yet</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                We&apos;ll notify you when something happens
+              </p>
+            </div>
+          ) : (
+            <div className="divide-y">
+              {notifications.map((notification) => (
+                <NotificationItem
+                  key={notification.id}
+                  notification={notification}
+                  onRead={handleRead}
+                  onDismiss={handleDismiss}
+                />
+              ))}
+            </div>
+          )}
+        </ScrollArea>
+
+        {/* Footer */}
+        {notifications.length > 0 && (
+          <>
+            <DropdownMenuSeparator />
+            <div className="p-2">
+              <Link href="/settings/notifications">
+                <Button variant="ghost" className="w-full justify-start gap-2 text-sm">
+                  <Settings className="h-4 w-4" />
+                  Notification settings
+                </Button>
+              </Link>
+            </div>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+// Compact version for mobile
+export function NotificationBellCompact() {
+  const [unreadCount, setUnreadCount] = useState(0)
+
+  useEffect(() => {
+    getUnreadCount().then(setUnreadCount)
+  }, [])
+
+  return (
+    <Link href="/notifications">
+      <Button variant="ghost" size="icon" className="relative">
+        <Bell className="h-5 w-5" />
+        {unreadCount > 0 && (
+          <Badge
+            className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-[10px] font-bold text-destructive-foreground"
+          >
+            {unreadCount > 99 ? "99+" : unreadCount}
+          </Badge>
+        )}
+      </Button>
+    </Link>
+  )
+}
