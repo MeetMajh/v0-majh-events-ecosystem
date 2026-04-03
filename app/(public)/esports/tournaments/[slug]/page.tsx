@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { FORMAT_LABELS, type TournamentFormat } from "@/lib/bracket-utils"
 import { formatCents, formatDate, formatDateTime } from "@/lib/format"
-import { Calendar, Users, DollarSign, Gamepad2, Trophy, Clock, ChevronRight, Radio } from "lucide-react"
+import { Calendar, Users, DollarSign, Gamepad2, Trophy, Clock, ChevronRight, Radio, Mic } from "lucide-react"
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
@@ -85,12 +85,20 @@ export default async function TournamentDetailPage({ params }: { params: Promise
 
         <div className="flex flex-shrink-0 items-center gap-3">
           {tournament.status === "in_progress" && (
-            <Button asChild variant="destructive" className="gap-2">
-              <Link href={`/esports/tournaments/${slug}/live`}>
-                <Radio className="h-4 w-4 animate-pulse" />
-                Watch Live
-              </Link>
-            </Button>
+            <>
+              <Button asChild variant="destructive" className="gap-2">
+                <Link href={`/esports/tournaments/${slug}/live`}>
+                  <Radio className="h-4 w-4 animate-pulse" />
+                  Watch Live
+                </Link>
+              </Button>
+              <Button asChild variant="outline" className="gap-2">
+                <Link href={`/esports/tournaments/${slug}/cast`}>
+                  <Mic className="h-4 w-4" />
+                  Cast
+                </Link>
+              </Button>
+            </>
           )}
           {user ? (
             <RegistrationButton
