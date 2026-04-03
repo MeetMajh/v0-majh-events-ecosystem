@@ -36,7 +36,7 @@ import type { MediaType } from "@/lib/media-utils"
 
 interface MediaCardProps {
   media: PlayerMedia
-  variant?: "default" | "compact" | "featured"
+  variant?: "default" | "compact" | "featured" | "mobile"
   showPlayer?: boolean
   isOwner?: boolean
   onDelete?: (id: string) => void
@@ -82,6 +82,47 @@ export function MediaCard({
   const [isHovered, setIsHovered] = useState(false)
   const typeConfig = getMediaTypeConfig(media.media_type)
   const TypeIcon = typeConfig.icon
+
+  // Mobile variant - horizontal compact layout
+  if (variant === "mobile") {
+    return (
+      <Link href={`/media/${media.id}`}>
+        <div className="flex gap-3 p-2 glass-panel rounded-xl group">
+          <div className="relative w-24 h-16 flex-shrink-0 overflow-hidden rounded-lg bg-muted">
+            {media.thumbnail_url ? (
+              <Image
+                src={media.thumbnail_url}
+                alt={media.title}
+                fill
+                className="object-cover"
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center">
+                <Play className="h-4 w-4 text-muted-foreground" />
+              </div>
+            )}
+            {/* Play overlay on hover */}
+            <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity">
+              <Play className="h-5 w-5 text-white fill-white" />
+            </div>
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="text-sm font-medium text-foreground line-clamp-2">{media.title}</h3>
+            <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <Eye className="h-3 w-3" />
+                {formatViews(media.view_count)}
+              </span>
+              <span className="flex items-center gap-1">
+                <Flame className="h-3 w-3" />
+                {media.like_count}
+              </span>
+            </div>
+          </div>
+        </div>
+      </Link>
+    )
+  }
 
   if (variant === "compact") {
     return (
@@ -371,7 +412,7 @@ export function MediaGrid({
   columns = 4,
 }: {
   media: PlayerMedia[]
-  variant?: "default" | "compact" | "featured"
+  variant?: "default" | "compact" | "featured" | "mobile"
   showPlayer?: boolean
   columns?: 2 | 3 | 4
 }) {
@@ -386,6 +427,22 @@ export function MediaGrid({
       <div className="flex flex-col items-center justify-center py-12 text-center">
         <Play className="mb-4 h-12 w-12 text-muted-foreground/30" />
         <p className="text-muted-foreground">No media found</p>
+      </div>
+    )
+  }
+
+  // Mobile variant uses a vertical list instead of grid
+  if (variant === "mobile") {
+    return (
+      <div className="flex flex-col gap-2">
+        {media.map((item) => (
+          <MediaCard 
+            key={item.id} 
+            media={item} 
+            variant="mobile"
+            showPlayer={showPlayer}
+          />
+        ))}
       </div>
     )
   }

@@ -2,10 +2,10 @@
 
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
-import { generateEmbedUrl, generateThumbnailUrl, checkContentViolations, isAllowedUrl } from "@/lib/media-utils"
+import { generateEmbedUrl, generateThumbnailUrl, checkContentViolations, isAllowedUrl, type MediaType, type SourceType } from "@/lib/media-utils"
 
 // Re-export types from media-utils for convenience
-export type { MediaType, SourceType } from "@/lib/media-utils"
+export type { MediaType, SourceType }
 
 // ==========================================
 // TYPES
@@ -382,6 +382,75 @@ export async function getFeaturedMedia(limit: number = 5): Promise<PlayerMedia[]
     .limit(limit)
   
   return (data || []) as PlayerMedia[]
+}
+
+// Get paginated media feed for infinite scroll (TikTok-style)
+export async function getMediaFeed(
+  cursor?: string, // ID of last item for pagination
+  limit: number = 10,
+  filter: "trending" | "recent" | "following" = "trending"
+): Promise<{ media: PlayerMedia[]; nextCursor: string | null }> {
+  const supabase = await createClient()
+  
+  let query = supabase
+    .from("player_media")
+    .select(`
+      *,
+      player:profiles!player_media_player_id_fkey(id, first_name, last_name, avatar_url),
+      game:games(id, name, slug)
+    `)
+    .eq("visibility", "public")
+    .eq("moderation_status", "approved")
+  
+  // Filter by type
+  if (filter === "trending") {
+    query = query.order("trending_score", { ascending: false })
+  } else if (filter === "recent") {
+    query = query.order("created_at", { ascending: false })
+  } else if (filter === "following") {
+    // Get user's followed players
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      const { data: follows } = await supabase
+        .from("player_follows")
+        .select("player_id")
+        .eq("follower_id", user.id)
+      
+      const followedIds = follows?.map(f => f.player_id) || []
+      if (followedIds.length > 0) {
+        query = query.in("player_id", followedIds)
+      }
+    }
+    query = query.order("created_at", { ascending: false })
+  }
+  
+  // Cursor-based pagination
+  if (cursor) {
+    // Get the cursor item to compare
+    const { data: cursorItem } = await supabase
+      .from("player_media")
+      .select("trending_score, created_at")
+      .eq("id", cursor)
+      .single()
+    
+    if (cursorItem) {
+      if (filter === "trending") {
+        query = query.or(`trending_score.lt.${cursorItem.trending_score},and(trending_score.eq.${cursorItem.trending_score},id.lt.${cursor})`)
+      } else {
+        query = query.lt("created_at", cursorItem.created_at)
+      }
+    }
+  }
+  
+  query = query.limit(limit + 1) // Fetch one extra to check if there are more
+  
+  const { data } = await query
+  
+  const media = (data || []).slice(0, limit) as PlayerMedia[]
+  const hasMore = (data?.length || 0) > limit
+  const nextCursor = hasMore && media.length > 0 ? media[media.length - 1].id : null
+  
+  return { media, nextCursor }
 }
 
 // ==========================================
