@@ -21,7 +21,9 @@ import {
   TrendingUp,
   Loader2,
   Upload,
+  Smartphone,
 } from "lucide-react"
+import Link from "next/link"
 import { MediaCard, MediaGrid } from "@/components/media/media-card"
 import { MediaUploadForm } from "@/components/media/media-upload-form"
 import {
@@ -96,16 +98,25 @@ export default function MediaBrowsePage() {
               </p>
             </div>
             
-            {isLoggedIn && (
-              <MediaUploadForm
-                trigger={
-                  <Button size="lg">
-                    <Upload className="mr-2 h-5 w-5" />
-                    Upload Clip
-                  </Button>
-                }
-              />
-            )}
+            <div className="flex gap-3">
+              <Button asChild variant="outline" size="lg" className="gap-2">
+                <Link href="/clips">
+                  <Smartphone className="h-5 w-5" />
+                  <span className="hidden sm:inline">Scroll Feed</span>
+                  <span className="sm:hidden">Feed</span>
+                </Link>
+              </Button>
+              {isLoggedIn && (
+                <MediaUploadForm
+                  trigger={
+                    <Button size="lg">
+                      <Upload className="mr-2 h-5 w-5" />
+                      Upload Clip
+                    </Button>
+                  }
+                />
+              )}
+            </div>
           </div>
         </div>
       </div>

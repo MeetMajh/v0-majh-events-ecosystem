@@ -7,6 +7,7 @@ import { NotificationBell } from "@/components/notifications/notification-bell"
 
 const NAV_ITEMS = [
   { label: "Esports", href: "/esports" },
+  { label: "Clips", href: "/clips" },
   { label: "Bar / Cafe", href: "/bar-cafe" },
   { label: "CARBARDMV", href: "/carbardmv" },
   { label: "News", href: "/news" },
