@@ -210,6 +210,17 @@ export function FeatureMatchCard({
           </div>
         )}
 
+        {/* Watch Link Banner */}
+        {embedUrl && (
+          <Link
+            href={`/match/${match.id}/watch`}
+            className="flex items-center justify-center gap-2 bg-primary/10 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/20"
+          >
+            <ExternalLink className="h-4 w-4" />
+            Open Full Watch Experience
+          </Link>
+        )}
+
         {/* Players section */}
         <div className="p-4">
           <div className="flex items-center justify-between">
