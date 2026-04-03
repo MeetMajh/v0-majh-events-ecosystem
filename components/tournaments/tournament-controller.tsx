@@ -71,6 +71,8 @@ import {
   FastForward,
   Star,
   Video,
+  Copy,
+  ExternalLink,
 } from "lucide-react"
 import {
   createSwissRound,
@@ -104,6 +106,7 @@ import {
   getRoundStats,
   setFeatureMatch,
   getFeatureMatches,
+  setMatchLive,
   type PlayerStanding,
 } from "@/lib/tournament-controller-actions"
 import { resetRoundTimer } from "@/lib/timer-actions"
@@ -1536,6 +1539,7 @@ const handleAddPlayer = () => {
                           <TableHead>Player 2</TableHead>
                           <TableHead className="w-24">Status</TableHead>
                           <TableHead className="w-16 text-center">Feature</TableHead>
+                          <TableHead className="w-20 text-center">Overlay</TableHead>
                           <TableHead className="w-24">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -1625,6 +1629,37 @@ const handleAddPlayer = () => {
                                     match.is_feature_match ? "fill-current" : ""
                                   )} />
                                 </Button>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {!match.is_bye && (
+                                <div className="flex items-center justify-center gap-1">
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-8 w-8 p-0"
+                                    onClick={() => {
+                                      const url = `${window.location.origin}/overlay/match/${match.id}`
+                                      navigator.clipboard.writeText(url)
+                                      toast.success("Overlay URL copied!")
+                                    }}
+                                    title="Copy overlay URL for OBS"
+                                  >
+                                    <Copy className="h-3.5 w-3.5" />
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-8 w-8 p-0"
+                                    onClick={() => {
+                                      const url = `${window.location.origin}/overlay/match/${match.id}`
+                                      window.open(url, "_blank")
+                                    }}
+                                    title="Preview overlay"
+                                  >
+                                    <ExternalLink className="h-3.5 w-3.5" />
+                                  </Button>
+                                </div>
                               )}
                             </TableCell>
                             <TableCell>

@@ -1371,7 +1371,7 @@ export async function getRoundPairings(roundId: string) {
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Elimination Bracket Generation
-// ════════════════════════════════════════════════════════════════════════���═════
+// ════════════════════════════════════════════════════════════════════════�������═════
 
 function nextPowerOf2(n: number): number {
   let p = 1
@@ -1869,7 +1869,7 @@ export async function adminCheckInPlayer(tournamentId: string, playerId: string,
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Round Timer Controls
-// ═══════════════════════════════════════════════════════��══════════════════════
+// ═══════════════════════════════════════════════════════��═��════════════════════
 
 export async function pauseRound(tournamentId: string, roundId: string) {
   const auth = await requireTournamentOrganizer(tournamentId)
@@ -3712,4 +3712,173 @@ export async function getTournamentStreams(tournamentId: string) {
     .order("created_at", { ascending: true })
 
   return data || []
+}
+
+// ==========================================
+// OBS OVERLAY SYSTEM
+// ==========================================
+
+// Set match as live (for overlay tracking)
+export async function setMatchLive(
+  matchId: string,
+  isLive: boolean
+): Promise<{ success?: boolean; error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: "Not authenticated" }
+
+  const { data: match } = await supabase
+    .from("tournament_matches")
+    .select("round_id, tournament_rounds(tournament_id)")
+    .eq("id", matchId)
+    .single()
+
+  if (!match) return { error: "Match not found" }
+
+  const tournamentId = (match.tournament_rounds as any)?.tournament_id
+  const auth = await requireTournamentOrganizer(tournamentId)
+  if ("error" in auth) return { error: auth.error }
+
+  const { error } = await supabase
+    .from("tournament_matches")
+    .update({ 
+      is_live: isLive,
+      stream_status: isLive ? "live" : "offline"
+    })
+    .eq("id", matchId)
+
+  if (error) return { error: error.message }
+
+  revalidatePath(`/dashboard/tournaments`)
+  return { success: true }
+}
+
+// Start match timer
+export async function startMatchTimer(
+  matchId: string,
+  durationSeconds?: number
+): Promise<{ success?: boolean; error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: "Not authenticated" }
+
+  const { data: match } = await supabase
+    .from("tournament_matches")
+    .select("round_id, tournament_rounds(tournament_id)")
+    .eq("id", matchId)
+    .single()
+
+  if (!match) return { error: "Match not found" }
+
+  const tournamentId = (match.tournament_rounds as any)?.tournament_id
+  const auth = await requireTournamentOrganizer(tournamentId)
+  if ("error" in auth) return { error: auth.error }
+
+  const updateData: Record<string, any> = {
+    timer_started_at: new Date().toISOString(),
+  }
+  
+  if (durationSeconds) {
+    updateData.timer_duration_seconds = durationSeconds
+  }
+
+  const { error } = await supabase
+    .from("tournament_matches")
+    .update(updateData)
+    .eq("id", matchId)
+
+  if (error) return { error: error.message }
+
+  revalidatePath(`/dashboard/tournaments`)
+  return { success: true }
+}
+
+// Stop/reset match timer
+export async function stopMatchTimer(
+  matchId: string
+): Promise<{ success?: boolean; error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: "Not authenticated" }
+
+  const { data: match } = await supabase
+    .from("tournament_matches")
+    .select("round_id, tournament_rounds(tournament_id)")
+    .eq("id", matchId)
+    .single()
+
+  if (!match) return { error: "Match not found" }
+
+  const tournamentId = (match.tournament_rounds as any)?.tournament_id
+  const auth = await requireTournamentOrganizer(tournamentId)
+  if ("error" in auth) return { error: auth.error }
+
+  const { error } = await supabase
+    .from("tournament_matches")
+    .update({ timer_started_at: null })
+    .eq("id", matchId)
+
+  if (error) return { error: error.message }
+
+  revalidatePath(`/dashboard/tournaments`)
+  return { success: true }
+}
+
+// Update overlay config
+export async function updateOverlayConfig(
+  matchId: string,
+  config: {
+    theme?: string
+    layout?: string
+    showTimer?: boolean
+    showRound?: boolean
+    showRecords?: boolean
+    showAvatars?: boolean
+    showTournamentName?: boolean
+    primaryColor?: string
+    accentColor?: string
+    backgroundOpacity?: number
+  }
+): Promise<{ success?: boolean; error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: "Not authenticated" }
+
+  const { data: match } = await supabase
+    .from("tournament_matches")
+    .select("round_id, tournament_rounds(tournament_id)")
+    .eq("id", matchId)
+    .single()
+
+  if (!match) return { error: "Match not found" }
+
+  const tournamentId = (match.tournament_rounds as any)?.tournament_id
+  const auth = await requireTournamentOrganizer(tournamentId)
+  if ("error" in auth) return { error: auth.error }
+
+  const updateData: Record<string, any> = {}
+  if (config.theme !== undefined) updateData.theme = config.theme
+  if (config.layout !== undefined) updateData.layout = config.layout
+  if (config.showTimer !== undefined) updateData.show_timer = config.showTimer
+  if (config.showRound !== undefined) updateData.show_round = config.showRound
+  if (config.showRecords !== undefined) updateData.show_records = config.showRecords
+  if (config.showAvatars !== undefined) updateData.show_avatars = config.showAvatars
+  if (config.showTournamentName !== undefined) updateData.show_tournament_name = config.showTournamentName
+  if (config.primaryColor !== undefined) updateData.primary_color = config.primaryColor
+  if (config.accentColor !== undefined) updateData.accent_color = config.accentColor
+  if (config.backgroundOpacity !== undefined) updateData.background_opacity = config.backgroundOpacity
+
+  // Upsert overlay config
+  const { error } = await supabase
+    .from("match_overlays")
+    .upsert({
+      match_id: matchId,
+      ...updateData,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "match_id" })
+
+  if (error) return { error: error.message }
+
+  revalidatePath(`/dashboard/tournaments`)
+  return { success: true }
 }
