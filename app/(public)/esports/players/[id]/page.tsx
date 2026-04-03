@@ -27,52 +27,95 @@ export default async function PlayerProfilePage({ params }: { params: Promise<{ 
     : 0
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-16">
-      <Link href="/esports/leaderboards" className="mb-4 inline-block text-sm text-muted-foreground hover:text-foreground transition-colors">
-        &larr; Leaderboards
+    <div className="mx-auto max-w-5xl px-4 py-8">
+      <Link href="/esports/leaderboards" className="mb-6 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
+        <span>&larr;</span> Back to Leaderboards
       </Link>
 
-      {/* Header */}
-      <div className="mb-8 flex flex-col sm:flex-row items-start sm:items-center gap-6">
-        <Avatar className="h-24 w-24 ring-4 ring-primary/20">
-          <AvatarImage src={player.avatar_url ?? undefined} />
-          <AvatarFallback className="text-3xl font-bold bg-primary/10 text-primary">
-            {player.display_name?.[0]?.toUpperCase() ?? "?"}
-          </AvatarFallback>
-        </Avatar>
-        <div className="flex-1">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-3xl font-bold text-foreground">{player.display_name}</h1>
-            {player.stats.totalRankingPoints > 0 && (
-              <Badge className="bg-primary/10 text-primary border-primary/30">
-                <TrendingUp className="mr-1 h-3 w-3" />
-                {player.stats.totalRankingPoints.toLocaleString()} pts
-              </Badge>
+      {/* Header - Glass Panel */}
+      <div className="glass-panel rounded-xl p-6 mb-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
+          <Avatar className="h-28 w-28 ring-4 ring-primary/30 shadow-lg">
+            <AvatarImage src={player.avatar_url ?? undefined} />
+            <AvatarFallback className="text-4xl font-bold bg-primary/10 text-primary">
+              {player.display_name?.[0]?.toUpperCase() ?? "?"}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex-1">
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="esports-heading text-3xl text-foreground">{player.display_name}</h1>
+              {player.stats.totalRankingPoints > 0 && (
+                <Badge className="badge-featured">
+                  <TrendingUp className="mr-1 h-3 w-3" />
+                  {player.stats.totalRankingPoints.toLocaleString()} pts
+                </Badge>
+              )}
+            </div>
+            {player.teams.length > 0 && (
+              <div className="mt-3 flex gap-2 flex-wrap">
+                {player.teams.map((team: any) => (
+                  <Link key={team.id} href={`/esports/teams/${team.slug}`}>
+                    <Badge variant="outline" className="text-xs hover:border-primary/30 hover:bg-primary/5 transition-colors">
+                      <Users className="mr-1 h-3 w-3" />
+                      {team.tag ? `[${team.tag}]` : ""} {team.name}
+                    </Badge>
+                  </Link>
+                ))}
+              </div>
+            )}
+            {player.created_at && (
+              <p className="mt-3 text-xs text-muted-foreground flex items-center gap-1">
+                <CalendarDays className="h-3 w-3" />
+                Member since {format(new Date(player.created_at), "MMMM yyyy")}
+              </p>
             )}
           </div>
-          {player.teams.length > 0 && (
-            <div className="mt-2 flex gap-2 flex-wrap">
-              {player.teams.map((team: any) => (
-                <Link key={team.id} href={`/esports/teams/${team.slug}`}>
-                  <Badge variant="outline" className="text-xs hover:border-primary/30 hover:bg-primary/5">
-                    <Users className="mr-1 h-3 w-3" />
-                    {team.tag ? `[${team.tag}]` : ""} {team.name}
-                  </Badge>
-                </Link>
-              ))}
+        </div>
+
+        {/* Stats Bar */}
+        <div className="stat-bar mt-6 flex-wrap justify-center sm:justify-start">
+          <div className="stat-item">
+            <span className="stat-value text-primary">{player.stats.totalRankingPoints.toLocaleString()}</span>
+            <span className="stat-label">Points</span>
+          </div>
+          <div className="stat-item">
+            <span className="stat-value">
+              <span className="text-green-500">{player.stats.totalWins}</span>
+              <span className="text-muted-foreground">-</span>
+              <span className="text-red-500">{player.stats.totalLosses}</span>
+            </span>
+            <span className="stat-label">Record</span>
+          </div>
+          <div className="stat-item">
+            <span className="stat-value">{winRate}%</span>
+            <span className="stat-label">Win Rate</span>
+          </div>
+          <div className="stat-item">
+            <span className="stat-value">{player.stats.totalTournaments}</span>
+            <span className="stat-label">Events</span>
+          </div>
+          <div className="stat-item">
+            <span className="stat-value text-yellow-500">
+              {player.leaderboardEntries.reduce((sum: number, e: any) => sum + (e.tournaments_won ?? 0), 0)}
+            </span>
+            <span className="stat-label">Titles</span>
+          </div>
+          {player.stats.bestPlacement && (
+            <div className="stat-item">
+              <span className="stat-value text-purple-500">
+                {player.stats.bestPlacement === 1 ? "1st" : 
+                 player.stats.bestPlacement === 2 ? "2nd" : 
+                 player.stats.bestPlacement === 3 ? "3rd" : 
+                 `${player.stats.bestPlacement}th`}
+              </span>
+              <span className="stat-label">Best Finish</span>
             </div>
-          )}
-          {player.created_at && (
-            <p className="mt-2 text-xs text-muted-foreground flex items-center gap-1">
-              <CalendarDays className="h-3 w-3" />
-              Member since {format(new Date(player.created_at), "MMMM yyyy")}
-            </p>
           )}
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="mb-8 grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
+      {/* Legacy Stats Grid - Hidden, data now in stat-bar */}
+      <div className="hidden mb-8 grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
         <Card className="border-border bg-card">
           <CardContent className="flex items-center gap-3 p-4">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
@@ -171,8 +214,8 @@ export default async function PlayerProfilePage({ params }: { params: Promise<{ 
       {/* Game Rankings */}
       {player.leaderboardEntries.length > 0 && (
         <section className="mb-8">
-          <h2 className="mb-4 text-lg font-bold text-foreground flex items-center gap-2">
-            <Gamepad2 className="h-5 w-5 text-primary" />
+          <h2 className="esports-subheading mb-4 text-muted-foreground flex items-center gap-2">
+            <Gamepad2 className="h-4 w-4 text-primary" />
             Game Rankings
           </h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -182,7 +225,7 @@ export default async function PlayerProfilePage({ params }: { params: Promise<{ 
                 : 0
               
               return (
-                <Card key={entry.id} className="border-border bg-card overflow-hidden">
+                <Card key={entry.id} className="esports-card glass-panel border-0 overflow-hidden">
                   <CardContent className="p-4">
                     <div className="flex items-start justify-between mb-3">
                       <div>
@@ -239,15 +282,15 @@ export default async function PlayerProfilePage({ params }: { params: Promise<{ 
       {/* Recent Matches */}
       {player.recentMatches && player.recentMatches.length > 0 && (
         <section className="mb-8">
-          <h2 className="mb-4 text-lg font-bold text-foreground flex items-center gap-2">
-            <Swords className="h-5 w-5 text-primary" />
+          <h2 className="esports-subheading mb-4 text-muted-foreground flex items-center gap-2">
+            <Swords className="h-4 w-4 text-primary" />
             Recent Matches
           </h2>
           <div className="space-y-2">
             {player.recentMatches.slice(0, 10).map((match: any) => (
               <div 
                 key={match.id} 
-                className="flex items-center gap-3 rounded-lg border border-border bg-card p-3 transition-colors hover:bg-muted/20"
+                className="esports-card flex items-center gap-3 rounded-lg glass-panel border-0 p-3"
               >
                 {/* Result indicator */}
                 <div className={cn(
@@ -319,14 +362,14 @@ export default async function PlayerProfilePage({ params }: { params: Promise<{ 
       {/* Tournament History */}
       {player.tournamentResults.length > 0 && (
         <section className="mb-8">
-          <h2 className="mb-4 text-lg font-bold text-foreground flex items-center gap-2">
-            <Medal className="h-5 w-5 text-primary" />
+          <h2 className="esports-subheading mb-4 text-muted-foreground flex items-center gap-2">
+            <Medal className="h-4 w-4 text-primary" />
             Tournament History
           </h2>
-          <div className="overflow-hidden rounded-xl border border-border">
+          <div className="glass-panel overflow-hidden rounded-xl">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-border bg-muted/30">
+                <tr className="border-b border-border/30 bg-background/30">
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase text-muted-foreground">Tournament</th>
                   <th className="px-4 py-3 text-center text-xs font-medium uppercase text-muted-foreground hidden sm:table-cell">Date</th>
                   <th className="px-4 py-3 text-center text-xs font-medium uppercase text-muted-foreground">Place</th>
@@ -336,7 +379,7 @@ export default async function PlayerProfilePage({ params }: { params: Promise<{ 
               </thead>
               <tbody>
                 {player.tournamentResults.map((result: any) => (
-                  <tr key={result.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
+                  <tr key={result.id} className="border-b border-border/20 hover:bg-primary/5 transition-colors">
                     <td className="px-4 py-3">
                       <Link href={`/esports/tournaments/${result.tournaments?.slug}`} className="text-sm font-medium text-foreground hover:text-primary transition-colors">
                         {result.tournaments?.name}
