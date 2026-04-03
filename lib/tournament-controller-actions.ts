@@ -3430,3 +3430,286 @@ export async function getRoundStats(roundId: string): Promise<{
     progressPercent,
   }
 }
+
+// ==========================================
+// FEATURE MATCH + STREAMING SYSTEM
+// ==========================================
+
+// Set or unset a match as a feature match
+export async function setFeatureMatch(
+  matchId: string,
+  isFeature: boolean,
+  streamUrl?: string,
+  streamPlatform?: "youtube" | "twitch" | "kick" | "custom"
+): Promise<{ success?: boolean; error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: "Not authenticated" }
+
+  // Get match to verify tournament access
+  const { data: match } = await supabase
+    .from("tournament_matches")
+    .select("round_id, tournament_rounds(tournament_id)")
+    .eq("id", matchId)
+    .single()
+
+  if (!match) return { error: "Match not found" }
+
+  const tournamentId = (match.tournament_rounds as any)?.tournament_id
+  if (!tournamentId) return { error: "Tournament not found" }
+
+  const auth = await requireTournamentOrganizer(tournamentId)
+  if ("error" in auth) return { error: auth.error }
+
+  // Update the match
+  const updateData: Record<string, any> = {
+    is_feature_match: isFeature,
+  }
+  
+  if (streamUrl) {
+    updateData.stream_url = streamUrl
+    updateData.stream_platform = streamPlatform || "custom"
+  }
+  
+  if (!isFeature) {
+    // Clear streaming info when removing feature status
+    updateData.stream_url = null
+    updateData.stream_platform = null
+    updateData.stream_embed_url = null
+  }
+
+  const { error } = await supabase
+    .from("tournament_matches")
+    .update(updateData)
+    .eq("id", matchId)
+
+  if (error) return { error: error.message }
+
+  revalidatePath(`/dashboard/tournaments`)
+  revalidatePath(`/esports/tournaments`)
+  return { success: true }
+}
+
+// Update stream URL for a match
+export async function updateMatchStream(
+  matchId: string,
+  streamUrl: string,
+  streamPlatform: "youtube" | "twitch" | "kick" | "custom"
+): Promise<{ success?: boolean; error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: "Not authenticated" }
+
+  const { data: match } = await supabase
+    .from("tournament_matches")
+    .select("round_id, tournament_rounds(tournament_id)")
+    .eq("id", matchId)
+    .single()
+
+  if (!match) return { error: "Match not found" }
+
+  const tournamentId = (match.tournament_rounds as any)?.tournament_id
+  const auth = await requireTournamentOrganizer(tournamentId)
+  if ("error" in auth) return { error: auth.error }
+
+  const { error } = await supabase
+    .from("tournament_matches")
+    .update({
+      stream_url: streamUrl,
+      stream_platform: streamPlatform,
+    })
+    .eq("id", matchId)
+
+  if (error) return { error: error.message }
+
+  revalidatePath(`/dashboard/tournaments`)
+  return { success: true }
+}
+
+// Get all feature matches for a tournament
+export async function getFeatureMatches(tournamentId: string) {
+  const supabase = await createClient()
+
+  const { data: matches, error } = await supabase
+    .from("tournament_matches")
+    .select(`
+      id, player1_id, player2_id, player1_wins, player2_wins, draws,
+      status, table_number, is_feature_match, stream_url, stream_platform, stream_embed_url,
+      tournament_rounds(round_number, status, tournament_id)
+    `)
+    .eq("is_feature_match", true)
+    .order("created_at", { ascending: false })
+
+  if (error) return []
+
+  // Filter by tournament and get player info
+  const tournamentMatches = matches.filter(
+    (m) => (m.tournament_rounds as any)?.tournament_id === tournamentId
+  )
+
+  // Get player profiles
+  const playerIds = new Set<string>()
+  tournamentMatches.forEach((m) => {
+    if (m.player1_id) playerIds.add(m.player1_id)
+    if (m.player2_id) playerIds.add(m.player2_id)
+  })
+
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("id, first_name, last_name, avatar_url")
+    .in("id", Array.from(playerIds))
+
+  const profileMap = new Map(profiles?.map((p) => [p.id, p]) || [])
+
+  return tournamentMatches.map((m) => ({
+    ...m,
+    player1: profileMap.get(m.player1_id!) || null,
+    player2: profileMap.get(m.player2_id!) || null,
+    roundNumber: (m.tournament_rounds as any)?.round_number,
+    roundStatus: (m.tournament_rounds as any)?.status,
+  }))
+}
+
+// Get live feature matches across all tournaments
+export async function getLiveFeatureMatches() {
+  const supabase = await createClient()
+
+  // Get all feature matches from active tournaments
+  const { data: matches, error } = await supabase
+    .from("tournament_matches")
+    .select(`
+      id, player1_id, player2_id, player1_wins, player2_wins, draws,
+      status, table_number, is_feature_match, stream_url, stream_platform, stream_embed_url, viewer_count,
+      tournament_rounds(
+        round_number, status,
+        tournament_phases(
+          tournaments(id, name, slug, status, games(name, slug))
+        )
+      )
+    `)
+    .eq("is_feature_match", true)
+    .in("status", ["pending", "in_progress", "player1_reported", "player2_reported"])
+
+  if (error || !matches) return []
+
+  // Filter to only matches from in_progress tournaments
+  const liveMatches = matches.filter((m) => {
+    const tournament = (m.tournament_rounds as any)?.tournament_phases?.tournaments
+    return tournament?.status === "in_progress"
+  })
+
+  // Get player profiles
+  const playerIds = new Set<string>()
+  liveMatches.forEach((m) => {
+    if (m.player1_id) playerIds.add(m.player1_id)
+    if (m.player2_id) playerIds.add(m.player2_id)
+  })
+
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("id, first_name, last_name, avatar_url")
+    .in("id", Array.from(playerIds))
+
+  const profileMap = new Map(profiles?.map((p) => [p.id, p]) || [])
+
+  return liveMatches.map((m) => {
+    const tournament = (m.tournament_rounds as any)?.tournament_phases?.tournaments
+    return {
+      id: m.id,
+      player1: profileMap.get(m.player1_id!) || null,
+      player2: profileMap.get(m.player2_id!) || null,
+      player1Wins: m.player1_wins,
+      player2Wins: m.player2_wins,
+      draws: m.draws,
+      status: m.status,
+      tableNumber: m.table_number,
+      streamUrl: m.stream_url,
+      streamPlatform: m.stream_platform,
+      streamEmbedUrl: m.stream_embed_url,
+      viewerCount: m.viewer_count,
+      roundNumber: (m.tournament_rounds as any)?.round_number,
+      tournament: tournament
+        ? {
+            id: tournament.id,
+            name: tournament.name,
+            slug: tournament.slug,
+            gameName: tournament.games?.name,
+            gameSlug: tournament.games?.slug,
+          }
+        : null,
+    }
+  })
+}
+
+// Tournament stream management
+export async function addTournamentStream(
+  tournamentId: string,
+  data: {
+    name: string
+    platform: "youtube" | "twitch" | "kick" | "custom"
+    streamUrl: string
+    isPrimary?: boolean
+  }
+): Promise<{ success?: boolean; streamId?: string; error?: string }> {
+  const supabase = await createClient()
+  const auth = await requireTournamentOrganizer(tournamentId)
+  if ("error" in auth) return { error: auth.error }
+
+  // If setting as primary, unset other primary streams
+  if (data.isPrimary) {
+    await supabase
+      .from("tournament_streams")
+      .update({ is_primary: false })
+      .eq("tournament_id", tournamentId)
+  }
+
+  const { data: stream, error } = await supabase
+    .from("tournament_streams")
+    .insert({
+      tournament_id: tournamentId,
+      name: data.name,
+      platform: data.platform,
+      stream_url: data.streamUrl,
+      is_primary: data.isPrimary ?? false,
+    })
+    .select("id")
+    .single()
+
+  if (error) return { error: error.message }
+
+  revalidatePath(`/dashboard/tournaments`)
+  return { success: true, streamId: stream.id }
+}
+
+export async function updateStreamStatus(
+  streamId: string,
+  isLive: boolean
+): Promise<{ success?: boolean; error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: "Not authenticated" }
+
+  const { error } = await supabase
+    .from("tournament_streams")
+    .update({ is_live: isLive, updated_at: new Date().toISOString() })
+    .eq("id", streamId)
+
+  if (error) return { error: error.message }
+
+  revalidatePath(`/esports`)
+  revalidatePath(`/live`)
+  return { success: true }
+}
+
+export async function getTournamentStreams(tournamentId: string) {
+  const supabase = await createClient()
+
+  const { data } = await supabase
+    .from("tournament_streams")
+    .select("*")
+    .eq("tournament_id", tournamentId)
+    .order("is_primary", { ascending: false })
+    .order("created_at", { ascending: true })
+
+  return data || []
+}

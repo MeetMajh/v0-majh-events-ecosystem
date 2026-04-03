@@ -69,6 +69,8 @@ import {
   CircleAlert,
   Sparkles,
   FastForward,
+  Star,
+  Video,
 } from "lucide-react"
 import {
   createSwissRound,
@@ -100,6 +102,8 @@ import {
   confirmAllMatchingReports,
   forceCompleteRound,
   getRoundStats,
+  setFeatureMatch,
+  getFeatureMatches,
   type PlayerStanding,
 } from "@/lib/tournament-controller-actions"
 import { resetRoundTimer } from "@/lib/timer-actions"
@@ -1531,6 +1535,7 @@ const handleAddPlayer = () => {
                           <TableHead className="w-24 text-center">Result</TableHead>
                           <TableHead>Player 2</TableHead>
                           <TableHead className="w-24">Status</TableHead>
+                          <TableHead className="w-16 text-center">Feature</TableHead>
                           <TableHead className="w-24">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -1587,6 +1592,40 @@ const handleAddPlayer = () => {
                               <Badge variant={match.status === "confirmed" ? "default" : "secondary"}>
                                 {match.status.replace("_", " ")}
                               </Badge>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {!match.is_bye && (
+                                <Button
+                                  size="sm"
+                                  variant={match.is_feature_match ? "default" : "ghost"}
+                                  className={cn(
+                                    "h-8 w-8 p-0",
+                                    match.is_feature_match && "bg-yellow-500 hover:bg-yellow-600"
+                                  )}
+                                  onClick={async () => {
+                                    const result = await setFeatureMatch(
+                                      match.id,
+                                      !match.is_feature_match
+                                    )
+                                    if ("error" in result) {
+                                      toast.error(result.error)
+                                    } else {
+                                      toast.success(
+                                        match.is_feature_match
+                                          ? "Removed from feature matches"
+                                          : "Set as feature match"
+                                      )
+                                      router.refresh()
+                                    }
+                                  }}
+                                  title={match.is_feature_match ? "Remove feature match" : "Set as feature match"}
+                                >
+                                  <Star className={cn(
+                                    "h-4 w-4",
+                                    match.is_feature_match ? "fill-current" : ""
+                                  )} />
+                                </Button>
+                              )}
                             </TableCell>
                             <TableCell>
                               {!match.is_bye && match.status !== "confirmed" && (
