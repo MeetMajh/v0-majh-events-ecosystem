@@ -2,14 +2,15 @@ import { notFound } from "next/navigation"
 import Link from "next/link"
 import { getTournamentBySlug } from "@/lib/esports-actions"
 import { createClient } from "@/lib/supabase/server"
-import { getTournamentStandings, getCurrentRound, getTournamentPhases, getAllTournamentRounds } from "@/lib/tournament-controller-actions"
+import { getTournamentStandings, getCurrentRound, getTournamentPhases, getAllTournamentRounds, getFeatureMatches } from "@/lib/tournament-controller-actions"
 import { RegistrationButton } from "@/components/esports/registration-button"
 import { TournamentTabs } from "@/components/esports/tournament-tabs"
+import { FeatureMatchCard } from "@/components/esports/feature-match-card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { FORMAT_LABELS, type TournamentFormat } from "@/lib/bracket-utils"
 import { formatCents, formatDate, formatDateTime } from "@/lib/format"
-import { Calendar, Users, DollarSign, Gamepad2, Trophy, Clock, ChevronRight } from "lucide-react"
+import { Calendar, Users, DollarSign, Gamepad2, Trophy, Clock, ChevronRight, Radio } from "lucide-react"
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
@@ -37,11 +38,12 @@ export default async function TournamentDetailPage({ params }: { params: Promise
   const isFull = tournament.max_participants ? tournament.participants.length >= tournament.max_participants : false
   const status = STATUS_STYLES[tournament.status] ?? STATUS_STYLES.draft
 
-  // Fetch phases, standings, current round, and all rounds for in-progress tournaments
-  const [phases, currentRound, allRounds] = await Promise.all([
+  // Fetch phases, standings, current round, all rounds, and feature matches
+  const [phases, currentRound, allRounds, featureMatches] = await Promise.all([
     getTournamentPhases(tournament.id),
     getCurrentRound(tournament.id),
     getAllTournamentRounds(tournament.id),
+    tournament.status === "in_progress" ? getFeatureMatches(tournament.id) : Promise.resolve([]),
   ])
 
   const currentPhase = phases.find((p: any) => p.is_current) || phases[0]
@@ -106,6 +108,48 @@ export default async function TournamentDetailPage({ params }: { params: Promise
         <InfoCard icon={Calendar} label="Start Date" value={tournament.start_date ? formatDate(tournament.start_date) : "TBD"} />
         <InfoCard icon={Trophy} label="Prize" value={tournament.prize_description || "TBD"} />
       </div>
+
+      {/* Feature Matches Section */}
+      {featureMatches.length > 0 && (
+        <div className="mb-8">
+          <div className="mb-4 flex items-center gap-3">
+            <span className="flex items-center gap-1.5 rounded-full bg-destructive/10 px-3 py-1 text-sm font-semibold text-destructive">
+              <Radio className="h-3 w-3 animate-pulse" />
+              Feature Match{featureMatches.length > 1 ? "es" : ""}
+            </span>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            {featureMatches.slice(0, 2).map((match: any) => (
+              <FeatureMatchCard
+                key={match.id}
+                match={{
+                  id: match.id,
+                  player1: match.player1,
+                  player2: match.player2,
+                  player1Wins: match.player1_wins,
+                  player2Wins: match.player2_wins,
+                  draws: match.draws,
+                  status: match.status,
+                  tableNumber: match.table_number,
+                  streamUrl: match.stream_url,
+                  streamPlatform: match.stream_platform,
+                  streamEmbedUrl: match.stream_embed_url,
+                  roundNumber: match.roundNumber,
+                  tournament: {
+                    id: tournament.id,
+                    name: tournament.name,
+                    slug: tournament.slug,
+                    gameName: tournament.games?.name,
+                    gameSlug: tournament.games?.slug,
+                  },
+                }}
+                showStream={true}
+                size="large"
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Sponsor Banners */}
       {tournament.sponsors && tournament.sponsors.length > 0 && (

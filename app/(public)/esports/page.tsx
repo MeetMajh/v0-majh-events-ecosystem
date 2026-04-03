@@ -3,11 +3,13 @@ import Image from "next/image"
 import { Suspense } from "react"
 import { Button } from "@/components/ui/button"
 import { IMAGES } from "@/lib/images"
-import { Gamepad2, Trophy, BarChart3, Users, ArrowRight, Zap, Globe } from "lucide-react"
+import { Gamepad2, Trophy, BarChart3, Users, ArrowRight, Zap, Globe, Radio } from "lucide-react"
 import { getGames, getTournaments, getLeaderboard } from "@/lib/esports-actions"
+import { getLiveFeatureMatches } from "@/lib/tournament-controller-actions"
 import { TournamentCard } from "@/components/esports/tournament-card"
 import { EsportsHubClient } from "@/components/esports/esports-hub-client"
 import { ExternalTournaments } from "@/components/esports/external-tournaments"
+import { FeatureMatchCard, FeatureMatchGrid } from "@/components/esports/feature-match-card"
 
 export const metadata = {
   title: "Esports Arena | MAJH EVENTS",
@@ -22,15 +24,17 @@ const FEATURES = [
 ]
 
 export default async function EsportsPage() {
-  const [games, tournaments, leaderboard] = await Promise.all([
+  const [games, tournaments, leaderboard, featureMatches] = await Promise.all([
     getGames(),
     getTournaments({ limit: 12 }),
     getLeaderboard(),
+    getLiveFeatureMatches(),
   ])
 
   const liveTournaments = tournaments.filter((t) => t.status === "in_progress")
   const openTournaments = tournaments.filter((t) => t.status === "registration")
   const topPlayers = leaderboard.slice(0, 5)
+  const hasLiveContent = featureMatches.length > 0 || liveTournaments.length > 0
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-16">
@@ -70,6 +74,27 @@ export default async function EsportsPage() {
           </Link>
         ))}
       </div>
+
+      {/* Feature Matches - Live Stream Section */}
+      {featureMatches.length > 0 && (
+        <section className="mb-12">
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="flex items-center gap-1.5 rounded-full bg-destructive/10 px-3 py-1 text-sm font-semibold text-destructive">
+                <Radio className="h-3 w-3 animate-pulse" />
+                Feature Matches
+              </span>
+              <span className="text-sm text-muted-foreground">
+                {featureMatches.length} live match{featureMatches.length !== 1 ? "es" : ""}
+              </span>
+            </div>
+            <Link href="/live" className="flex items-center gap-1 text-sm text-primary hover:underline">
+              View all streams <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+          <FeatureMatchGrid matches={featureMatches} showStreams={true} />
+        </section>
+      )}
 
       {/* Live Tournaments */}
       {liveTournaments.length > 0 && (
