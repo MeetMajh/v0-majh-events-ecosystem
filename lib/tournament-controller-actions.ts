@@ -3882,3 +3882,226 @@ export async function updateOverlayConfig(
   revalidatePath(`/dashboard/tournaments`)
   return { success: true }
 }
+
+// ==========================================
+// VOD ARCHIVE SYSTEM
+// ==========================================
+
+export interface VODData {
+  id?: string
+  tournamentId: string
+  matchId?: string
+  title: string
+  description?: string
+  platform: "youtube" | "twitch" | "kick" | "custom"
+  videoUrl: string
+  thumbnailUrl?: string
+  durationSeconds?: number
+  roundNumber?: number
+  isFeatured?: boolean
+  isHighlight?: boolean
+  player1Id?: string
+  player2Id?: string
+  recordedAt?: string
+}
+
+// Add a VOD to a tournament
+export async function addTournamentVod(data: VODData): Promise<{ success?: boolean; vodId?: string; error?: string }> {
+  const supabase = await createClient()
+  const auth = await requireTournamentOrganizer(data.tournamentId)
+  if ("error" in auth) return { error: auth.error }
+
+  const { data: vod, error } = await supabase
+    .from("tournament_vods")
+    .insert({
+      tournament_id: data.tournamentId,
+      match_id: data.matchId || null,
+      title: data.title,
+      description: data.description || null,
+      platform: data.platform,
+      video_url: data.videoUrl,
+      thumbnail_url: data.thumbnailUrl || null,
+      duration_seconds: data.durationSeconds || null,
+      round_number: data.roundNumber || null,
+      is_featured: data.isFeatured || false,
+      is_highlight: data.isHighlight || false,
+      player1_id: data.player1Id || null,
+      player2_id: data.player2Id || null,
+      recorded_at: data.recordedAt || null,
+    })
+    .select("id")
+    .single()
+
+  if (error) return { error: error.message }
+
+  revalidatePath(`/esports/tournaments`)
+  return { success: true, vodId: vod.id }
+}
+
+// Update a VOD
+export async function updateTournamentVod(
+  vodId: string,
+  data: Partial<VODData>
+): Promise<{ success?: boolean; error?: string }> {
+  const supabase = await createClient()
+  
+  // Get VOD to verify tournament access
+  const { data: vod } = await supabase
+    .from("tournament_vods")
+    .select("tournament_id")
+    .eq("id", vodId)
+    .single()
+
+  if (!vod) return { error: "VOD not found" }
+
+  const auth = await requireTournamentOrganizer(vod.tournament_id)
+  if ("error" in auth) return { error: auth.error }
+
+  const updateData: Record<string, any> = { updated_at: new Date().toISOString() }
+  if (data.title !== undefined) updateData.title = data.title
+  if (data.description !== undefined) updateData.description = data.description
+  if (data.platform !== undefined) updateData.platform = data.platform
+  if (data.videoUrl !== undefined) updateData.video_url = data.videoUrl
+  if (data.thumbnailUrl !== undefined) updateData.thumbnail_url = data.thumbnailUrl
+  if (data.durationSeconds !== undefined) updateData.duration_seconds = data.durationSeconds
+  if (data.isFeatured !== undefined) updateData.is_featured = data.isFeatured
+  if (data.isHighlight !== undefined) updateData.is_highlight = data.isHighlight
+
+  const { error } = await supabase
+    .from("tournament_vods")
+    .update(updateData)
+    .eq("id", vodId)
+
+  if (error) return { error: error.message }
+
+  revalidatePath(`/esports/tournaments`)
+  return { success: true }
+}
+
+// Delete a VOD
+export async function deleteTournamentVod(vodId: string): Promise<{ success?: boolean; error?: string }> {
+  const supabase = await createClient()
+  
+  const { data: vod } = await supabase
+    .from("tournament_vods")
+    .select("tournament_id")
+    .eq("id", vodId)
+    .single()
+
+  if (!vod) return { error: "VOD not found" }
+
+  const auth = await requireTournamentOrganizer(vod.tournament_id)
+  if ("error" in auth) return { error: auth.error }
+
+  const { error } = await supabase
+    .from("tournament_vods")
+    .delete()
+    .eq("id", vodId)
+
+  if (error) return { error: error.message }
+
+  revalidatePath(`/esports/tournaments`)
+  return { success: true }
+}
+
+// Get VODs for a tournament
+export async function getTournamentVods(tournamentId: string) {
+  const supabase = await createClient()
+
+  const { data: vods } = await supabase
+    .from("tournament_vods")
+    .select(`
+      *,
+      player1:profiles!tournament_vods_player1_id_fkey(id, first_name, last_name, avatar_url),
+      player2:profiles!tournament_vods_player2_id_fkey(id, first_name, last_name, avatar_url)
+    `)
+    .eq("tournament_id", tournamentId)
+    .order("published_at", { ascending: false })
+
+  return vods || []
+}
+
+// Get featured VODs across all tournaments
+export async function getFeaturedVods(limit: number = 6) {
+  const supabase = await createClient()
+
+  const { data: vods } = await supabase
+    .from("tournament_vods")
+    .select(`
+      *,
+      tournaments(id, name, slug, games(name, slug)),
+      player1:profiles!tournament_vods_player1_id_fkey(id, first_name, last_name, avatar_url),
+      player2:profiles!tournament_vods_player2_id_fkey(id, first_name, last_name, avatar_url)
+    `)
+    .eq("is_featured", true)
+    .order("published_at", { ascending: false })
+    .limit(limit)
+
+  return vods || []
+}
+
+// Get recent VODs
+export async function getRecentVods(limit: number = 12) {
+  const supabase = await createClient()
+
+  const { data: vods } = await supabase
+    .from("tournament_vods")
+    .select(`
+      *,
+      tournaments(id, name, slug, games(name, slug)),
+      player1:profiles!tournament_vods_player1_id_fkey(id, first_name, last_name, avatar_url),
+      player2:profiles!tournament_vods_player2_id_fkey(id, first_name, last_name, avatar_url)
+    `)
+    .order("published_at", { ascending: false })
+    .limit(limit)
+
+  return vods || []
+}
+
+// Add timestamp/chapter to a VOD
+export async function addVodTimestamp(
+  vodId: string,
+  label: string,
+  timestampSeconds: number,
+  description?: string
+): Promise<{ success?: boolean; error?: string }> {
+  const supabase = await createClient()
+  
+  const { data: vod } = await supabase
+    .from("tournament_vods")
+    .select("tournament_id")
+    .eq("id", vodId)
+    .single()
+
+  if (!vod) return { error: "VOD not found" }
+
+  const auth = await requireTournamentOrganizer(vod.tournament_id)
+  if ("error" in auth) return { error: auth.error }
+
+  const { error } = await supabase
+    .from("vod_timestamps")
+    .insert({
+      vod_id: vodId,
+      label,
+      timestamp_seconds: timestampSeconds,
+      description: description || null,
+    })
+
+  if (error) return { error: error.message }
+
+  revalidatePath(`/esports/tournaments`)
+  return { success: true }
+}
+
+// Get timestamps for a VOD
+export async function getVodTimestamps(vodId: string) {
+  const supabase = await createClient()
+
+  const { data } = await supabase
+    .from("vod_timestamps")
+    .select("*")
+    .eq("vod_id", vodId)
+    .order("timestamp_seconds", { ascending: true })
+
+  return data || []
+}

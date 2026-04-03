@@ -2,7 +2,7 @@ import { notFound } from "next/navigation"
 import Link from "next/link"
 import { getTournamentBySlug } from "@/lib/esports-actions"
 import { createClient } from "@/lib/supabase/server"
-import { getTournamentStandings, getCurrentRound, getTournamentPhases, getAllTournamentRounds, getFeatureMatches } from "@/lib/tournament-controller-actions"
+import { getTournamentStandings, getCurrentRound, getTournamentPhases, getAllTournamentRounds, getFeatureMatches, getTournamentVods } from "@/lib/tournament-controller-actions"
 import { RegistrationButton } from "@/components/esports/registration-button"
 import { TournamentTabs } from "@/components/esports/tournament-tabs"
 import { FeatureMatchCard } from "@/components/esports/feature-match-card"
@@ -38,12 +38,13 @@ export default async function TournamentDetailPage({ params }: { params: Promise
   const isFull = tournament.max_participants ? tournament.participants.length >= tournament.max_participants : false
   const status = STATUS_STYLES[tournament.status] ?? STATUS_STYLES.draft
 
-  // Fetch phases, standings, current round, all rounds, and feature matches
-  const [phases, currentRound, allRounds, featureMatches] = await Promise.all([
+  // Fetch phases, standings, current round, all rounds, feature matches, and VODs
+  const [phases, currentRound, allRounds, featureMatches, vods] = await Promise.all([
     getTournamentPhases(tournament.id),
     getCurrentRound(tournament.id),
     getAllTournamentRounds(tournament.id),
     tournament.status === "in_progress" ? getFeatureMatches(tournament.id) : Promise.resolve([]),
+    getTournamentVods(tournament.id),
   ])
 
   const currentPhase = phases.find((p: any) => p.is_current) || phases[0]
@@ -194,6 +195,7 @@ export default async function TournamentDetailPage({ params }: { params: Promise
         currentRound={currentRound}
         allRounds={allRounds}
         currentUserId={user?.id}
+        vods={vods}
       />
     </div>
   )
