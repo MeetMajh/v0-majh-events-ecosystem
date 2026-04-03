@@ -23,7 +23,10 @@ import {
   Gamepad2,
   Tv,
   Hash,
+  Flame,
 } from "lucide-react"
+import { ReactionsBar, ReactionFeed } from "@/components/esports/reactions-bar"
+import { ViewerCount } from "@/components/esports/viewer-presence"
 
 interface FeatureMatch {
   id: string
@@ -347,11 +350,20 @@ export default function MajhLivePage() {
                     )}
                     
                     {/* Live badge overlay */}
-                    <div className="absolute left-4 top-4">
-                      <Badge className="bg-destructive text-destructive-foreground gap-1.5 px-3 py-1">
-                        <span className="h-2 w-2 rounded-full bg-white animate-pulse" />
-                        LIVE
-                      </Badge>
+                    <div className="absolute inset-x-0 top-0 flex items-center justify-between bg-gradient-to-b from-black/60 to-transparent p-4">
+                      <div className="flex items-center gap-2">
+                        <Badge className="bg-destructive text-destructive-foreground gap-1.5 px-3 py-1">
+                          <span className="h-2 w-2 rounded-full bg-white animate-pulse" />
+                          LIVE
+                        </Badge>
+                        <ViewerCount matchId={selectedMatch.id} size="sm" />
+                      </div>
+                      <ReactionsBar matchId={selectedMatch.id} compact />
+                    </div>
+                    
+                    {/* Reaction Feed */}
+                    <div className="absolute bottom-4 left-4 max-w-xs">
+                      <ReactionFeed matchId={selectedMatch.id} />
                     </div>
                   </div>
 

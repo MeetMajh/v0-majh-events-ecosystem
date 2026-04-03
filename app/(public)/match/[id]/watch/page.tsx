@@ -25,7 +25,12 @@ import {
   Eye,
   Wifi,
   WifiOff,
+  Flame,
+  TrendingUp,
 } from "lucide-react"
+import { ReactionsBar, ReactionFeed } from "@/components/esports/reactions-bar"
+import { MatchPredictions } from "@/components/esports/match-predictions"
+import { ViewerCount, EngagementStats } from "@/components/esports/viewer-presence"
 
 interface MatchData {
   id: string
@@ -388,18 +393,27 @@ export default function MatchWatchPage({ params }: { params: Promise<{ id: strin
                     LIVE
                   </Badge>
                 )}
+                <ViewerCount matchId={matchId} size="sm" />
                 {match.tournament?.game_name && (
                   <Badge variant="secondary">{match.tournament.game_name}</Badge>
                 )}
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="text-white hover:bg-white/20"
-                onClick={() => setIsFullscreen(!isFullscreen)}
-              >
-                {isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
-              </Button>
+              <div className="flex items-center gap-2">
+                <ReactionsBar matchId={matchId} compact />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-white hover:bg-white/20"
+                  onClick={() => setIsFullscreen(!isFullscreen)}
+                >
+                  {isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
+                </Button>
+              </div>
+            </div>
+            
+            {/* Reaction Feed (floating) */}
+            <div className="absolute bottom-16 left-4 max-w-xs">
+              <ReactionFeed matchId={matchId} />
             </div>
 
             {/* Timer Overlay */}
@@ -490,6 +504,17 @@ export default function MatchWatchPage({ params }: { params: Promise<{ id: strin
         {/* Sidebar */}
         {!isFullscreen && (
           <div className="space-y-6">
+            {/* Reactions */}
+            <ReactionsBar matchId={matchId} />
+            
+            {/* Predictions */}
+            <MatchPredictions
+              matchId={matchId}
+              player1={match.player1}
+              player2={match.player2}
+              matchStatus={match.status}
+            />
+            
             {/* Stats Tabs */}
             <Card>
               <Tabs value={activeTab} onValueChange={setActiveTab}>
