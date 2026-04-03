@@ -27,10 +27,15 @@ import {
   WifiOff,
   Flame,
   TrendingUp,
+  MessageSquare,
+  Zap,
 } from "lucide-react"
 import { ReactionsBar, ReactionFeed } from "@/components/esports/reactions-bar"
 import { MatchPredictions } from "@/components/esports/match-predictions"
 import { ViewerCount, EngagementStats } from "@/components/esports/viewer-presence"
+import { MatchChat } from "@/components/esports/match-chat"
+import { MomentumBadge, MomentumIndicator, GameHistoryBar } from "@/components/esports/momentum-badge"
+import { getMatchMomentum, getMatchGameHistory, type MatchMomentum } from "@/lib/tournament-controller-actions"
 
 interface MatchData {
   id: string
@@ -130,10 +135,11 @@ export default function MatchWatchPage({ params }: { params: Promise<{ id: strin
     async function fetchMatch() {
       const { data: matchData } = await supabase
         .from("tournament_matches")
-        .select(`
-          id, player1_id, player2_id, player1_wins, player2_wins, draws,
-          status, table_number, stream_url, stream_platform, stream_embed_url, viewer_count,
-          timer_started_at, timer_duration_seconds,
+.select(`
+      id, player1_id, player2_id, player1_wins, player2_wins, draws,
+      status, table_number, stream_url, stream_platform, stream_embed_url, viewer_count,
+      timer_started_at, timer_duration_seconds,
+      momentum_badge, momentum_player_id, momentum_streak, lead_changes, is_deciding_game,
           tournament_rounds(
             round_number,
             tournament_phases(
@@ -473,6 +479,15 @@ export default function MatchWatchPage({ params }: { params: Promise<{ id: strin
                       {match.player2_wins}
                     </span>
                   </div>
+                  {/* Momentum indicator */}
+                  {(match as any).momentum_badge && (
+                    <div className="mt-2">
+                      <MomentumBadge badge={(match as any).momentum_badge} size="md" animate />
+                    </div>
+                  )}
+                  {(match as any).is_deciding_game && !(match as any).momentum_badge && (
+                    <Badge className="mt-2 animate-pulse bg-destructive">MATCH POINT</Badge>
+                  )}
                   <p className="mt-2 text-muted-foreground">
                     Round {match.round_number || "?"} {match.table_number ? `• Table ${match.table_number}` : ""}
                   </p>
@@ -515,6 +530,9 @@ export default function MatchWatchPage({ params }: { params: Promise<{ id: strin
               matchStatus={match.status}
             />
             
+            {/* Chat */}
+            <MatchChat matchId={matchId} className="h-[400px]" />
+            
             {/* Stats Tabs */}
             <Card>
               <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -524,9 +542,9 @@ export default function MatchWatchPage({ params }: { params: Promise<{ id: strin
                       <BarChart3 className="h-3.5 w-3.5" />
                       Stats
                     </TabsTrigger>
-                    <TabsTrigger value="history" className="gap-1.5">
-                      <History className="h-3.5 w-3.5" />
-                      History
+                    <TabsTrigger value="games" className="gap-1.5">
+                      <Swords className="h-3.5 w-3.5" />
+                      Games
                     </TabsTrigger>
                   </TabsList>
                 </CardHeader>
@@ -552,10 +570,21 @@ export default function MatchWatchPage({ params }: { params: Promise<{ id: strin
                       </div>
                     </div>
                   </TabsContent>
-                  <TabsContent value="history" className="mt-0">
-                    <div className="rounded-lg border border-dashed border-border p-6 text-center">
-                      <History className="mx-auto mb-2 h-8 w-8 text-muted-foreground/30" />
-                      <p className="text-sm text-muted-foreground">Match history coming soon</p>
+                  <TabsContent value="games" className="mt-0 space-y-3">
+                    {/* Game-by-game history */}
+                    <GameHistoryBar
+                      player1Id={match.player1_id}
+                      player2Id={match.player2_id}
+                      player1Wins={match.player1_wins}
+                      player2Wins={match.player2_wins}
+                      player1Name={getPlayerName(match.player1)}
+                      player2Name={getPlayerName(match.player2)}
+                    />
+                    <div className="text-center text-sm text-muted-foreground">
+                      {match.player1_wins + match.player2_wins === 0 
+                        ? "No games played yet"
+                        : `${match.player1_wins + match.player2_wins} games played`
+                      }
                     </div>
                   </TabsContent>
                 </CardContent>
