@@ -4625,19 +4625,6 @@ export async function updateViewerPresence(
   return { viewerCount: count || 0 }
 }
 
-// Get current viewer count
-export async function getMatchViewerCount(matchId: string): Promise<number> {
-  const supabase = await createClient()
-
-  const { count } = await supabase
-    .from("match_viewers")
-    .select("*", { count: "exact", head: true })
-    .eq("match_id", matchId)
-    .gte("last_seen_at", new Date(Date.now() - 2 * 60 * 1000).toISOString())
-
-  return count || 0
-}
-
 // Get prediction leaderboard
 export async function getPredictionLeaderboard(limit: number = 10) {
   const supabase = await createClient()
