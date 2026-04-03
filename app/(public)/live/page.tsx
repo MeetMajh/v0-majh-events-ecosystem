@@ -24,9 +24,14 @@ import {
   Tv,
   Hash,
   Flame,
+  TrendingUp,
+  ArrowUp,
 } from "lucide-react"
 import { ReactionsBar, ReactionFeed } from "@/components/esports/reactions-bar"
 import { ViewerCount } from "@/components/esports/viewer-presence"
+import { TrendingMatchCard, TrendingList } from "@/components/esports/trending-match-card"
+import { LiveStatsBar } from "@/components/esports/live-stats-bar"
+import { getTrendingMatchesWithMetrics, type TrendingMatch } from "@/lib/tournament-controller-actions"
 
 interface FeatureMatch {
   id: string
@@ -103,10 +108,11 @@ export default function MajhLivePage() {
   const [featureMatches, setFeatureMatches] = useState<FeatureMatch[]>([])
   const [liveTournaments, setLiveTournaments] = useState<LiveTournament[]>([])
   const [streams, setStreams] = useState<Stream[]>([])
+  const [trendingMatches, setTrendingMatches] = useState<TrendingMatch[]>([])
   const [loading, setLoading] = useState(true)
   const [connected, setConnected] = useState(true)
   const [selectedMatch, setSelectedMatch] = useState<FeatureMatch | null>(null)
-  const [activeTab, setActiveTab] = useState("matches")
+  const [activeTab, setActiveTab] = useState("trending")
 
   useEffect(() => {
     const supabase = createClient()
@@ -240,6 +246,14 @@ export default function MajhLivePage() {
         setStreams(streamData)
       }
 
+      // Fetch trending matches
+      try {
+        const trending = await getTrendingMatchesWithMetrics(10)
+        setTrendingMatches(trending)
+      } catch (error) {
+        console.error("Failed to fetch trending:", error)
+      }
+
       setLoading(false)
     }
 
@@ -305,6 +319,11 @@ export default function MajhLivePage() {
               </Badge>
             </div>
           </div>
+          
+          {/* Live Stats Bar */}
+          <div className="mt-6">
+            <LiveStatsBar />
+          </div>
         </div>
       </div>
 
@@ -325,7 +344,25 @@ export default function MajhLivePage() {
             </Button>
           </div>
         ) : (
-          <div className="grid gap-8 lg:grid-cols-3">
+          <div className="space-y-8">
+            {/* Hot Now - Featured Trending Match */}
+            {trendingMatches.length > 0 && trendingMatches[0].trendingBadge && (
+              <div>
+                <div className="mb-4 flex items-center gap-2">
+                  <Flame className="h-5 w-5 text-orange-500" />
+                  <h2 className="text-lg font-semibold">Hot Now</h2>
+                  {trendingMatches[0].viewerVelocity > 0 && (
+                    <Badge variant="outline" className="gap-1 text-emerald-500 border-emerald-500/30">
+                      <ArrowUp className="h-3 w-3" />
+                      +{trendingMatches[0].viewerVelocity} viewers
+                    </Badge>
+                  )}
+                </div>
+                <TrendingMatchCard match={trendingMatches[0]} variant="featured" />
+              </div>
+            )}
+            
+            <div className="grid gap-8 lg:grid-cols-3">
             {/* Main Content - Feature Stream */}
             <div className="lg:col-span-2">
               {selectedMatch ? (
@@ -490,20 +527,45 @@ export default function MajhLivePage() {
             {/* Sidebar - Live Channels */}
             <div className="space-y-6">
               <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList className="w-full grid grid-cols-3">
-                  <TabsTrigger value="matches" className="gap-1.5">
-                    <Gamepad2 className="h-3.5 w-3.5" />
-                    Matches
-                  </TabsTrigger>
-                  <TabsTrigger value="tournaments" className="gap-1.5">
-                    <Trophy className="h-3.5 w-3.5" />
-                    Events
-                  </TabsTrigger>
-                  <TabsTrigger value="streams" className="gap-1.5">
-                    <Tv className="h-3.5 w-3.5" />
-                    Streams
-                  </TabsTrigger>
-                </TabsList>
+<TabsList className="w-full grid grid-cols-4">
+<TabsTrigger value="trending" className="gap-1.5">
+  <Flame className="h-3.5 w-3.5" />
+  Hot
+  </TabsTrigger>
+<TabsTrigger value="matches" className="gap-1.5">
+  <Gamepad2 className="h-3.5 w-3.5" />
+  Matches
+  </TabsTrigger>
+  <TabsTrigger value="tournaments" className="gap-1.5">
+  <Trophy className="h-3.5 w-3.5" />
+  Events
+  </TabsTrigger>
+  <TabsTrigger value="streams" className="gap-1.5">
+  <Tv className="h-3.5 w-3.5" />
+  Streams
+  </TabsTrigger>
+  </TabsList>
+
+                <TabsContent value="trending" className="mt-4 space-y-3">
+                  {trendingMatches.length > 0 ? (
+                    <div className="space-y-2">
+                      {trendingMatches.slice(0, 5).map((match, index) => (
+                        <TrendingMatchCard
+                          key={match.id}
+                          match={match}
+                          rank={index + 1}
+                          variant="compact"
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
+                      <TrendingUp className="mb-2 h-8 w-8 opacity-50" />
+                      <p className="text-sm">No trending matches</p>
+                      <p className="text-xs">Check back when events are live</p>
+                    </div>
+                  )}
+                </TabsContent>
 
                 <TabsContent value="matches" className="mt-4 space-y-2">
                   {featureMatches.length > 0 ? (
@@ -671,6 +733,7 @@ export default function MajhLivePage() {
                 </TabsContent>
               </Tabs>
             </div>
+          </div>
           </div>
         )}
       </div>

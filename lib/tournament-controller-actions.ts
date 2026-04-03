@@ -4454,6 +4454,177 @@ export async function getTrendingMatches(limit: number = 10) {
 }
 
 // ==========================================
+// TRENDING SYSTEM
+// ==========================================
+
+export type TrendingBadge = "hot" | "rising" | "chat_exploding" | "peak_viewers" | "clutch_moment" | "upset_alert"
+
+export interface TrendingMatch {
+  id: string
+  player1: { id: string; first_name: string | null; last_name: string | null; avatar_url: string | null } | null
+  player2: { id: string; first_name: string | null; last_name: string | null; avatar_url: string | null } | null
+  player1Wins: number
+  player2Wins: number
+  status: string
+  streamUrl: string | null
+  streamPlatform: string | null
+  viewerCount: number
+  reactionsPerMinute: number
+  chatPerMinute: number
+  viewerVelocity: number
+  trendingScore: number
+  trendingBadge: TrendingBadge | null
+  roundNumber: number | null
+  tournament: {
+    id: string
+    name: string
+    slug: string
+    gameName: string | null
+  } | null
+}
+
+// Get trending matches with full metrics
+export async function getTrendingMatchesWithMetrics(limit: number = 10): Promise<TrendingMatch[]> {
+  const supabase = await createClient()
+
+  const { data: matches } = await supabase
+    .from("tournament_matches")
+    .select(`
+      id, player1_id, player2_id, player1_wins, player2_wins,
+      status, stream_url, stream_platform,
+      viewer_count, reactions_per_minute, chat_per_minute, viewer_velocity,
+      trending_score, trending_badge,
+      tournament_rounds(
+        round_number,
+        tournament_phases(
+          tournaments(id, name, slug, games(name))
+        )
+      )
+    `)
+    .eq("is_feature_match", true)
+    .in("status", ["pending", "in_progress", "player1_reported", "player2_reported"])
+    .order("trending_score", { ascending: false })
+    .limit(limit)
+
+  if (!matches || matches.length === 0) return []
+
+  // Get player profiles
+  const playerIds = new Set<string>()
+  matches.forEach(m => {
+    if (m.player1_id) playerIds.add(m.player1_id)
+    if (m.player2_id) playerIds.add(m.player2_id)
+  })
+
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("id, first_name, last_name, avatar_url")
+    .in("id", Array.from(playerIds))
+
+  const profileMap = new Map(profiles?.map(p => [p.id, p]) || [])
+
+  return matches.map(m => {
+    const tournament = (m.tournament_rounds as any)?.tournament_phases?.tournaments
+    return {
+      id: m.id,
+      player1: profileMap.get(m.player1_id!) || null,
+      player2: profileMap.get(m.player2_id!) || null,
+      player1Wins: m.player1_wins || 0,
+      player2Wins: m.player2_wins || 0,
+      status: m.status,
+      streamUrl: m.stream_url,
+      streamPlatform: m.stream_platform,
+      viewerCount: m.viewer_count || 0,
+      reactionsPerMinute: Number(m.reactions_per_minute) || 0,
+      chatPerMinute: Number(m.chat_per_minute) || 0,
+      viewerVelocity: m.viewer_velocity || 0,
+      trendingScore: Number(m.trending_score) || 0,
+      trendingBadge: m.trending_badge as TrendingBadge | null,
+      roundNumber: (m.tournament_rounds as any)?.round_number || null,
+      tournament: tournament ? {
+        id: tournament.id,
+        name: tournament.name,
+        slug: tournament.slug,
+        gameName: tournament.games?.name || null,
+      } : null,
+    }
+  })
+}
+
+// Get trending tournaments
+export async function getTrendingTournaments(limit: number = 5) {
+  const supabase = await createClient()
+
+  const { data } = await supabase
+    .from("tournaments")
+    .select(`
+      id, name, slug, status, current_round,
+      trending_score, total_viewers, total_reactions,
+      games(name, slug),
+      participants:tournament_participants(count)
+    `)
+    .eq("status", "in_progress")
+    .order("trending_score", { ascending: false })
+    .limit(limit)
+
+  return data?.map(t => ({
+    id: t.id,
+    name: t.name,
+    slug: t.slug,
+    status: t.status,
+    currentRound: t.current_round,
+    trendingScore: Number(t.trending_score) || 0,
+    totalViewers: t.total_viewers || 0,
+    totalReactions: t.total_reactions || 0,
+    gameName: (t.games as any)?.name || null,
+    participantCount: (t.participants as any)?.[0]?.count || 0,
+  })) || []
+}
+
+// Update trending metrics for a match (call periodically)
+export async function refreshMatchTrending(matchId: string): Promise<{ success?: boolean; error?: string }> {
+  const supabase = await createClient()
+
+  const { error } = await supabase.rpc("update_match_trending_metrics", { p_match_id: matchId })
+
+  if (error) return { error: error.message }
+  return { success: true }
+}
+
+// Get live stats summary
+export async function getLiveStats() {
+  const supabase = await createClient()
+
+  const cutoff = new Date(Date.now() - 60000).toISOString()
+
+  const [
+    { count: activeViewers },
+    { count: liveMatches },
+    { count: liveTournaments }
+  ] = await Promise.all([
+    supabase
+      .from("match_viewer_sessions")
+      .select("*", { count: "exact", head: true })
+      .is("ended_at", null)
+      .gte("last_ping_at", cutoff),
+    supabase
+      .from("tournament_matches")
+      .select("*", { count: "exact", head: true })
+      .eq("is_feature_match", true)
+      .in("status", ["in_progress", "player1_reported", "player2_reported"]),
+    supabase
+      .from("tournaments")
+      .select("*", { count: "exact", head: true })
+      .eq("status", "in_progress"),
+  ])
+
+  return {
+    activeViewers: activeViewers || 0,
+    liveMatches: liveMatches || 0,
+    liveTournaments: liveTournaments || 0,
+  }
+}
+
+// ==========================================
 // VIEWER ENGAGEMENT SYSTEM
 // ==========================================
 
