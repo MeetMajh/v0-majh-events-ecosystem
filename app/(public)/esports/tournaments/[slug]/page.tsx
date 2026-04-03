@@ -83,7 +83,15 @@ export default async function TournamentDetailPage({ params }: { params: Promise
           )}
         </div>
 
-        <div className="flex-shrink-0">
+        <div className="flex flex-shrink-0 items-center gap-3">
+          {tournament.status === "in_progress" && (
+            <Button asChild variant="destructive" className="gap-2">
+              <Link href={`/esports/tournaments/${slug}/live`}>
+                <Radio className="h-4 w-4 animate-pulse" />
+                Watch Live
+              </Link>
+            </Button>
+          )}
           {user ? (
             <RegistrationButton
               tournamentId={tournament.id}
