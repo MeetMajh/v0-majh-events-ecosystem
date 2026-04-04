@@ -54,12 +54,17 @@ export interface PlayerMedia {
 // ==========================================
 
 export async function uploadMediaFile(
-  file: File
+  formData: FormData
 ): Promise<{ url?: string; storagePath?: string; error?: string }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   
   if (!user) return { error: "Must be logged in to upload" }
+  
+  const file = formData.get("file") as File
+  if (!file || !(file instanceof File)) {
+    return { error: "No file provided" }
+  }
   
   // Validate file type
   const allowedTypes = ["video/mp4", "video/webm", "video/quicktime", "video/x-m4v"]
@@ -78,12 +83,17 @@ export async function uploadMediaFile(
   const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${fileExt}`
   const filePath = `${user.id}/${fileName}`
   
+  // Convert File to ArrayBuffer for server-side upload
+  const arrayBuffer = await file.arrayBuffer()
+  const buffer = new Uint8Array(arrayBuffer)
+  
   // Upload to Supabase Storage
   const { error: uploadError } = await supabase.storage
     .from("player-media")
-    .upload(filePath, file, {
+    .upload(filePath, buffer, {
       cacheControl: "3600",
       upsert: false,
+      contentType: file.type,
     })
   
   if (uploadError) {
