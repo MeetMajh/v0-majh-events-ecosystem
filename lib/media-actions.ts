@@ -87,6 +87,11 @@ export async function uploadMediaFile(
     })
   
   if (uploadError) {
+    console.error("[v0] Storage upload error:", uploadError)
+    // Check for common issues
+    if (uploadError.message.includes("bucket") || uploadError.message.includes("not found")) {
+      return { error: "Storage not configured. Please create a 'player-media' bucket in Supabase Storage." }
+    }
     return { error: `Upload failed: ${uploadError.message}` }
   }
   

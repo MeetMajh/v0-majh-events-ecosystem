@@ -183,8 +183,9 @@ export function MediaUploadForm({
           router.push(`/media/${result.media.id}`)
         }
       }, 1500)
-    } catch {
-      setError("An unexpected error occurred")
+    } catch (err) {
+      console.error("[v0] Upload error:", err)
+      setError(err instanceof Error ? err.message : "An unexpected error occurred")
     } finally {
       setLoading(false)
     }
