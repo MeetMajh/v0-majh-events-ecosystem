@@ -37,7 +37,7 @@ import {
   Play,
   Image as ImageIcon,
 } from "lucide-react"
-import { createMedia, uploadMediaFile } from "@/lib/media-actions"
+import { createMedia } from "@/lib/media-actions"
 import { extractVideoId, generateThumbnailUrl, type MediaType, type SourceType } from "@/lib/media-utils"
 import { createClient } from "@/lib/supabase/client"
 import Image from "next/image"
@@ -138,10 +138,20 @@ export function MediaUploadForm({
       // Handle file upload
       if (uploadMethod === "upload" && file) {
         setUploadProgress(10)
-        const uploadResult = await uploadMediaFile(file)
         
-        if (uploadResult.error) {
-          setError(uploadResult.error)
+        // Upload file via API route (server actions can't handle File objects)
+        const formData = new FormData()
+        formData.append("file", file)
+        
+        const uploadResponse = await fetch("/api/media/upload", {
+          method: "POST",
+          body: formData,
+        })
+        
+        const uploadResult = await uploadResponse.json()
+        
+        if (!uploadResponse.ok || uploadResult.error) {
+          setError(uploadResult.error || "Upload failed")
           setLoading(false)
           return
         }
@@ -183,8 +193,9 @@ export function MediaUploadForm({
           router.push(`/media/${result.media.id}`)
         }
       }, 1500)
-    } catch {
-      setError("An unexpected error occurred")
+    } catch (err) {
+      console.error("[v0] Upload error:", err)
+      setError(err instanceof Error ? err.message : "An unexpected error occurred")
     } finally {
       setLoading(false)
     }
