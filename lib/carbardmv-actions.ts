@@ -610,7 +610,6 @@ export async function createStaffShift(formData: FormData) {
     start_time: formData.get("start_time") as string,
     end_time: formData.get("end_time") as string,
     role: formData.get("role") as string,
-    location: (formData.get("location") as string) || null,
     notes: (formData.get("notes") as string) || null,
     status: "scheduled",
   }

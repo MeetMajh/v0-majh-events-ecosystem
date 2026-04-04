@@ -190,7 +190,6 @@ export async function createMedia(data: {
       match_id: data.matchId || null,
       visibility: data.visibility || "public",
       moderation_status: autoApprove ? "approved" : "pending",
-      published_at: autoApprove ? new Date().toISOString() : null,
     })
     .select()
     .single()

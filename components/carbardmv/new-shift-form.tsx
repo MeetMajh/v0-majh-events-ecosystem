@@ -25,7 +25,6 @@ export function NewShiftForm({ staffMembers }: { staffMembers: StaffMember[] }) 
   const [shiftDate, setShiftDate] = useState("")
   const [startTime, setStartTime] = useState("")
   const [endTime, setEndTime] = useState("")
-  const [location, setLocation] = useState("")
   const [notes, setNotes] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
@@ -51,7 +50,6 @@ export function NewShiftForm({ staffMembers }: { staffMembers: StaffMember[] }) 
           start_time: startTime,
           end_time: endTime,
           role: role,
-          location: location || null,
           notes: notes || null,
         }),
       })
@@ -74,7 +72,6 @@ export function NewShiftForm({ staffMembers }: { staffMembers: StaffMember[] }) 
       setShiftDate("")
       setStartTime("")
       setEndTime("")
-      setLocation("")
       setNotes("")
       router.refresh()
     } catch (err: any) {
@@ -162,15 +159,6 @@ export function NewShiftForm({ staffMembers }: { staffMembers: StaffMember[] }) 
                 className="mt-1" 
               />
             </div>
-          </div>
-          <div>
-            <Label className="text-xs">Location</Label>
-            <Input 
-              value={location} 
-              onChange={(e) => setLocation(e.target.value)} 
-              className="mt-1" 
-              placeholder="Event venue / address" 
-            />
           </div>
           <div>
             <Label className="text-xs">Notes</Label>

@@ -30,7 +30,6 @@ export async function POST(request: Request) {
       start_time: body.start_time,
       end_time: body.end_time,
       role: body.role,
-      location: body.location || null,
       notes: body.notes || null,
       status: "scheduled",
     }
