@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
-import { Gift, Gamepad2, CalendarCheck, Monitor } from "lucide-react"
+import { Gift, Gamepad2, CalendarCheck, Monitor, Play, Upload } from "lucide-react"
+import Link from "next/link"
 
 export default async function DashboardOverviewPage() {
   const supabase = await createClient()
@@ -44,19 +45,31 @@ export default async function DashboardOverviewPage() {
             icon={Gamepad2}
             title="Esports"
             description="Browse tournaments and compete"
-            status="Coming Soon"
+            href="/esports"
+          />
+          <QuickActionCard
+            icon={Play}
+            title="Clips"
+            description="Watch and share gaming highlights"
+            href="/clips"
+          />
+          <QuickActionCard
+            icon={Upload}
+            title="Upload Media"
+            description="Share your best gaming moments"
+            href="/create"
           />
           <QuickActionCard
             icon={CalendarCheck}
-            title="Book an Event"
-            description="Schedule a CARBARDMV experience"
-            status="Coming Soon"
+            title="CARBARDMV"
+            description="Explore the gaming lounge"
+            href="/carbardmv"
           />
           <QuickActionCard
             icon={Monitor}
-            title="Rent Equipment"
-            description="Browse available gaming gear"
-            status="Coming Soon"
+            title="My Media"
+            description="Manage your uploaded content"
+            href="/dashboard/my-media"
           />
         </div>
       </div>
@@ -78,25 +91,25 @@ function QuickActionCard({
   icon: Icon,
   title,
   description,
-  status,
+  href,
 }: {
   icon: React.ElementType
   title: string
   description: string
-  status: string
+  href: string
 }) {
   return (
-    <div className="flex items-start gap-4 rounded-xl border border-border bg-card p-5">
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-secondary">
-        <Icon className="h-5 w-5 text-muted-foreground" />
+    <Link 
+      href={href}
+      className="flex items-start gap-4 rounded-xl border border-border bg-card p-5 transition-colors hover:border-primary/50 hover:bg-card/80"
+    >
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+        <Icon className="h-5 w-5 text-primary" />
       </div>
       <div className="flex-1">
         <h4 className="font-medium text-foreground">{title}</h4>
         <p className="text-xs text-muted-foreground">{description}</p>
-        <span className="mt-2 inline-block rounded bg-secondary px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-          {status}
-        </span>
       </div>
-    </div>
+    </Link>
   )
 }
