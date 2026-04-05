@@ -4,11 +4,14 @@
 -- MEDIA_REACTIONS - Allow users to add/remove their reactions
 -- ==========================================
 
--- Drop existing policies
+-- Drop ALL possible policy names (for idempotency)
 DROP POLICY IF EXISTS "Reactions are viewable by everyone" ON media_reactions;
 DROP POLICY IF EXISTS "Users can manage their own reactions" ON media_reactions;
 DROP POLICY IF EXISTS "Users can insert reactions" ON media_reactions;
 DROP POLICY IF EXISTS "Users can delete reactions" ON media_reactions;
+DROP POLICY IF EXISTS "Anyone can view reactions" ON media_reactions;
+DROP POLICY IF EXISTS "Authenticated users can insert reactions" ON media_reactions;
+DROP POLICY IF EXISTS "Users can delete their own reactions" ON media_reactions;
 
 -- Create new policies
 CREATE POLICY "Anyone can view reactions" ON media_reactions
@@ -26,9 +29,10 @@ CREATE POLICY "Users can delete their own reactions" ON media_reactions
 -- MEDIA_VIEWS - Allow anyone to insert views
 -- ==========================================
 
--- Drop existing policies  
+-- Drop ALL possible policy names (for idempotency)
 DROP POLICY IF EXISTS "Views can be inserted by anyone" ON media_views;
 DROP POLICY IF EXISTS "Anyone can insert views" ON media_views;
+DROP POLICY IF EXISTS "Anyone can view views" ON media_views;
 
 -- Allow anyone (including anonymous) to insert views
 CREATE POLICY "Anyone can insert views" ON media_views
@@ -36,7 +40,6 @@ CREATE POLICY "Anyone can insert views" ON media_views
   WITH CHECK (true);
 
 -- Allow reading views (for stats)
-DROP POLICY IF EXISTS "Anyone can view views" ON media_views;
 CREATE POLICY "Anyone can view views" ON media_views
   FOR SELECT USING (true);
 
@@ -44,9 +47,12 @@ CREATE POLICY "Anyone can view views" ON media_views
 -- MEDIA_COMMENTS - Allow authenticated users to comment
 -- ==========================================
 
+-- Drop ALL possible policy names (for idempotency)
 DROP POLICY IF EXISTS "Comments are viewable by everyone" ON media_comments;
 DROP POLICY IF EXISTS "Users can create comments" ON media_comments;
 DROP POLICY IF EXISTS "Users can delete their own comments" ON media_comments;
+DROP POLICY IF EXISTS "Anyone can view comments" ON media_comments;
+DROP POLICY IF EXISTS "Authenticated users can insert comments" ON media_comments;
 
 CREATE POLICY "Anyone can view comments" ON media_comments
   FOR SELECT USING (is_hidden = false);
