@@ -26,6 +26,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { cn } from "@/lib/utils"
+import { useToast } from "@/hooks/use-toast"
 import {
   Play,
   Eye,
@@ -70,6 +71,8 @@ export default function MediaWatchPage() {
   const [media, setMedia] = useState<PlayerMedia | null>(null)
   const [loading, setLoading] = useState(true)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  
+  const { toast } = useToast()
   
   // Engagement state
   const [userReaction, setUserReaction] = useState<ReactionType | null>(null)
@@ -152,15 +155,54 @@ export default function MediaWatchPage() {
     }
   }
   
+  const handleShare = async () => {
+    const url = `${window.location.origin}/media/${mediaId}`
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: media?.title || "Check out this clip", url })
+      } else {
+        await navigator.clipboard.writeText(url)
+        toast({
+          title: "Link copied!",
+          description: "Share this clip with your friends",
+        })
+      }
+    } catch (err) {
+      // User cancelled share or error
+      if ((err as Error).name !== "AbortError") {
+        await navigator.clipboard.writeText(url)
+        toast({
+          title: "Link copied!",
+          description: "Share this clip with your friends",
+        })
+      }
+    }
+  }
+  
   const handleComment = async () => {
-    if (!currentUserId || !newComment.trim()) return
+    if (!currentUserId || !newComment.trim()) {
+      console.log("[v0] Comment blocked - no user or empty comment", { currentUserId, newComment })
+      return
+    }
     
+    console.log("[v0] Submitting comment:", { mediaId, newComment })
     setSubmittingComment(true)
     const result = await addMediaComment(mediaId, newComment)
+    console.log("[v0] Comment result:", result)
     if (result.commentId) {
       const commentsData = await getMediaComments(mediaId)
       setComments(commentsData)
       setNewComment("")
+      toast({
+        title: "Comment posted!",
+        description: "Your comment has been added",
+      })
+    } else if (result.error) {
+      toast({
+        title: "Error",
+        description: result.error,
+        variant: "destructive",
+      })
     }
     setSubmittingComment(false)
   }
@@ -295,10 +337,10 @@ export default function MediaWatchPage() {
                     </Button>
                   </div>
                   
-                  <Button variant="outline" size="sm" className="gap-1.5">
-                    <Share2 className="h-4 w-4" />
-                    Share
-                  </Button>
+<Button variant="outline" size="sm" className="gap-1.5" onClick={handleShare}>
+                <Share2 className="h-4 w-4" />
+                Share
+              </Button>
                   
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
