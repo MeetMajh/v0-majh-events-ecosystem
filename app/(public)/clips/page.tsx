@@ -368,6 +368,27 @@ function ClipView({
           </div>
         </motion.button>
 
+        {/* Volume Toggle */}
+        <motion.button 
+          whileTap={{ scale: 0.9 }}
+          className="flex flex-col items-center gap-1"
+          onClick={(e) => {
+            e.stopPropagation()
+            onToggleMute()
+          }}
+        >
+          <div className={cn(
+            "rounded-full p-2.5 backdrop-blur-sm transition-colors",
+            isMuted ? "bg-white/10" : "bg-primary/30"
+          )}>
+            {isMuted ? (
+              <VolumeX className="h-7 w-7 text-white" />
+            ) : (
+              <Volume2 className="h-7 w-7 text-white" />
+            )}
+          </div>
+        </motion.button>
+
         {/* More */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
