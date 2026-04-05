@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import { generateEmbedUrl, generateThumbnailUrl, checkContentViolations, isAllowedUrl } from "@/lib/media-utils"
-import { moderateMedia } from "@/lib/content-moderation"
+import { moderateMedia as runAIModeration } from "@/lib/content-moderation"
 
 // Define types locally to avoid server action bundling issues with type re-exports
 export type MediaType = "clip" | "vod" | "highlight" | "full_match" | "tutorial"
@@ -222,7 +222,7 @@ export async function createMedia(data: {
   // Run AI content moderation asynchronously (don't block the response)
   // This will update moderation_status in the background
   if (!autoApprove) {
-    moderateMedia(media.id).catch((err) => {
+    runAIModeration(media.id).catch((err) => {
       console.error("[v0] Background moderation failed:", err)
     })
   }
