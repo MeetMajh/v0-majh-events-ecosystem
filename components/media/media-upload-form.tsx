@@ -135,29 +135,54 @@ export function MediaUploadForm({
       let finalVideoUrl = videoUrl
       let storagePath: string | undefined
       
-      // Handle file upload
+      // Handle file upload - directly to Supabase Storage from client
       if (uploadMethod === "upload" && file) {
         setUploadProgress(10)
         
-        // Upload file via API route (server actions can't handle File objects)
-        const formData = new FormData()
-        formData.append("file", file)
+        const supabase = createClient()
+        const { data: { user } } = await supabase.auth.getUser()
         
-        const uploadResponse = await fetch("/api/media/upload", {
-          method: "POST",
-          body: formData,
-        })
-        
-        const uploadResult = await uploadResponse.json()
-        
-        if (!uploadResponse.ok || uploadResult.error) {
-          setError(uploadResult.error || "Upload failed")
+        if (!user) {
+          setError("Must be logged in to upload")
           setLoading(false)
           return
         }
         
-        finalVideoUrl = uploadResult.url || ""
-        storagePath = uploadResult.storagePath
+        // Generate unique file path
+        const fileExt = file.name.split(".").pop()?.toLowerCase() || "mp4"
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${fileExt}`
+        const filePath = `${user.id}/${fileName}`
+        
+        setUploadProgress(20)
+        
+        // Upload directly to Supabase Storage (bypasses Next.js body limit)
+        const { error: uploadError } = await supabase.storage
+          .from("player-media")
+          .upload(filePath, file, {
+            cacheControl: "3600",
+            upsert: false,
+          })
+        
+        if (uploadError) {
+          console.error("[v0] Storage upload error:", uploadError)
+          if (uploadError.message.includes("not found") || uploadError.message.includes("Bucket")) {
+            setError("Storage not configured. Please contact support.")
+          } else {
+            setError(`Upload failed: ${uploadError.message}`)
+          }
+          setLoading(false)
+          return
+        }
+        
+        setUploadProgress(40)
+        
+        // Get public URL
+        const { data: urlData } = supabase.storage
+          .from("player-media")
+          .getPublicUrl(filePath)
+        
+        finalVideoUrl = urlData.publicUrl
+        storagePath = filePath
         setUploadProgress(50)
       }
       
