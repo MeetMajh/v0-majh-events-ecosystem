@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import { useToast } from "@/hooks/use-toast"
 import { 
   Play, 
   Heart, 
@@ -48,17 +49,18 @@ const FLICK_VELOCITY = 1200        // Fast flick = instant navigate
 const RUBBER_BAND_ELASTIC = 0.2    // Resistance when dragging past bounds
 
 // Single clip view in the swipe feed
-function ClipView({ 
-  clip, 
+function ClipView({
+  clip,
   isActive,
   isMuted,
   onToggleMute,
-}: { 
+  }: {
   clip: PlayerMedia
   isActive: boolean
   isMuted: boolean
   onToggleMute: () => void
-}) {
+  }) {
+  const { toast } = useToast()
   const [isPlaying, setIsPlaying] = useState(false)
   const [isLiked, setIsLiked] = useState(false)
   const [likeCount, setLikeCount] = useState(clip.like_count)
@@ -171,10 +173,25 @@ function ClipView({
 
   const handleShare = async () => {
     const url = `${window.location.origin}/media/${clip.id}`
-    if (navigator.share) {
-      await navigator.share({ title: clip.title, url })
-    } else {
-      await navigator.clipboard.writeText(url)
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: clip.title, url })
+      } else {
+        await navigator.clipboard.writeText(url)
+        toast({
+          title: "Link copied!",
+          description: "Share this clip with your friends",
+        })
+      }
+    } catch (err) {
+      // User cancelled share or error
+      if ((err as Error).name !== "AbortError") {
+        await navigator.clipboard.writeText(url)
+        toast({
+          title: "Link copied!",
+          description: "Share this clip with your friends",
+        })
+      }
     }
   }
 

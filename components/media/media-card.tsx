@@ -316,7 +316,7 @@ export function MediaCard({
       <CardContent className="p-3">
         <div className="flex gap-3">
           {showPlayer && media.player && (
-            <Link href={`/players/${media.player.id}`}>
+            <Link href={`/esports/players/${media.player.id}`}>
               <Avatar className="h-9 w-9 flex-shrink-0">
                 <AvatarImage src={media.player.avatar_url || undefined} />
                 <AvatarFallback>
@@ -335,7 +335,7 @@ export function MediaCard({
             
             {showPlayer && media.player && (
               <Link 
-                href={`/players/${media.player.id}`}
+                href={`/esports/players/${media.player.id}`}
                 className="mt-1 block text-xs text-muted-foreground hover:text-foreground"
               >
                 {media.player.first_name} {media.player.last_name}

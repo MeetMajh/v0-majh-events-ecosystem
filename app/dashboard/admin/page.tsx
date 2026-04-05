@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server"
 import { requireRole } from "@/lib/roles"
 import { formatCents } from "@/lib/format"
 import Link from "next/link"
-import { Package, ShoppingCart, AlertTriangle, Users, Trophy, Play, Calendar, DollarSign, Scale } from "lucide-react"
+import { Package, ShoppingCart, AlertTriangle, Users, Trophy, Play, Calendar, DollarSign, Scale, Video } from "lucide-react"
 
 export default async function AdminOverviewPage() {
   const { role } = await requireRole(["owner", "manager", "staff"])
@@ -16,6 +16,7 @@ export default async function AdminOverviewPage() {
     { count: liveTournaments },
     { count: upcomingTournaments },
     { data: disputedMatches },
+    { count: pendingMedia },
   ] = await Promise.all([
     supabase.from("menu_items").select("*", { count: "exact", head: true }),
     supabase.from("orders").select("*", { count: "exact", head: true }).in("status", ["pending", "confirmed", "preparing", "ready"]),
@@ -24,11 +25,13 @@ export default async function AdminOverviewPage() {
     supabase.from("tournaments").select("*", { count: "exact", head: true }).eq("status", "in_progress"),
     supabase.from("tournaments").select("*", { count: "exact", head: true }).in("status", ["published", "registration_open"]),
     supabase.from("tournament_matches").select("id").eq("status", "disputed"),
+    supabase.from("player_media").select("*", { count: "exact", head: true }).eq("moderation_status", "pending"),
   ])
 
   const todayRevenue = todayOrders?.filter((o) => o.status !== "cancelled").reduce((sum, o) => sum + o.total_cents, 0) ?? 0
 
   const stats = [
+    { label: "Media Review", value: pendingMedia ?? 0, icon: Video, href: "/dashboard/admin/media", alert: (pendingMedia ?? 0) > 0 },
     { label: "Live Tournaments", value: liveTournaments ?? 0, icon: Play, href: "/dashboard/admin/tournaments?filter=in_progress", highlight: (liveTournaments ?? 0) > 0 },
     { label: "Upcoming", value: upcomingTournaments ?? 0, icon: Calendar, href: "/dashboard/admin/tournaments?filter=published" },
     { label: "Disputes", value: disputedMatches?.length ?? 0, icon: Scale, href: "/dashboard/admin/tournaments", alert: (disputedMatches?.length ?? 0) > 0 },
