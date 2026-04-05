@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { DashboardHeader } from "@/components/dashboard/dashboard-header"
+import { MobileNav, MobileNavSpacer } from "@/components/esports/mobile-nav"
 import { Toaster } from "sonner"
 
 export const metadata = { title: "Dashboard" }
@@ -32,8 +33,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
       />
       <div className="flex flex-1 flex-col">
         <DashboardHeader displayName={displayName} />
-        <main className="flex-1 p-6">{children}</main>
+        <main className="flex-1 p-6 pb-20 md:pb-6">{children}</main>
+        <MobileNavSpacer />
       </div>
+      <MobileNav />
       <Toaster position="top-right" richColors />
     </div>
   )
