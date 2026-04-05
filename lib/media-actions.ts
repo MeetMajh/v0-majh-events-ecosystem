@@ -620,7 +620,12 @@ export async function addMediaComment(
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   
-  if (!user) return { error: "Must be logged in to comment" }
+  console.log("[v0] addMediaComment called:", { mediaId, content, userId: user?.id })
+  
+  if (!user) {
+    console.log("[v0] No user logged in")
+    return { error: "Must be logged in to comment" }
+  }
   
   if (content.length < 1 || content.length > 1000) {
     return { error: "Comment must be between 1 and 1000 characters" }
@@ -636,6 +641,8 @@ export async function addMediaComment(
     })
     .select("id")
     .single()
+  
+  console.log("[v0] Comment insert result:", { data, error })
   
   if (error) return { error: error.message }
   return { commentId: data.id }
