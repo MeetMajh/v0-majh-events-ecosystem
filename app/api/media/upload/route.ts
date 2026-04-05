@@ -3,6 +3,8 @@ import { NextResponse } from "next/server"
 
 export const runtime = "nodejs"
 export const maxDuration = 60
+// Dynamic to ensure no static generation issues
+export const dynamic = "force-dynamic"
 
 export async function POST(request: Request) {
   try {
