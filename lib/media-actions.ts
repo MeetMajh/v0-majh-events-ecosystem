@@ -541,18 +541,39 @@ export async function addMediaReaction(
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   
-  if (!user) return { error: "Must be logged in to react" }
+  console.log("[v0] addMediaReaction called:", { mediaId, reactionType, userId: user?.id })
   
-  // Upsert reaction
-  const { error } = await supabase
+  if (!user) {
+    console.log("[v0] No user for reaction")
+    return { error: "Must be logged in to react" }
+  }
+  
+  // First remove any existing reaction of this type, then insert
+  // This avoids upsert issues with the composite unique constraint
+  await supabase
     .from("media_reactions")
-    .upsert({
+    .delete()
+    .eq("media_id", mediaId)
+    .eq("user_id", user.id)
+    .eq("reaction_type", reactionType)
+  
+  // Insert new reaction
+  const { data, error } = await supabase
+    .from("media_reactions")
+    .insert({
       media_id: mediaId,
       user_id: user.id,
       reaction_type: reactionType,
-    }, { onConflict: "media_id,user_id,reaction_type" })
+    })
+    .select()
+  
+  console.log("[v0] Reaction insert result:", { data, error })
   
   if (error) return { error: error.message }
+  
+  // Update like_count on the media
+  await supabase.rpc("update_media_stats", { p_media_id: mediaId })
+  
   return { success: true }
 }
 
@@ -688,23 +709,39 @@ export async function deleteMediaComment(commentId: string): Promise<{ success?:
 // ==========================================
 
 export async function trackMediaView(
-  mediaId: string,
-  sessionId?: string
+  mediaId: string
 ): Promise<void> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   
-  // Upsert view
-  await supabase
-    .from("media_views")
-    .upsert({
-      media_id: mediaId,
-      user_id: user?.id || null,
-      session_id: sessionId || null,
-    }, { onConflict: "media_id,user_id" })
-    .select()
+  console.log("[v0] trackMediaView called:", { mediaId, userId: user?.id })
   
-  // Increment view count
+  // For logged-in users, use upsert to avoid duplicate views
+  // For anonymous users, just insert a new view each time
+  if (user) {
+    const { data, error } = await supabase
+      .from("media_views")
+      .upsert({
+        media_id: mediaId,
+        user_id: user.id,
+      }, { onConflict: "media_id,user_id" })
+      .select()
+    
+    console.log("[v0] View upsert result:", { data, error })
+  } else {
+    // Anonymous view - just insert
+    const { data, error } = await supabase
+      .from("media_views")
+      .insert({
+        media_id: mediaId,
+        user_id: null,
+      })
+      .select()
+    
+    console.log("[v0] Anonymous view insert result:", { data, error })
+  }
+  
+  // Update view count on the media
   await supabase.rpc("update_media_stats", { p_media_id: mediaId })
 }
 
