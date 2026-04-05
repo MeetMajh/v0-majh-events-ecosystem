@@ -321,7 +321,7 @@ export default function MediaWatchPage() {
             <Card className="glass-panel border-0">
               <CardContent className="p-4">
                 <div className="flex items-start justify-between">
-                  <Link href={`/players/${media.player_id}`} className="flex items-center gap-3">
+                  <Link href={`/esports/players/${media.player_id}`} className="flex items-center gap-3">
                     <Avatar className="h-12 w-12">
                       <AvatarImage src={media.player?.avatar_url || undefined} />
                       <AvatarFallback>
@@ -513,7 +513,7 @@ export default function MediaWatchPage() {
                     <MediaCard key={item.id} media={item} variant="compact" showPlayer={false} />
                   ))}
                   <Button asChild variant="ghost" className="w-full">
-                    <Link href={`/players/${media.player_id}`}>
+                    <Link href={`/esports/players/${media.player_id}`}>
                       View all clips
                       <ChevronRight className="ml-2 h-4 w-4" />
                     </Link>
