@@ -1,42 +1,72 @@
 // MAJH EVENTS Service Worker
+// This service worker provides offline support by caching assets and serving from cache when offline
 const CACHE_NAME = 'majh-events-v1';
 const OFFLINE_URL = '/offline';
+const OFFLINE_CACHE = 'offline-cache-v1';
 
-// Assets to cache immediately on install
+// Assets to cache immediately on install for offline support
 const PRECACHE_ASSETS = [
   '/',
   '/offline',
+  '/manifest.json',
   '/icons/icon-192x192.png',
   '/icons/icon-512x512.png',
 ];
 
-// Install event - precache essential assets
+// Static assets to cache for offline use
+const STATIC_ASSETS = [
+  '/events',
+  '/esports',
+  '/clips',
+  '/bar-cafe',
+];
+
+// Install event - precache essential assets for offline support
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(PRECACHE_ASSETS);
-    })
+    Promise.all([
+      // Main cache for precached assets
+      caches.open(CACHE_NAME).then((cache) => {
+        console.log('[SW] Caching precache assets for offline support');
+        return cache.addAll(PRECACHE_ASSETS);
+      }),
+      // Offline cache for additional pages
+      caches.open(OFFLINE_CACHE).then((cache) => {
+        console.log('[SW] Caching static pages for offline support');
+        return cache.addAll(STATIC_ASSETS).catch(() => {
+          // Some pages may not exist yet, that's ok
+          console.log('[SW] Some static assets not available');
+        });
+      }),
+    ])
   );
   // Activate immediately
   self.skipWaiting();
 });
 
-// Activate event - clean up old caches
+// Activate event - clean up old caches and claim clients for offline support
 self.addEventListener('activate', (event) => {
+  const currentCaches = [CACHE_NAME, OFFLINE_CACHE];
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames
-          .filter((name) => name !== CACHE_NAME)
-          .map((name) => caches.delete(name))
+          .filter((name) => !currentCaches.includes(name))
+          .map((name) => {
+            console.log('[SW] Deleting old cache:', name);
+            return caches.delete(name);
+          })
       );
+    }).then(() => {
+      console.log('[SW] Service worker activated with offline support');
     })
   );
-  // Take control of all pages immediately
+  // Take control of all pages immediately for offline support
   self.clients.claim();
 });
 
-// Fetch event - network-first with cache fallback
+// Fetch event - implements offline support with cache strategies
+// This handler intercepts all fetch requests and serves from cache when offline
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
@@ -53,76 +83,89 @@ self.addEventListener('fetch', (event) => {
   // Skip Supabase and external requests
   if (!url.origin.includes(self.location.origin)) return;
 
-  // For navigation requests (HTML pages)
+  // OFFLINE SUPPORT: For navigation requests (HTML pages)
+  // Uses network-first strategy with offline fallback
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request)
-        .then((response) => {
-          // Cache successful responses
-          if (response.ok) {
-            const responseClone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(request, responseClone);
-            });
+      (async () => {
+        try {
+          // Try network first
+          const networkResponse = await fetch(request);
+          // Cache successful responses for offline use
+          if (networkResponse.ok) {
+            const cache = await caches.open(CACHE_NAME);
+            cache.put(request, networkResponse.clone());
           }
-          return response;
-        })
-        .catch(() => {
-          // Return cached version or offline page
-          return caches.match(request).then((cached) => {
-            return cached || caches.match(OFFLINE_URL);
-          });
-        })
+          return networkResponse;
+        } catch (error) {
+          // OFFLINE: Network failed, try cache
+          console.log('[SW] Network failed, serving from cache for offline support');
+          const cachedResponse = await caches.match(request);
+          if (cachedResponse) {
+            return cachedResponse;
+          }
+          // OFFLINE: Return offline page if nothing in cache
+          const offlinePage = await caches.match(OFFLINE_URL);
+          return offlinePage || new Response('Offline', { status: 503 });
+        }
+      })()
     );
     return;
   }
 
-  // For static assets - cache-first strategy
+  // OFFLINE SUPPORT: For static assets - cache-first strategy
+  // Serves instantly from cache, updates in background
   if (
-    url.pathname.match(/\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2)$/) ||
-    url.pathname.startsWith('/_next/static/')
+    url.pathname.match(/\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|webp)$/) ||
+    url.pathname.startsWith('/_next/static/') ||
+    url.pathname.startsWith('/icons/')
   ) {
     event.respondWith(
-      caches.match(request).then((cached) => {
-        if (cached) {
-          // Return cached but also update in background
+      (async () => {
+        // Check cache first for offline support
+        const cachedResponse = await caches.match(request);
+        if (cachedResponse) {
+          // Update cache in background (stale-while-revalidate)
           fetch(request).then((response) => {
             if (response.ok) {
-              caches.open(CACHE_NAME).then((cache) => {
-                cache.put(request, response);
-              });
+              caches.open(CACHE_NAME).then((cache) => cache.put(request, response));
             }
-          });
-          return cached;
+          }).catch(() => {});
+          return cachedResponse;
         }
-        // Not cached - fetch and cache
-        return fetch(request).then((response) => {
-          if (response.ok) {
-            const responseClone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(request, responseClone);
-            });
+        // Not cached - fetch and cache for future offline use
+        try {
+          const networkResponse = await fetch(request);
+          if (networkResponse.ok) {
+            const cache = await caches.open(CACHE_NAME);
+            cache.put(request, networkResponse.clone());
           }
-          return response;
-        });
-      })
+          return networkResponse;
+        } catch (error) {
+          // Offline and not cached
+          return new Response('', { status: 408 });
+        }
+      })()
     );
     return;
   }
 
-  // Default: network-first
+  // OFFLINE SUPPORT: Default network-first with cache fallback
   event.respondWith(
-    fetch(request)
-      .then((response) => {
-        if (response.ok) {
-          const responseClone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(request, responseClone);
-          });
+    (async () => {
+      try {
+        const networkResponse = await fetch(request);
+        if (networkResponse.ok) {
+          const cache = await caches.open(CACHE_NAME);
+          cache.put(request, networkResponse.clone());
         }
-        return response;
-      })
-      .catch(() => caches.match(request))
+        return networkResponse;
+      } catch (error) {
+        // Offline: serve from cache
+        const cachedResponse = await caches.match(request);
+        return cachedResponse || new Response('', { status: 408 });
+      }
+    })()
   );
 });
 
