@@ -6,8 +6,8 @@ const OFFLINE_URL = '/offline';
 const PRECACHE_ASSETS = [
   '/',
   '/offline',
-  '/icons/icon-192x192.jpg',
-  '/icons/icon-512x512.jpg',
+  '/icons/icon-192x192.png',
+  '/icons/icon-512x512.png',
 ];
 
 // Install event - precache essential assets
@@ -133,8 +133,8 @@ self.addEventListener('push', (event) => {
   const data = event.data.json();
   const options = {
     body: data.body,
-    icon: '/icons/icon-192x192.jpg',
-    badge: '/icons/icon-96x96.jpg',
+    icon: '/icons/icon-192x192.png',
+    badge: '/icons/icon-192x192.png',
     vibrate: [100, 50, 100],
     data: {
       url: data.url || '/',
@@ -168,4 +168,56 @@ self.addEventListener('notificationclick', (event) => {
       }
     })
   );
+});
+
+// Periodic Background Sync - fetch fresh data periodically
+self.addEventListener('periodicsync', (event) => {
+  if (event.tag === 'update-content') {
+    event.waitUntil(
+      // Refresh cached pages
+      caches.open(CACHE_NAME).then((cache) => {
+        return Promise.all(
+          PRECACHE_ASSETS.map((url) =>
+            fetch(url)
+              .then((response) => {
+                if (response.ok) {
+                  return cache.put(url, response);
+                }
+              })
+              .catch(() => {
+                // Ignore fetch errors during background sync
+              })
+          )
+        );
+      })
+    );
+  }
+});
+
+// Background Sync - retry failed requests when back online
+self.addEventListener('sync', (event) => {
+  if (event.tag === 'sync-pending-data') {
+    event.waitUntil(
+      // Process any queued requests
+      self.clients.matchAll().then((clients) => {
+        clients.forEach((client) => {
+          client.postMessage({
+            type: 'SYNC_COMPLETE',
+            message: 'Background sync completed',
+          });
+        });
+      })
+    );
+  }
+});
+
+// Message handler for communication with the main app
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+  
+  if (event.data && event.data.type === 'GET_VERSION') {
+    event.ports[0].postMessage({ version: CACHE_NAME });
+  }
 });

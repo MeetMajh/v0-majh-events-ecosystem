@@ -33,8 +33,8 @@ export const metadata: Metadata = {
       { url: '/icon.svg', type: 'image/svg+xml' },
     ],
     apple: [
-      { url: '/icons/icon-144x144.jpg', sizes: '144x144' },
-      { url: '/icons/icon-192x192.jpg', sizes: '192x192' },
+      { url: '/icons/icon-192x192.png', sizes: '192x192' },
+      { url: '/icons/icon-512x512.png', sizes: '512x512' },
     ],
   },
 }
@@ -51,6 +51,20 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <link rel="serviceworker" href="/sw.js" />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                  navigator.serviceWorker.register('/sw.js');
+                });
+              }
+            `,
+          }}
+        />
+      </head>
       <body className="font-sans antialiased">
         {children}
         <ServiceWorkerRegistration />
