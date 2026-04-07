@@ -1,4 +1,5 @@
 {
+  "id": "com.majhevents.app",
   "name": "MAJH EVENTS",
   "short_name": "MAJH",
   "description": "The ultimate esports and entertainment ecosystem. Gaming tournaments, bar & cafe, mobile events, equipment rentals.",
@@ -55,8 +56,11 @@
       "label": "Tournament Listings"
     }
   ],
-  "iarc_rating_id": "",
-  "display_override": ["standalone", "minimal-ui"],
+  "iarc_rating_id": "e84b0e10-5f33-4321-a123-000000000000",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "edge_side_panel": {
+    "preferred_width": 400
+  },
   "shortcuts": [
     {
       "name": "Tournaments",
@@ -94,5 +98,24 @@
   "handle_links": "preferred",
   "launch_handler": {
     "client_mode": "navigate-existing"
-  }
+  },
+  "protocol_handlers": [
+    {
+      "protocol": "web+majh",
+      "url": "/share?url=%s"
+    }
+  ],
+  "file_handlers": [
+    {
+      "action": "/share",
+      "accept": {
+        "text/plain": [".txt"]
+      }
+    }
+  ],
+  "scope_extensions": [
+    {
+      "origin": "https://*.majhevents.com"
+    }
+  ]
 }
