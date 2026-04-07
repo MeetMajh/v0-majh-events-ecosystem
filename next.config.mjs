@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Enable static export for Capacitor builds
+  // Set to 'export' when building for mobile: output: 'export',
   typescript: {
     ignoreBuildErrors: true,
   },
