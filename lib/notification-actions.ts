@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
+import { sendEmailNotification } from "@/lib/email-notifications"
 
 // ==========================================
 // NOTIFICATION TYPES
@@ -228,6 +229,18 @@ export async function createNotification(params: {
     .single()
 
   if (error) return { error: error.message }
+  
+  // Send email notification asynchronously (don't block)
+  sendEmailNotification({
+    userId: params.userId,
+    type: params.type,
+    title: params.title,
+    body: params.body,
+    link: params.link,
+  }).catch((err) => {
+    console.error("[Notification] Email send error:", err)
+  })
+  
   return { success: true, id: data.id }
 }
 

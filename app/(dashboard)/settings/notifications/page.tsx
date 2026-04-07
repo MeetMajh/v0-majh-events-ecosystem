@@ -31,6 +31,7 @@ import {
   updateNotificationPreferences,
   type NotificationPreferences,
 } from "@/lib/notification-actions"
+import { usePushNotifications } from "@/hooks/use-notifications"
 import Link from "next/link"
 
 const notificationTypes = [
@@ -102,6 +103,7 @@ export default function NotificationSettingsPage() {
   const [saving, setSaving] = useState(false)
   const { toast } = useToast()
   const router = useRouter()
+  const { supported: pushSupported, permission: pushPermission, requestPermission } = usePushNotifications()
 
   useEffect(() => {
     async function loadPreferences() {
@@ -112,8 +114,22 @@ export default function NotificationSettingsPage() {
     loadPreferences()
   }, [])
 
-  const handleToggle = (key: keyof NotificationPreferences, value: boolean) => {
+  const handleToggle = async (key: keyof NotificationPreferences, value: boolean) => {
     if (!preferences) return
+    
+    // Special handling for push notifications
+    if (key === "push" && value && pushSupported && pushPermission !== "granted") {
+      const granted = await requestPermission()
+      if (!granted) {
+        toast({
+          title: "Permission denied",
+          description: "Please enable notifications in your browser settings",
+          variant: "destructive",
+        })
+        return
+      }
+    }
+    
     setPreferences({ ...preferences, [key]: value })
   }
 
@@ -245,18 +261,14 @@ export default function NotificationSettingsPage() {
               </div>
               <div>
                 <Label htmlFor="email">Email Notifications</Label>
-                <p className="text-xs text-muted-foreground">Receive notifications via email</p>
+                <p className="text-xs text-muted-foreground">Receive important notifications via email</p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Badge variant="outline" className="text-xs">Coming Soon</Badge>
-              <Switch
-                id="email"
-                checked={preferences.email}
-                onCheckedChange={(checked) => handleToggle("email", checked)}
-                disabled
-              />
-            </div>
+            <Switch
+              id="email"
+              checked={preferences.email}
+              onCheckedChange={(checked) => handleToggle("email", checked)}
+            />
           </div>
 
           <Separator />
@@ -268,18 +280,22 @@ export default function NotificationSettingsPage() {
               </div>
               <div>
                 <Label htmlFor="push">Push Notifications</Label>
-                <p className="text-xs text-muted-foreground">Receive push notifications on mobile</p>
+                <p className="text-xs text-muted-foreground">
+                  {!pushSupported 
+                    ? "Not supported in this browser" 
+                    : pushPermission === "denied"
+                    ? "Blocked - enable in browser settings"
+                    : "Receive browser push notifications"
+                  }
+                </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Badge variant="outline" className="text-xs">Coming Soon</Badge>
-              <Switch
-                id="push"
-                checked={preferences.push}
-                onCheckedChange={(checked) => handleToggle("push", checked)}
-                disabled
-              />
-            </div>
+            <Switch
+              id="push"
+              checked={preferences.push && pushPermission === "granted"}
+              onCheckedChange={(checked) => handleToggle("push", checked)}
+              disabled={!pushSupported || pushPermission === "denied"}
+            />
           </div>
         </CardContent>
       </Card>
