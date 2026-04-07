@@ -57,10 +57,31 @@
     }
   ],
   "iarc_rating_id": "e84b0e10-5f33-4321-a123-000000000000",
-  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "display_override": ["tabbed", "window-controls-overlay", "standalone", "minimal-ui"],
   "edge_side_panel": {
     "preferred_width": 400
   },
+  "widgets": [
+    {
+      "name": "MAJH Quick Access",
+      "description": "Quick access to tournaments and events",
+      "tag": "majh-widget",
+      "ms_ac_template": "widget/quick-access.json",
+      "screenshots": [
+        {
+          "src": "/screenshots/mobile-home.jpg",
+          "sizes": "750x1334",
+          "label": "Widget preview"
+        }
+      ],
+      "icons": [
+        {
+          "src": "/icons/icon-192x192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ],
   "shortcuts": [
     {
       "name": "Tournaments",
