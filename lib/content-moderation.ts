@@ -73,7 +73,7 @@ Respond with your analysis.`
 
     return result.object
   } catch (error) {
-    console.error("[v0] Content moderation error:", error)
+    console.error("[Content Moderation] AI analysis error:", error)
     // Default to requiring manual review on error
     return {
       safe: false,
@@ -168,7 +168,8 @@ export async function moderateMedia(
   }
   
   // Update media moderation status
-  const newStatus = finalResult.safe ? "approved" : "flagged"
+  // Use "rejected" for flagged content, "approved" for safe content
+  const newStatus = finalResult.safe ? "approved" : "rejected"
   
   await supabase
     .from("player_media")
@@ -184,6 +185,7 @@ export async function moderateMedia(
     media_id: mediaId,
     result: finalResult,
     action_taken: newStatus,
+    automated: true,
   }).catch(() => {
     // Table might not exist yet, ignore
   })

@@ -26,7 +26,7 @@ export async function POST(req: Request) {
       timestamp: new Date().toISOString(),
     })
   } catch (error) {
-    console.error("[v0] Moderation processing error:", error)
+    console.error("[Moderation API] Processing error:", error)
     return NextResponse.json(
       { error: "Moderation processing failed" },
       { status: 500 }

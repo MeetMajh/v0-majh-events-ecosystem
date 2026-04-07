@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { moderateMedia } from "@/lib/media-actions"
+import { moderateMedia as runAIModeration } from "@/lib/content-moderation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -16,7 +17,8 @@ import {
   AlertTriangle,
   Loader2,
   ExternalLink,
-  RefreshCw
+  RefreshCw,
+  Sparkles
 } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
@@ -44,6 +46,8 @@ export default function MediaModerationPage() {
   const [media, setMedia] = useState<MediaItem[]>([])
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [aiLoading, setAiLoading] = useState<string | null>(null)
+  const [batchAiLoading, setBatchAiLoading] = useState(false)
   const [filter, setFilter] = useState<"pending" | "approved" | "rejected" | "all">("pending")
   
   const supabase = createClient()
@@ -98,6 +102,37 @@ export default function MediaModerationPage() {
     setActionLoading(null)
   }
 
+  const handleAIModerate = async (mediaId: string) => {
+    setAiLoading(mediaId)
+    try {
+      const result = await runAIModeration(mediaId)
+      // Update local state based on AI result
+      setMedia(prev => 
+        prev.map(m => m.id === mediaId 
+          ? { ...m, moderation_status: result.approved ? "approved" : "rejected" } 
+          : m
+        )
+      )
+      // Refresh if we're filtering by pending
+      if (filter === "pending") {
+        setMedia(prev => prev.filter(m => m.id !== mediaId))
+      }
+    } catch (error) {
+      console.error("AI moderation error:", error)
+    }
+    setAiLoading(null)
+  }
+
+  const handleBatchAIModerate = async () => {
+    setBatchAiLoading(true)
+    const pendingItems = media.filter(m => m.moderation_status === "pending")
+    for (const item of pendingItems.slice(0, 5)) { // Process 5 at a time
+      await runAIModeration(item.id)
+    }
+    await fetchMedia() // Refresh list
+    setBatchAiLoading(false)
+  }
+
   const statusCounts = {
     pending: media.filter(m => m.moderation_status === "pending").length,
     approved: media.filter(m => m.moderation_status === "approved").length,
@@ -111,10 +146,26 @@ export default function MediaModerationPage() {
           <h1 className="text-2xl font-bold">Media Moderation</h1>
           <p className="text-muted-foreground">Review and approve user-uploaded content</p>
         </div>
-        <Button variant="outline" onClick={fetchMedia} disabled={loading}>
-          <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-          Refresh
-        </Button>
+        <div className="flex gap-2">
+          {statusCounts.pending > 0 && (
+            <Button 
+              variant="default" 
+              onClick={handleBatchAIModerate} 
+              disabled={batchAiLoading}
+            >
+              {batchAiLoading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="mr-2 h-4 w-4" />
+              )}
+              AI Review All ({Math.min(statusCounts.pending, 5)})
+            </Button>
+          )}
+          <Button variant="outline" onClick={fetchMedia} disabled={loading}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -264,6 +315,19 @@ export default function MediaModerationPage() {
                           
                           {item.moderation_status === "pending" && (
                             <>
+                              <Button 
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => handleAIModerate(item.id)}
+                                disabled={aiLoading === item.id}
+                              >
+                                {aiLoading === item.id ? (
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Sparkles className="mr-2 h-4 w-4" />
+                                )}
+                                AI Review
+                              </Button>
                               <Button 
                                 size="sm" 
                                 onClick={() => handleModerate(item.id, "approved")}
