@@ -44,6 +44,7 @@ const NAV_ITEMS = [
   { label: "My Orders", href: "/dashboard/orders", icon: UtensilsCrossed },
   { label: "Esports", href: "/esports", icon: Gamepad2 },
   { label: "My Events", href: "/dashboard/my-events", icon: CalendarCheck },
+  { label: "My Bookings", href: "/dashboard/my-bookings", icon: CalendarCheck },
   { label: "Player Portal", href: "/dashboard/player-portal", icon: Joystick },
   { label: "Player Controller", href: "/dashboard/player-controller", icon: Gamepad2 },
   { label: "My Rentals", href: "/dashboard/rentals", icon: Monitor },

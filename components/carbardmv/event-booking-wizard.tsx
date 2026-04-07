@@ -9,7 +9,9 @@ import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { formatCents } from "@/lib/format"
-import { createEventBookingCheckout } from "@/lib/carbardmv-actions"
+import { createEventBookingCheckout, checkDateAvailability } from "@/lib/carbardmv-actions"
+import { AvailabilityCalendar } from "@/components/carbardmv/availability-calendar"
+import { format, parse } from "date-fns"
 import {
   Check,
   ChevronLeft,
@@ -91,6 +93,7 @@ export function EventBookingWizard({ packages, addons, cateringCategories, cater
   const [selectedCatering, setSelectedCatering] = useState<Record<string, number>>({})
   const [guestCount, setGuestCount] = useState(25)
   const [eventDate, setEventDate] = useState("")
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined)
   const [startTime, setStartTime] = useState("")
   const [contactName, setContactName] = useState("")
   const [contactEmail, setContactEmail] = useState("")
@@ -172,8 +175,22 @@ export function EventBookingWizard({ packages, addons, cateringCategories, cater
 
   return (
     <div>
-      {/* Step Indicator */}
-      <div className="mb-8 flex items-center justify-center gap-1" role="navigation" aria-label="Booking steps">
+      {/* Mobile Progress Bar */}
+      <div className="mb-4 sm:hidden">
+        <div className="flex items-center justify-between text-sm">
+          <span className="font-medium text-foreground">Step {step + 1} of {STEPS.length}</span>
+          <span className="text-muted-foreground">{STEPS[step].label}</span>
+        </div>
+        <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted">
+          <div 
+            className="h-full bg-primary transition-all duration-300" 
+            style={{ width: `${((step + 1) / STEPS.length) * 100}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Desktop Step Indicator */}
+      <div className="mb-8 hidden items-center justify-center gap-1 sm:flex" role="navigation" aria-label="Booking steps">
         {STEPS.map((s, i) => (
           <div key={s.label} className="flex items-center gap-1">
             <button
@@ -188,10 +205,10 @@ export function EventBookingWizard({ packages, addons, cateringCategories, cater
               }`}
             >
               {i < step ? <Check className="h-3 w-3" /> : <s.icon className="h-3 w-3" />}
-              <span className="hidden sm:inline">{s.label}</span>
+              <span>{s.label}</span>
             </button>
             {i < STEPS.length - 1 && (
-              <div className={`h-px w-4 sm:w-8 ${i < step ? "bg-primary/50" : "bg-border"}`} />
+              <div className={`h-px w-8 ${i < step ? "bg-primary/50" : "bg-border"}`} />
             )}
           </div>
         ))}
@@ -376,13 +393,16 @@ export function EventBookingWizard({ packages, addons, cateringCategories, cater
                     {pkg ? `${pkg.min_guests}-${pkg.max_guests ?? "unlimited"} guests for ${pkg.name}` : "Select a package first"}
                   </p>
                 </div>
-                <div>
-                  <Label htmlFor="event-date">Event Date *</Label>
-                  <Input id="event-date" type="date" value={eventDate} onChange={(e) => setEventDate(e.target.value)} className="mt-1" required />
-                </div>
-                <div>
-                  <Label htmlFor="start-time">Start Time</Label>
-                  <Input id="start-time" type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="mt-1" />
+                <div className="sm:col-span-2">
+                  <AvailabilityCalendar
+                    selectedDate={selectedDate}
+                    selectedTime={startTime}
+                    onDateSelect={(date) => {
+                      setSelectedDate(date)
+                      setEventDate(date ? format(date, "yyyy-MM-dd") : "")
+                    }}
+                    onTimeSelect={(time) => setStartTime(time)}
+                  />
                 </div>
                 <div>
                   <Label htmlFor="contact-name">Your Name *</Label>
@@ -517,6 +537,39 @@ export function EventBookingWizard({ packages, addons, cateringCategories, cater
           </Card>
         </div>
       </div>
+
+      {/* Mobile Sticky Footer */}
+      {step < 4 && (
+        <div className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background p-4 shadow-lg sm:hidden">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-xs text-muted-foreground">Total</p>
+              <p className="text-lg font-bold text-foreground">{formatCents(total)}</p>
+            </div>
+            <div className="flex gap-2">
+              {step > 0 && (
+                <Button variant="outline" size="sm" onClick={() => setStep(step - 1)}>
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+              )}
+              {step < 3 && (
+                <Button size="sm" onClick={() => setStep(step + 1)} disabled={!canProceed()}>
+                  Next <ChevronRight className="ml-1 h-4 w-4" />
+                </Button>
+              )}
+              {step === 3 && (
+                <Button size="sm" onClick={handleCheckout} disabled={!canProceed() || loading}>
+                  {loading ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <CreditCard className="mr-1 h-4 w-4" />}
+                  {loading ? "..." : `Pay ${formatCents(deposit)}`}
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bottom spacing for mobile sticky footer */}
+      <div className="h-24 sm:hidden" />
     </div>
   )
 }
