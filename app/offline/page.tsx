@@ -1,11 +1,8 @@
+"use client"
+
 import { WifiOff, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-
-export const metadata = {
-  title: "Offline",
-  description: "You appear to be offline",
-}
 
 export default function OfflinePage() {
   return (
