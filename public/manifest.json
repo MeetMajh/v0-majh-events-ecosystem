@@ -1,0 +1,64 @@
+{
+  "name": "MAJH EVENTS",
+  "short_name": "MAJH",
+  "description": "The ultimate esports and entertainment ecosystem. Gaming tournaments, bar & cafe, mobile events, equipment rentals.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#1a0e2e",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/icons/icon-96x96.jpg",
+      "sizes": "96x96",
+      "type": "image/jpeg",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-144x144.jpg",
+      "sizes": "144x144",
+      "type": "image/jpeg",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-192x192.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-512x512.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "maskable any"
+    }
+  ],
+  
+  "categories": ["entertainment", "games", "sports"],
+  "shortcuts": [
+    {
+      "name": "Tournaments",
+      "short_name": "Tournaments",
+      "description": "Browse and join gaming tournaments",
+      "url": "/esports",
+      "icons": [{ "src": "/icons/icon-96x96.jpg", "sizes": "96x96" }]
+    },
+    {
+      "name": "Book Event",
+      "short_name": "Book",
+      "description": "Book a CARBARDMV experience",
+      "url": "/events",
+      "icons": [{ "src": "/icons/icon-96x96.jpg", "sizes": "96x96" }]
+    },
+    {
+      "name": "Dashboard",
+      "short_name": "Dashboard",
+      "description": "Access your dashboard",
+      "url": "/dashboard",
+      "icons": [{ "src": "/icons/icon-96x96.jpg", "sizes": "96x96" }]
+    }
+  ],
+  "related_applications": [],
+  "prefer_related_applications": false
+}
