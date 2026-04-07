@@ -100,11 +100,11 @@ ON CONFLICT (slug) DO UPDATE SET
 -- ============================================
 
 INSERT INTO cb_event_addons (name, description, price_cents, price_type, category, is_active) VALUES
--- Equipment
-('Extra Gaming Station', 'Additional gaming setup with console, monitor, and accessories', 5000, 'flat', 'equipment', true),
-('VR Experience Station', 'Immersive VR gaming station with popular VR titles', 7500, 'flat', 'equipment', true),
-('Racing Simulator', 'Professional racing sim with wheel, pedals, and seat', 10000, 'flat', 'equipment', true),
-('Streaming Setup', 'Professional streaming kit with camera, lighting, and capture card', 15000, 'flat', 'equipment', true),
+-- Equipment (av_equipment)
+('Extra Gaming Station', 'Additional gaming setup with console, monitor, and accessories', 5000, 'flat', 'av_equipment', true),
+('VR Experience Station', 'Immersive VR gaming station with popular VR titles', 7500, 'flat', 'av_equipment', true),
+('Racing Simulator', 'Professional racing sim with wheel, pedals, and seat', 10000, 'flat', 'av_equipment', true),
+('Streaming Setup', 'Professional streaming kit with camera, lighting, and capture card', 15000, 'flat', 'av_equipment', true),
 
 -- Entertainment
 ('DJ / Music', 'Professional DJ for background music and event hype', 20000, 'flat', 'entertainment', true),
@@ -112,17 +112,17 @@ INSERT INTO cb_event_addons (name, description, price_cents, price_type, categor
 ('Video Highlights', 'Edited highlight reel of your event', 35000, 'flat', 'entertainment', true),
 ('Live Commentary', 'Professional esports commentator for tournaments', 30000, 'flat', 'entertainment', true),
 
--- Decorations
-('Custom Banners', 'Personalized banners with your event branding', 5000, 'flat', 'decoration', true),
-('LED Lighting Package', 'Ambient RGB lighting setup throughout venue', 7500, 'flat', 'decoration', true),
-('Balloon Decoration', 'Themed balloon arrangements and arches', 10000, 'flat', 'decoration', true),
-('Photo Booth', 'Custom themed photo booth with props and instant prints', 15000, 'flat', 'decoration', true),
+-- Decorations (decor)
+('Custom Banners', 'Personalized banners with your event branding', 5000, 'flat', 'decor', true),
+('LED Lighting Package', 'Ambient RGB lighting setup throughout venue', 7500, 'flat', 'decor', true),
+('Balloon Decoration', 'Themed balloon arrangements and arches', 10000, 'flat', 'decor', true),
+('Photo Booth', 'Custom themed photo booth with props and instant prints', 15000, 'flat', 'decor', true),
 
--- Services
-('Extra Hour', 'Extend your event by one additional hour', 10000, 'per_hour', 'service', true),
-('Extra Guests', 'Additional capacity above package maximum', 1500, 'per_person', 'service', true),
-('Dedicated Host', 'Additional dedicated event host/coordinator', 15000, 'flat', 'service', true),
-('Cleanup Service', 'Post-event cleanup so you can leave worry-free', 5000, 'flat', 'service', true)
+-- Services (staffing)
+('Extra Hour', 'Extend your event by one additional hour', 10000, 'per_hour', 'staffing', true),
+('Extra Guests', 'Additional capacity above package maximum', 1500, 'per_person', 'staffing', true),
+('Dedicated Host', 'Additional dedicated event host/coordinator', 15000, 'flat', 'staffing', true),
+('Cleanup Service', 'Post-event cleanup so you can leave worry-free', 5000, 'flat', 'staffing', true)
 ON CONFLICT DO NOTHING;
 
 -- ============================================
