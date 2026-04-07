@@ -25,17 +25,14 @@ export function ServiceWorkerRegistration() {
             }
           }
           
-          // Handle updates
+          // Handle updates - auto-update silently
           registration.addEventListener("updatefound", () => {
             const newWorker = registration.installing
             if (newWorker) {
               newWorker.addEventListener("statechange", () => {
                 if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
-                  // New content available
-                  if (window.confirm("New version available! Reload to update?")) {
-                    newWorker.postMessage({ type: "SKIP_WAITING" })
-                    window.location.reload()
-                  }
+                  // New version available - update silently on next reload
+                  newWorker.postMessage({ type: "SKIP_WAITING" })
                 }
               })
             }
