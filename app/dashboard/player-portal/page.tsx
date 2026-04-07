@@ -75,7 +75,7 @@ export default async function PlayerPortalPage() {
       .order("start_date", { ascending: false })
     
     if (error) {
-      console.log("[v0] Tournament query error:", error)
+      console.error("[Player Portal] Tournament query error:", error)
       tournamentQueryError = error.message
     }
     
