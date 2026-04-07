@@ -20,7 +20,7 @@ INSERT INTO cb_event_packages (name, slug, description, base_price_cents, durati
   3,
   30,
   10,
-  'party',
+  'birthday',
   ARRAY['Dedicated party host', 'Custom tournament setup', 'Birthday decorations', 'Winner trophies/medals', 'Party playlist', 'Photo opportunities'],
   true
 ),
@@ -44,7 +44,7 @@ INSERT INTO cb_event_packages (name, slug, description, base_price_cents, durati
   6,
   64,
   16,
-  'tournament',
+  'custom',
   ARRAY['Professional bracket system', 'Stream-ready setup', 'Commentary station', 'Prize pool management', 'Player check-in system', 'Live leaderboard display'],
   true
 ),
@@ -56,7 +56,7 @@ INSERT INTO cb_event_packages (name, slug, description, base_price_cents, durati
   2,
   12,
   4,
-  'private',
+  'custom',
   ARRAY['Exclusive venue access', 'Premium gaming stations', 'Complimentary drinks', 'Flexible game selection', 'Comfortable lounge seating'],
   true
 ),
@@ -68,7 +68,7 @@ INSERT INTO cb_event_packages (name, slug, description, base_price_cents, durati
   4,
   40,
   10,
-  'watch_party',
+  'custom',
   ARRAY['Multiple large screens', 'Premium sound system', 'Gaming stations for halftime', 'Sports bar atmosphere', 'Dedicated seating areas'],
   true
 ),
@@ -80,7 +80,7 @@ INSERT INTO cb_event_packages (name, slug, description, base_price_cents, durati
   10,
   30,
   8,
-  'marathon',
+  'custom',
   ARRAY['10 hours of gaming', 'Breakfast, lunch & dinner included', 'Energy drinks & snacks', 'Marathon achievements', 'Comfort stations', 'Priority game selection'],
   true
 )
