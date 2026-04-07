@@ -21,7 +21,7 @@ INSERT INTO cb_event_packages (name, slug, description, base_price_cents, durati
   30,
   10,
   'party',
-  '["Dedicated party host", "Custom tournament setup", "Birthday decorations", "Winner trophies/medals", "Party playlist", "Photo opportunities"]',
+  ARRAY['Dedicated party host', 'Custom tournament setup', 'Birthday decorations', 'Winner trophies/medals', 'Party playlist', 'Photo opportunities'],
   true
 ),
 (
@@ -33,7 +33,7 @@ INSERT INTO cb_event_packages (name, slug, description, base_price_cents, durati
   50,
   15,
   'corporate',
-  '["Professional event coordinator", "Custom team brackets", "Company branding options", "Achievement awards", "Networking lounge setup", "Post-event analytics report"]',
+  ARRAY['Professional event coordinator', 'Custom team brackets', 'Company branding options', 'Achievement awards', 'Networking lounge setup', 'Post-event analytics report'],
   true
 ),
 (
@@ -45,7 +45,7 @@ INSERT INTO cb_event_packages (name, slug, description, base_price_cents, durati
   64,
   16,
   'tournament',
-  '["Professional bracket system", "Stream-ready setup", "Commentary station", "Prize pool management", "Player check-in system", "Live leaderboard display"]',
+  ARRAY['Professional bracket system', 'Stream-ready setup', 'Commentary station', 'Prize pool management', 'Player check-in system', 'Live leaderboard display'],
   true
 ),
 (
@@ -57,7 +57,7 @@ INSERT INTO cb_event_packages (name, slug, description, base_price_cents, durati
   12,
   4,
   'private',
-  '["Exclusive venue access", "Premium gaming stations", "Complimentary drinks", "Flexible game selection", "Comfortable lounge seating"]',
+  ARRAY['Exclusive venue access', 'Premium gaming stations', 'Complimentary drinks', 'Flexible game selection', 'Comfortable lounge seating'],
   true
 ),
 (
@@ -69,7 +69,7 @@ INSERT INTO cb_event_packages (name, slug, description, base_price_cents, durati
   40,
   10,
   'watch_party',
-  '["Multiple large screens", "Premium sound system", "Gaming stations for halftime", "Sports bar atmosphere", "Dedicated seating areas"]',
+  ARRAY['Multiple large screens', 'Premium sound system', 'Gaming stations for halftime', 'Sports bar atmosphere', 'Dedicated seating areas'],
   true
 ),
 (
@@ -81,7 +81,7 @@ INSERT INTO cb_event_packages (name, slug, description, base_price_cents, durati
   30,
   8,
   'marathon',
-  '["10 hours of gaming", "Breakfast, lunch & dinner included", "Energy drinks & snacks", "Marathon achievements", "Comfort stations", "Priority game selection"]',
+  ARRAY['10 hours of gaming', 'Breakfast, lunch & dinner included', 'Energy drinks & snacks', 'Marathon achievements', 'Comfort stations', 'Priority game selection'],
   true
 )
 ON CONFLICT (slug) DO UPDATE SET
