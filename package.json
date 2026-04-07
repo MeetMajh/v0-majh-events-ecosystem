@@ -63,6 +63,7 @@
     "react-intersection-observer": "^10.0.3",
     "react-resizable-panels": "^2.1.7",
     "recharts": "2.15.0",
+    "resend": "^6.10.0",
     "server-only": "^0.0.1",
     "sonner": "^1.7.1",
     "stripe": "^17.5.0",

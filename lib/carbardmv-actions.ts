@@ -4,6 +4,12 @@ import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { stripe } from "@/lib/stripe"
+import { 
+  sendBookingInquiryEmail, 
+  sendBookingConfirmedEmail,
+  sendDepositPaidEmail,
+  sendAdminBookingNotification 
+} from "@/lib/booking-emails"
 
 // ── Auth helper ──
 
@@ -157,6 +163,25 @@ export async function createEventBookingCheckout(bookingData: {
   // Store stripe session id
   await supabase.from("cb_bookings").update({ stripe_session_id: session.id }).eq("id", booking.id)
 
+  // Send confirmation emails
+  const emailData = {
+    bookingId: booking.id,
+    contactName: bookingData.contactName,
+    contactEmail: bookingData.contactEmail,
+    contactPhone: bookingData.contactPhone,
+    packageName: pkg.name,
+    eventDate: bookingData.eventDate,
+    startTime: bookingData.startTime,
+    guestCount: bookingData.guestCount,
+    totalCents,
+    depositCents,
+    specialRequests: bookingData.venueNotes,
+  }
+  
+  // Send emails in background (don't block checkout)
+  sendBookingInquiryEmail(emailData).catch(console.error)
+  sendAdminBookingNotification(emailData, "inquiry").catch(console.error)
+
   return { clientSecret: session.client_secret, bookingId: booking.id }
 }
 
@@ -292,9 +317,44 @@ export async function submitCateringInquiry(formData: FormData) {
 export async function updateBookingStatus(bookingId: string, status: string) {
   const { supabase } = await requireStaff()
 
+  // Get booking details for email
+  const { data: booking } = await supabase
+    .from("cb_bookings")
+    .select(`
+      *,
+      cb_event_packages (name)
+    `)
+    .eq("id", bookingId)
+    .single()
+
   const { error } = await supabase.from("cb_bookings").update({ status, updated_at: new Date().toISOString() }).eq("id", bookingId)
 
   if (error) return { error: error.message }
+
+  // Send email notifications based on status change
+  if (booking && (status === "confirmed" || status === "deposit_paid")) {
+    const emailData = {
+      bookingId: booking.id,
+      contactName: booking.contact_name,
+      contactEmail: booking.contact_email,
+      contactPhone: booking.contact_phone,
+      packageName: booking.cb_event_packages?.name || "Event",
+      eventDate: booking.event_date,
+      startTime: booking.start_time,
+      guestCount: booking.guest_count,
+      totalCents: booking.total_cents,
+      depositCents: booking.deposit_cents,
+      specialRequests: booking.venue_notes,
+    }
+
+    if (status === "confirmed") {
+      sendBookingConfirmedEmail(emailData).catch(console.error)
+      sendAdminBookingNotification(emailData, "confirmed").catch(console.error)
+    } else if (status === "deposit_paid") {
+      sendDepositPaidEmail(emailData).catch(console.error)
+      sendAdminBookingNotification(emailData, "deposit_paid").catch(console.error)
+    }
+  }
 
   revalidatePath("/dashboard/carbardmv/events")
   return { success: true }
@@ -910,4 +970,222 @@ export async function createInvoicePaymentCheckout(invoiceId: string) {
   }
 
   return { clientSecret: session.client_secret }
+}
+
+// ════════════════════════════════════════════
+// USER BOOKING MANAGEMENT
+// ════════════════════════════════════════════
+
+export async function getUserBookings() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  if (!user) return { bookings: [] }
+  
+  const { data: bookings, error } = await supabase
+    .from("cb_bookings")
+    .select(`
+      *,
+      cb_event_packages (
+        id,
+        name,
+        slug,
+        description,
+        duration_hours,
+        image_url
+      )
+    `)
+    .eq("user_id", user.id)
+    .order("event_date", { ascending: false })
+  
+  if (error) {
+    console.error("[Bookings] Error fetching user bookings:", error)
+    return { bookings: [], error: error.message }
+  }
+  
+  return { bookings: bookings || [] }
+}
+
+export async function getBookingById(bookingId: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  if (!user) return { booking: null, error: "Not authenticated" }
+  
+  const { data: booking, error } = await supabase
+    .from("cb_bookings")
+    .select(`
+      *,
+      cb_event_packages (
+        id,
+        name,
+        slug,
+        description,
+        duration_hours,
+        max_guests,
+        includes,
+        image_url
+      )
+    `)
+    .eq("id", bookingId)
+    .eq("user_id", user.id)
+    .single()
+  
+  if (error) {
+    return { booking: null, error: error.message }
+  }
+  
+  // Get payment history
+  const { data: payments } = await supabase
+    .from("cb_booking_payments")
+    .select("*")
+    .eq("booking_id", bookingId)
+    .order("created_at", { ascending: false })
+  
+  return { booking, payments: payments || [] }
+}
+
+export async function cancelBooking(bookingId: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  if (!user) return { error: "Not authenticated" }
+  
+  // Check ownership
+  const { data: booking } = await supabase
+    .from("cb_bookings")
+    .select("id, status, user_id, event_date")
+    .eq("id", bookingId)
+    .eq("user_id", user.id)
+    .single()
+  
+  if (!booking) return { error: "Booking not found" }
+  
+  // Only allow cancellation for inquiry/pending/confirmed status
+  if (!["inquiry", "pending", "confirmed"].includes(booking.status)) {
+    return { error: "Cannot cancel booking at this stage" }
+  }
+  
+  const { error } = await supabase
+    .from("cb_bookings")
+    .update({ 
+      status: "cancelled",
+      updated_at: new Date().toISOString()
+    })
+    .eq("id", bookingId)
+  
+  if (error) return { error: error.message }
+  
+  revalidatePath("/dashboard/my-bookings")
+  return { success: true }
+}
+
+// ════════════════════════════════════════════
+// AVAILABILITY CALENDAR
+// ════════════════════════════════════════════
+
+export async function getBookedDates(startDate: string, endDate: string) {
+  const supabase = await createClient()
+  
+  // Get all confirmed/deposit_paid bookings in the date range
+  const { data: bookings, error } = await supabase
+    .from("cb_bookings")
+    .select("event_date, start_time, end_time, guest_count, status")
+    .gte("event_date", startDate)
+    .lte("event_date", endDate)
+    .in("status", ["confirmed", "deposit_paid", "completed"])
+    .order("event_date", { ascending: true })
+  
+  if (error) {
+    console.error("[Availability] Error fetching booked dates:", error)
+    return { bookedDates: [], partialDates: [] }
+  }
+  
+  // Group by date and determine availability
+  const dateMap = new Map<string, { count: number; timeSlots: string[] }>()
+  
+  bookings?.forEach(booking => {
+    const date = booking.event_date
+    const existing = dateMap.get(date) || { count: 0, timeSlots: [] }
+    existing.count++
+    if (booking.start_time) {
+      existing.timeSlots.push(booking.start_time)
+    }
+    dateMap.set(date, existing)
+  })
+  
+  // Dates with 2+ bookings are fully booked
+  // Dates with 1 booking are partially available
+  const bookedDates: string[] = []
+  const partialDates: string[] = []
+  
+  dateMap.forEach((info, date) => {
+    if (info.count >= 2) {
+      bookedDates.push(date)
+    } else {
+      partialDates.push(date)
+    }
+  })
+  
+  return { bookedDates, partialDates }
+}
+
+export async function checkDateAvailability(date: string, startTime?: string) {
+  const supabase = await createClient()
+  
+  // Check existing bookings for this date
+  const { data: bookings, error } = await supabase
+    .from("cb_bookings")
+    .select("start_time, end_time, guest_count")
+    .eq("event_date", date)
+    .in("status", ["confirmed", "deposit_paid"])
+  
+  if (error) {
+    return { available: false, error: error.message }
+  }
+  
+  // If 2 or more bookings, date is fully booked
+  if (bookings && bookings.length >= 2) {
+    return { 
+      available: false, 
+      reason: "This date is fully booked",
+      existingBookings: bookings.length
+    }
+  }
+  
+  // If we have a specific time, check for conflicts
+  if (startTime && bookings && bookings.length > 0) {
+    const requestedHour = parseInt(startTime.split(":")[0])
+    
+    for (const booking of bookings) {
+      if (booking.start_time) {
+        const bookedHour = parseInt(booking.start_time.split(":")[0])
+        // Assume 4-hour events, check for overlap
+        if (Math.abs(requestedHour - bookedHour) < 4) {
+          return {
+            available: false,
+            reason: "Time slot conflicts with existing booking",
+            suggestedTimes: getSuggestedTimes(bookings)
+          }
+        }
+      }
+    }
+  }
+  
+  return { 
+    available: true,
+    existingBookings: bookings?.length || 0,
+    note: bookings && bookings.length > 0 ? "Limited availability" : undefined
+  }
+}
+
+function getSuggestedTimes(existingBookings: any[]) {
+  const bookedHours = existingBookings
+    .filter(b => b.start_time)
+    .map(b => parseInt(b.start_time.split(":")[0]))
+  
+  const allSlots = [10, 12, 14, 16, 18, 20] // 10am to 8pm
+  return allSlots
+    .filter(hour => !bookedHours.some(bh => Math.abs(hour - bh) < 4))
+    .map(h => `${h.toString().padStart(2, "0")}:00`)
 }
