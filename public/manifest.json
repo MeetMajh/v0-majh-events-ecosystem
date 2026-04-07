@@ -13,29 +13,62 @@
       "src": "/icons/icon-96x96.jpg",
       "sizes": "96x96",
       "type": "image/jpeg",
-      "purpose": "maskable any"
+      "purpose": "any"
     },
     {
       "src": "/icons/icon-144x144.jpg",
       "sizes": "144x144",
       "type": "image/jpeg",
-      "purpose": "maskable any"
+      "purpose": "any"
     },
     {
       "src": "/icons/icon-192x192.jpg",
       "sizes": "192x192",
       "type": "image/jpeg",
-      "purpose": "maskable any"
+      "purpose": "any"
     },
     {
       "src": "/icons/icon-512x512.jpg",
       "sizes": "512x512",
       "type": "image/jpeg",
-      "purpose": "maskable any"
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-512x512.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "maskable"
     }
   ],
   
   "categories": ["entertainment", "games", "sports"],
+  "lang": "en-US",
+  "dir": "ltr",
+  "screenshots": [
+    {
+      "src": "/screenshots/desktop-home.jpg",
+      "sizes": "1280x720",
+      "type": "image/jpeg",
+      "form_factor": "wide",
+      "label": "MAJH EVENTS Homepage - Desktop"
+    },
+    {
+      "src": "/screenshots/mobile-home.jpg",
+      "sizes": "750x1334",
+      "type": "image/jpeg",
+      "form_factor": "narrow",
+      "label": "MAJH EVENTS Homepage - Mobile"
+    },
+    {
+      "src": "/screenshots/mobile-tournaments.jpg",
+      "sizes": "750x1334",
+      "type": "image/jpeg",
+      "form_factor": "narrow",
+      "label": "Tournament Listings"
+    }
+  ],
+  "iarc_rating_id": "",
+  "display_override": ["standalone", "minimal-ui"],
   "shortcuts": [
     {
       "name": "Tournaments",
@@ -60,5 +93,18 @@
     }
   ],
   "related_applications": [],
-  "prefer_related_applications": false
+  "prefer_related_applications": false,
+  "share_target": {
+    "action": "/share",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  },
+  "handle_links": "preferred",
+  "launch_handler": {
+    "client_mode": "navigate-existing"
+  }
 }
