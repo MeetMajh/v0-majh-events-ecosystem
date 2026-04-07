@@ -138,6 +138,30 @@
   "scope_extensions": [
     {
       "origin": "https://*.majhevents.com"
+    },
+    {
+      "origin": "https://auth.majhevents.com"
+    },
+    {
+      "origin": "https://api.majhevents.com"
+    },
+    {
+      "origin": "https://cdn.majhevents.com"
+    },
+    {
+      "origin": "https://admin.majhevents.com"
+    },
+    {
+      "origin": "https://esports.majhevents.com"
+    },
+    {
+      "origin": "https://events.majhevents.com"
+    },
+    {
+      "origin": "https://carbardmv.majhevents.com"
+    },
+    {
+      "origin": "https://streams.majhevents.com"
     }
   ]
 }
