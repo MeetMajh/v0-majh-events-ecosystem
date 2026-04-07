@@ -541,10 +541,7 @@ export async function addMediaReaction(
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   
-  console.log("[v0] addMediaReaction called:", { mediaId, reactionType, userId: user?.id })
-  
   if (!user) {
-    console.log("[v0] No user for reaction")
     return { error: "Must be logged in to react" }
   }
   
@@ -558,16 +555,13 @@ export async function addMediaReaction(
     .eq("reaction_type", reactionType)
   
   // Insert new reaction
-  const { data, error } = await supabase
+  const { error } = await supabase
     .from("media_reactions")
     .insert({
       media_id: mediaId,
       user_id: user.id,
       reaction_type: reactionType,
     })
-    .select()
-  
-  console.log("[v0] Reaction insert result:", { data, error })
   
   if (error) return { error: error.message }
   
@@ -641,10 +635,7 @@ export async function addMediaComment(
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   
-  console.log("[v0] addMediaComment called:", { mediaId, content, userId: user?.id })
-  
   if (!user) {
-    console.log("[v0] No user logged in")
     return { error: "Must be logged in to comment" }
   }
   
@@ -662,8 +653,6 @@ export async function addMediaComment(
     })
     .select("id")
     .single()
-  
-  console.log("[v0] Comment insert result:", { data, error })
   
   if (error) return { error: error.message }
   return { commentId: data.id }
@@ -714,31 +703,23 @@ export async function trackMediaView(
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   
-  console.log("[v0] trackMediaView called:", { mediaId, userId: user?.id })
-  
   // For logged-in users, use upsert to avoid duplicate views
   // For anonymous users, just insert a new view each time
   if (user) {
-    const { data, error } = await supabase
+    await supabase
       .from("media_views")
       .upsert({
         media_id: mediaId,
         user_id: user.id,
       }, { onConflict: "media_id,user_id" })
-      .select()
-    
-    console.log("[v0] View upsert result:", { data, error })
   } else {
     // Anonymous view - just insert
-    const { data, error } = await supabase
+    await supabase
       .from("media_views")
       .insert({
         media_id: mediaId,
         user_id: null,
       })
-      .select()
-    
-    console.log("[v0] Anonymous view insert result:", { data, error })
   }
   
   // Update view count on the media

@@ -41,6 +41,7 @@ import {
   type Notification,
   type NotificationType,
 } from "@/lib/notification-actions"
+import { usePushNotifications } from "@/hooks/use-notifications"
 
 // Icon mapping for notification types
 const typeIcons: Record<NotificationType, typeof Bell> = {
@@ -181,6 +182,7 @@ export function NotificationBell() {
   const [unreadCount, setUnreadCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [isOpen, setIsOpen] = useState(false)
+  const { showNotification: showPush, permission: pushPermission } = usePushNotifications()
 
   const fetchNotifications = useCallback(async () => {
     const [notifs, count] = await Promise.all([
@@ -213,6 +215,14 @@ export function NotificationBell() {
           const newNotification = payload.new as Notification
           setNotifications((prev) => [newNotification, ...prev.slice(0, 19)])
           setUnreadCount((prev) => prev + 1)
+          
+          // Show browser push notification if enabled
+          if (pushPermission === "granted" && !isOpen) {
+            showPush(newNotification.title, {
+              body: newNotification.body || undefined,
+              tag: newNotification.id,
+            })
+          }
         }
       )
       .subscribe()
@@ -220,7 +230,7 @@ export function NotificationBell() {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [])
+  }, [pushPermission, showPush, isOpen])
 
   const handleRead = async (id: string) => {
     await markAsRead(id)

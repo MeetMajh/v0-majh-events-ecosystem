@@ -181,14 +181,11 @@ export default function MediaWatchPage() {
   
   const handleComment = async () => {
     if (!currentUserId || !newComment.trim()) {
-      console.log("[v0] Comment blocked - no user or empty comment", { currentUserId, newComment })
       return
     }
     
-    console.log("[v0] Submitting comment:", { mediaId, newComment })
     setSubmittingComment(true)
     const result = await addMediaComment(mediaId, newComment)
-    console.log("[v0] Comment result:", result)
     if (result.commentId) {
       const commentsData = await getMediaComments(mediaId)
       setComments(commentsData)
