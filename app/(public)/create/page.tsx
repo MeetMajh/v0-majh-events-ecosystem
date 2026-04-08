@@ -12,13 +12,15 @@ import {
   ChevronRight,
   Hash,
   Gamepad2,
-  Trophy,
   Globe,
   Lock,
   Users,
   Scissors,
   Loader2,
   Sparkles,
+  Crop,
+  Image,
+  Type,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -36,6 +38,9 @@ import { cn } from "@/lib/utils"
 import { uploadMediaFile, createMedia } from "@/lib/media-actions"
 import { getGames } from "@/lib/esports-actions"
 import { MobileNavSpacer } from "@/components/esports/mobile-nav"
+import { VideoCropper, type Area } from "@/components/editor/video-cropper"
+import { ThumbnailSelector } from "@/components/editor/thumbnail-selector"
+import { TextOverlayEditor, TextOverlay } from "@/components/editor/text-overlay-editor"
 
 type Step = "upload" | "edit" | "details" | "posting"
 type Game = { id: string; name: string; slug: string }
@@ -56,6 +61,15 @@ export default function CreateClipPage() {
   const [uploadProgress, setUploadProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [games, setGames] = useState<Game[]>([])
+  
+  // Editor state
+  const [showCropper, setShowCropper] = useState(false)
+  const [showThumbnailSelector, setShowThumbnailSelector] = useState(false)
+  const [showTextEditor, setShowTextEditor] = useState(false)
+  const [cropArea, setCropArea] = useState<Area | null>(null)
+  const [customThumbnail, setCustomThumbnail] = useState<string | null>(null)
+  const [textOverlays, setTextOverlays] = useState<TextOverlay[]>([])
+  
   const videoRef = useRef<HTMLVideoElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -284,7 +298,7 @@ export default function CreateClipPage() {
               className="flex-1 flex flex-col"
             >
               {/* Video preview */}
-              <div className="relative aspect-[9/16] max-h-[60vh] bg-black mx-auto w-full max-w-sm">
+              <div className="relative aspect-[9/16] max-h-[50vh] bg-black mx-auto w-full max-w-sm">
                 <video
                   ref={videoRef}
                   src={videoUrl}
@@ -295,6 +309,52 @@ export default function CreateClipPage() {
                   onPlay={() => setIsPlaying(true)}
                   onPause={() => setIsPlaying(false)}
                 />
+
+                {/* Render text overlays preview */}
+                {textOverlays.map((overlay) => (
+                  <div
+                    key={overlay.id}
+                    className="absolute pointer-events-none"
+                    style={{
+                      left: `${overlay.x}%`,
+                      top: `${overlay.y}%`,
+                      transform: `translate(-50%, -50%) rotate(${overlay.rotation}deg)`,
+                    }}
+                  >
+                    <div
+                      className="px-3 py-1.5 rounded whitespace-nowrap"
+                      style={{
+                        fontSize: `${overlay.fontSize * 0.6}px`,
+                        fontWeight: overlay.fontWeight,
+                        fontStyle: overlay.fontStyle,
+                        textAlign: overlay.textAlign,
+                        color: overlay.color,
+                        backgroundColor: overlay.backgroundColor,
+                        textShadow: overlay.backgroundColor === "transparent" 
+                          ? "2px 2px 4px rgba(0,0,0,0.8)" 
+                          : "none",
+                      }}
+                    >
+                      {overlay.text}
+                    </div>
+                  </div>
+                ))}
+
+                {/* Crop indicator badge */}
+                {cropArea && (
+                  <div className="absolute top-2 left-2 px-2 py-1 rounded bg-primary/80 text-xs font-medium text-primary-foreground flex items-center gap-1">
+                    <Crop className="h-3 w-3" />
+                    Cropped
+                  </div>
+                )}
+
+                {/* Custom thumbnail indicator */}
+                {customThumbnail && (
+                  <div className="absolute top-2 right-2 px-2 py-1 rounded bg-emerald-500/80 text-xs font-medium text-white flex items-center gap-1">
+                    <Image className="h-3 w-3" />
+                    Custom Thumb
+                  </div>
+                )}
 
                 {/* Play/pause overlay */}
                 <AnimatePresence>
@@ -313,7 +373,7 @@ export default function CreateClipPage() {
                   )}
                 </AnimatePresence>
 
-                {/* Trim indicator (visual only for now) */}
+                {/* Trim indicator */}
                 <div className="absolute bottom-4 left-4 right-4">
                   <div className="glass-panel rounded-lg p-2 flex items-center gap-2">
                     <Scissors className="h-4 w-4 text-muted-foreground" />
@@ -321,6 +381,46 @@ export default function CreateClipPage() {
                       <div className="h-full w-full bg-primary rounded-full" />
                     </div>
                   </div>
+                </div>
+              </div>
+
+              {/* Editor tools */}
+              <div className="p-4 space-y-3">
+                <p className="text-xs text-muted-foreground uppercase tracking-wider">Edit Tools</p>
+                <div className="grid grid-cols-3 gap-2">
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "flex-col h-auto py-3 gap-1",
+                      cropArea && "border-primary bg-primary/10"
+                    )}
+                    onClick={() => setShowCropper(true)}
+                  >
+                    <Crop className="h-5 w-5" />
+                    <span className="text-xs">Crop</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "flex-col h-auto py-3 gap-1",
+                      customThumbnail && "border-emerald-500 bg-emerald-500/10"
+                    )}
+                    onClick={() => setShowThumbnailSelector(true)}
+                  >
+                    <Image className="h-5 w-5" />
+                    <span className="text-xs">Thumbnail</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "flex-col h-auto py-3 gap-1",
+                      textOverlays.length > 0 && "border-blue-500 bg-blue-500/10"
+                    )}
+                    onClick={() => setShowTextEditor(true)}
+                  >
+                    <Type className="h-5 w-5" />
+                    <span className="text-xs">Text ({textOverlays.length})</span>
+                  </Button>
                 </div>
               </div>
 
@@ -546,6 +646,41 @@ export default function CreateClipPage() {
       </div>
 
       <MobileNavSpacer />
+
+      {/* Editor Overlays */}
+      <AnimatePresence>
+        {showCropper && videoUrl && (
+          <VideoCropper
+            videoUrl={videoUrl}
+            onCropComplete={(area) => {
+              setCropArea(area)
+              setShowCropper(false)
+            }}
+            onCancel={() => setShowCropper(false)}
+          />
+        )}
+
+        {showThumbnailSelector && videoUrl && (
+          <ThumbnailSelector
+            videoUrl={videoUrl}
+            onSelect={(thumbnail) => {
+              setCustomThumbnail(thumbnail)
+              setShowThumbnailSelector(false)
+            }}
+            onCancel={() => setShowThumbnailSelector(false)}
+          />
+        )}
+
+        {showTextEditor && videoUrl && (
+          <TextOverlayEditor
+            videoUrl={videoUrl}
+            overlays={textOverlays}
+            onOverlaysChange={setTextOverlays}
+            onComplete={() => setShowTextEditor(false)}
+            onCancel={() => setShowTextEditor(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }

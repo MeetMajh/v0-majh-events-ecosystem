@@ -36,6 +36,7 @@ import {
   Wallet,
   DollarSign,
   Megaphone,
+  Radio,
 } from "lucide-react"
 import { signOut } from "@/lib/actions"
 import { Button } from "@/components/ui/button"
@@ -101,6 +102,7 @@ const SETTINGS_ITEMS = [
 const ADMIN_FINANCIAL_ITEMS = [
   { label: "Financial Overview", href: "/dashboard/admin/financials", icon: DollarSign },
   { label: "Compliance", href: "/dashboard/admin/compliance", icon: ShieldCheck },
+  { label: "Broadcast Control", href: "/dashboard/admin/broadcast", icon: Radio },
 ]
 
 const ADS_ITEMS = [
