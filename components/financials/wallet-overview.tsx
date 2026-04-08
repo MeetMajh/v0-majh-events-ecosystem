@@ -1,7 +1,9 @@
 "use client"
 
+import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Wallet, TrendingUp, Clock, DollarSign } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Wallet, TrendingUp, Clock, DollarSign, ArrowUpRight } from "lucide-react"
 
 interface WalletOverviewProps {
   wallet: {
@@ -35,18 +37,26 @@ export function WalletOverview({ wallet, profile, organizerEarnings }: WalletOve
   return (
     <>
       {/* Available Balance */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+      <Card className="relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent" />
+        <CardHeader className="relative flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium text-muted-foreground">
             Available Balance
           </CardTitle>
-          <Wallet className="h-4 w-4 text-muted-foreground" />
+          <Wallet className="h-4 w-4 text-primary" />
         </CardHeader>
-        <CardContent>
+        <CardContent className="relative">
           <div className="text-2xl font-bold text-foreground">{formatCurrency(balance)}</div>
-          <p className="text-xs text-muted-foreground">
-            Ready to withdraw
-          </p>
+          {balance > 0 ? (
+            <Button variant="link" className="h-auto p-0 text-xs text-primary" asChild>
+              <Link href="/dashboard/financials/withdraw">
+                Withdraw
+                <ArrowUpRight className="ml-1 h-3 w-3" />
+              </Link>
+            </Button>
+          ) : (
+            <p className="text-xs text-muted-foreground">No balance to withdraw</p>
+          )}
         </CardContent>
       </Card>
 

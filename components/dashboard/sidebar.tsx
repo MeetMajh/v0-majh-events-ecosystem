@@ -35,6 +35,7 @@ import {
   Joystick,
   Wallet,
   DollarSign,
+  Megaphone,
 } from "lucide-react"
 import { signOut } from "@/lib/actions"
 import { Button } from "@/components/ui/button"
@@ -89,12 +90,22 @@ const TOURNAMENT_ITEMS = [
 
 const FINANCIAL_ITEMS = [
   { label: "Wallet & Earnings", href: "/dashboard/financials", icon: Wallet },
+  { label: "Withdraw", href: "/dashboard/financials/withdraw", icon: DollarSign },
   { label: "Payout Methods", href: "/dashboard/financials/payout-methods", icon: CreditCard },
+]
+
+const SETTINGS_ITEMS = [
+  { label: "Identity Verification", href: "/dashboard/settings/verification", icon: ShieldCheck },
 ]
 
 const ADMIN_FINANCIAL_ITEMS = [
   { label: "Financial Overview", href: "/dashboard/admin/financials", icon: DollarSign },
   { label: "Pending Payouts", href: "/dashboard/admin/financials/payouts", icon: Wallet },
+]
+
+const ADS_ITEMS = [
+  { label: "Ads Manager", href: "/dashboard/ads", icon: Megaphone },
+  { label: "Create Campaign", href: "/dashboard/ads/create", icon: Megaphone },
 ]
 
 export function DashboardSidebar({
@@ -196,6 +207,38 @@ export function DashboardSidebar({
           </>
         )}
 
+        {/* Ads Manager - visible to organizers */}
+        {canOrganize && (
+          <>
+            <div className="my-3 border-t border-sidebar-border" />
+            <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
+              Advertising
+            </p>
+            {ADS_ITEMS.map((item) => {
+              const isActive = item.href === "/dashboard/ads"
+                ? pathname === "/dashboard/ads"
+                : pathname.startsWith(item.href)
+
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                    isActive
+                      ? "bg-sidebar-accent text-sidebar-primary"
+                      : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                  )}
+                  aria-current={isActive ? "page" : undefined}
+                >
+                  <item.icon className="h-4 w-4" />
+                  {item.label}
+                </Link>
+              )
+            })}
+          </>
+        )}
+
         {/* Financials Section - visible to all users */}
         <div className="my-3 border-t border-sidebar-border" />
         <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
@@ -205,6 +248,32 @@ export function DashboardSidebar({
           const isActive = item.href === "/dashboard/financials"
             ? pathname === "/dashboard/financials"
             : pathname.startsWith(item.href)
+
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                isActive
+                  ? "bg-sidebar-accent text-sidebar-primary"
+                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+              )}
+              aria-current={isActive ? "page" : undefined}
+            >
+              <item.icon className="h-4 w-4" />
+              {item.label}
+            </Link>
+          )
+        })}
+
+        {/* Settings Section */}
+        <div className="my-3 border-t border-sidebar-border" />
+        <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
+          Settings
+        </p>
+        {SETTINGS_ITEMS.map((item) => {
+          const isActive = pathname.startsWith(item.href)
 
           return (
             <Link
