@@ -100,7 +100,7 @@ const SETTINGS_ITEMS = [
 
 const ADMIN_FINANCIAL_ITEMS = [
   { label: "Financial Overview", href: "/dashboard/admin/financials", icon: DollarSign },
-  { label: "Pending Payouts", href: "/dashboard/admin/financials/payouts", icon: Wallet },
+  { label: "Compliance", href: "/dashboard/admin/compliance", icon: ShieldCheck },
 ]
 
 const ADS_ITEMS = [
