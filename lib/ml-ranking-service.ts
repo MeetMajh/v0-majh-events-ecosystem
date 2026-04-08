@@ -161,8 +161,9 @@ function calculateFreshnessScore(freshnessHours: number): number {
 
 /**
  * Calculate final rank score for content
+ * Note: This is a pure calculation function, not a server action
  */
-export function calculateRankScore(
+function calculateRankScore(
   content: ContentItem,
   prefs: UserPreferences | null
 ): number {
