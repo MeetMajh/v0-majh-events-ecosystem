@@ -35,6 +35,7 @@ import {
   Joystick,
   Wallet,
   DollarSign,
+  Megaphone,
 } from "lucide-react"
 import { signOut } from "@/lib/actions"
 import { Button } from "@/components/ui/button"
