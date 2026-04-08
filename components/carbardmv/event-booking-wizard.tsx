@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -86,6 +86,8 @@ interface Props {
   isLoggedIn: boolean
 }
 
+const STORAGE_KEY = "carbardmv_booking_wizard"
+
 export function EventBookingWizard({ packages, addons, cateringCategories, cateringItems, isLoggedIn }: Props) {
   const [step, setStep] = useState(0)
   const [selectedPackage, setSelectedPackage] = useState<string | null>(null)
@@ -102,6 +104,65 @@ export function EventBookingWizard({ packages, addons, cateringCategories, cater
   const [clientSecret, setClientSecret] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [hydrated, setHydrated] = useState(false)
+
+  // Restore state from sessionStorage on mount (prevent data loss on back button)
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(STORAGE_KEY)
+      if (saved) {
+        const data = JSON.parse(saved)
+        if (data.selectedPackage) setSelectedPackage(data.selectedPackage)
+        if (data.selectedAddons) setSelectedAddons(data.selectedAddons)
+        if (data.selectedCatering) setSelectedCatering(data.selectedCatering)
+        if (data.guestCount) setGuestCount(data.guestCount)
+        if (data.eventDate) {
+          setEventDate(data.eventDate)
+          setSelectedDate(new Date(data.eventDate))
+        }
+        if (data.startTime) setStartTime(data.startTime)
+        if (data.contactName) setContactName(data.contactName)
+        if (data.contactEmail) setContactEmail(data.contactEmail)
+        if (data.contactPhone) setContactPhone(data.contactPhone)
+        if (data.venueNotes) setVenueNotes(data.venueNotes)
+        if (data.step && data.step < 4) setStep(data.step)
+      }
+    } catch (e) {
+      // Ignore storage errors
+    }
+    setHydrated(true)
+  }, [])
+
+  // Save state to sessionStorage on changes
+  useEffect(() => {
+    if (!hydrated) return
+    try {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+        step,
+        selectedPackage,
+        selectedAddons,
+        selectedCatering,
+        guestCount,
+        eventDate,
+        startTime,
+        contactName,
+        contactEmail,
+        contactPhone,
+        venueNotes,
+      }))
+    } catch (e) {
+      // Ignore storage errors
+    }
+  }, [hydrated, step, selectedPackage, selectedAddons, selectedCatering, guestCount, eventDate, startTime, contactName, contactEmail, contactPhone, venueNotes])
+
+  // Clear storage on successful checkout
+  const clearStorage = useCallback(() => {
+    try {
+      sessionStorage.removeItem(STORAGE_KEY)
+    } catch (e) {
+      // Ignore
+    }
+  }, [])
 
   const pkg = packages.find((p) => p.id === selectedPackage)
   const selectedAddonItems = addons.filter((a) => selectedAddons.includes(a.id))
@@ -165,13 +226,14 @@ export function EventBookingWizard({ packages, addons, cateringCategories, cater
         cateringItems: Object.entries(selectedCatering).map(([itemId, quantity]) => ({ itemId, quantity })),
       })
       setClientSecret(result.clientSecret)
+      clearStorage() // Clear saved state on successful checkout
       setStep(4)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to create checkout session")
     } finally {
       setLoading(false)
     }
-  }, [selectedPackage, selectedAddons, guestCount, eventDate, startTime, contactName, contactEmail, contactPhone, venueNotes, selectedCatering])
+  }, [selectedPackage, selectedAddons, guestCount, eventDate, startTime, contactName, contactEmail, contactPhone, venueNotes, selectedCatering, clearStorage])
 
   return (
     <div>
@@ -222,7 +284,7 @@ export function EventBookingWizard({ packages, addons, cateringCategories, cater
             <div>
               <h2 className="mb-1 text-xl font-semibold text-foreground">Choose Your Package</h2>
               <p className="mb-6 text-sm text-muted-foreground">Select the event package that fits your needs.</p>
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
                 {packages.map((p) => (
                   <button
                     key={p.id}
@@ -230,10 +292,10 @@ export function EventBookingWizard({ packages, addons, cateringCategories, cater
                       setSelectedPackage(p.id)
                       if (p.min_guests && guestCount < p.min_guests) setGuestCount(p.min_guests)
                     }}
-                    className={`rounded-xl border p-5 text-left transition-all ${
+                    className={`rounded-xl border p-4 text-left transition-all touch-manipulation active:scale-[0.98] sm:p-5 ${
                       selectedPackage === p.id
-                        ? "border-primary bg-primary/5 ring-1 ring-primary/30"
-                        : "border-border bg-card hover:border-primary/30"
+                        ? "border-primary bg-primary/5 ring-2 ring-primary/40 shadow-sm"
+                        : "border-border bg-card hover:border-primary/30 active:bg-muted/50"
                     }`}
                   >
                     <div className="mb-2 flex items-start justify-between">
@@ -273,7 +335,7 @@ export function EventBookingWizard({ packages, addons, cateringCategories, cater
             <div>
               <h2 className="mb-1 text-xl font-semibold text-foreground">Customize with Add-ons</h2>
               <p className="mb-6 text-sm text-muted-foreground">Enhance your event with additional services. All add-ons are optional.</p>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-2 sm:grid-cols-2 sm:gap-3">
                 {addons.map((a) => {
                   const isSelected = selectedAddons.includes(a.id)
                   const displayPrice = a.price_type === "per_person"
@@ -283,10 +345,10 @@ export function EventBookingWizard({ packages, addons, cateringCategories, cater
                     <button
                       key={a.id}
                       onClick={() => toggleAddon(a.id)}
-                      className={`flex items-start gap-3 rounded-xl border p-4 text-left transition-all ${
+                      className={`flex items-start gap-3 rounded-xl border p-3 text-left transition-all touch-manipulation active:scale-[0.98] sm:p-4 ${
                         isSelected
-                          ? "border-primary bg-primary/5 ring-1 ring-primary/30"
-                          : "border-border bg-card hover:border-primary/30"
+                          ? "border-primary bg-primary/5 ring-2 ring-primary/40"
+                          : "border-border bg-card hover:border-primary/30 active:bg-muted/50"
                       }`}
                     >
                       <div className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${
@@ -330,35 +392,35 @@ export function EventBookingWizard({ packages, addons, cateringCategories, cater
                         return (
                           <div
                             key={item.id}
-                            className={`flex items-center justify-between rounded-lg border p-3 transition-colors ${
+                            className={`flex flex-col gap-2 rounded-lg border p-3 transition-colors sm:flex-row sm:items-center sm:justify-between ${
                               qty > 0 ? "border-primary/30 bg-primary/5" : "border-border bg-card"
                             }`}
                           >
                             <div className="flex-1">
-                              <div className="flex items-center gap-2">
+                              <div className="flex flex-wrap items-center gap-1 sm:gap-2">
                                 <span className="text-sm font-medium text-foreground">{item.name}</span>
                                 {item.dietary_tags?.map((tag) => (
                                   <Badge key={tag} variant="outline" className="text-[9px] px-1 py-0">{tag}</Badge>
                                 ))}
                               </div>
-                              <p className="text-xs text-muted-foreground">{item.description}</p>
+                              <p className="text-xs text-muted-foreground line-clamp-1 sm:line-clamp-none">{item.description}</p>
                             </div>
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center justify-between gap-3 sm:justify-end">
                               <span className="text-sm font-medium text-primary">{displayPrice}</span>
                               <div className="flex items-center gap-1">
                                 <button
                                   onClick={() => updateCatering(item.id, -1)}
                                   disabled={qty === 0}
-                                  className="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-muted text-foreground transition-colors hover:bg-muted/80 disabled:opacity-30"
+                                  className="flex h-9 w-9 items-center justify-center rounded-md border border-border bg-muted text-foreground transition-colors touch-manipulation active:bg-muted/80 disabled:opacity-30 sm:h-7 sm:w-7"
                                 >
-                                  <Minus className="h-3 w-3" />
+                                  <Minus className="h-4 w-4 sm:h-3 sm:w-3" />
                                 </button>
-                                <span className="w-6 text-center text-sm font-medium text-foreground">{qty}</span>
+                                <span className="w-8 text-center text-sm font-medium text-foreground sm:w-6">{qty}</span>
                                 <button
                                   onClick={() => updateCatering(item.id, 1)}
-                                  className="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-muted text-foreground transition-colors hover:bg-muted/80"
+                                  className="flex h-9 w-9 items-center justify-center rounded-md border border-border bg-muted text-foreground transition-colors touch-manipulation active:bg-muted/80 sm:h-7 sm:w-7"
                                 >
-                                  <Plus className="h-3 w-3" />
+                                  <Plus className="h-4 w-4 sm:h-3 sm:w-3" />
                                 </button>
                               </div>
                             </div>
