@@ -656,3 +656,102 @@ export async function getPayoutStats() {
     failedAmount: failed.reduce((sum, p) => sum + p.net_amount_cents, 0),
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Payout Method Management
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export async function addPayoutMethod(data: {
+  method_type: "bank" | "paypal" | "venmo" | "cashapp"
+  bank_name?: string
+  bank_last_four?: string
+  bank_routing_last_four?: string
+  account_email?: string
+  account_handle?: string
+  is_primary?: boolean
+  nickname?: string
+}) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: "Must be signed in" }
+
+  // If setting as primary, unset other primary methods first
+  if (data.is_primary) {
+    await supabase
+      .from("payout_methods")
+      .update({ is_primary: false })
+      .eq("user_id", user.id)
+  }
+
+  const { data: method, error } = await supabase
+    .from("payout_methods")
+    .insert({
+      user_id: user.id,
+      method_type: data.method_type,
+      bank_name: data.bank_name,
+      bank_last_four: data.bank_last_four,
+      bank_routing_last_four: data.bank_routing_last_four,
+      account_email: data.account_email,
+      account_handle: data.account_handle,
+      is_primary: data.is_primary ?? false,
+      nickname: data.nickname,
+      verification_status: "unverified",
+    })
+    .select()
+    .single()
+
+  if (error) {
+    console.error("Failed to add payout method:", error)
+    return { error: "Failed to add payout method" }
+  }
+
+  revalidatePath("/dashboard/financials/payout-methods")
+  return { success: true, method }
+}
+
+export async function removePayoutMethod(methodId: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: "Must be signed in" }
+
+  const { error } = await supabase
+    .from("payout_methods")
+    .delete()
+    .eq("id", methodId)
+    .eq("user_id", user.id)
+
+  if (error) {
+    console.error("Failed to remove payout method:", error)
+    return { error: "Failed to remove payout method" }
+  }
+
+  revalidatePath("/dashboard/financials/payout-methods")
+  return { success: true }
+}
+
+export async function setPrimaryPayoutMethod(methodId: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: "Must be signed in" }
+
+  // Unset all other primary methods
+  await supabase
+    .from("payout_methods")
+    .update({ is_primary: false })
+    .eq("user_id", user.id)
+
+  // Set this one as primary
+  const { error } = await supabase
+    .from("payout_methods")
+    .update({ is_primary: true, updated_at: new Date().toISOString() })
+    .eq("id", methodId)
+    .eq("user_id", user.id)
+
+  if (error) {
+    console.error("Failed to set primary payout method:", error)
+    return { error: "Failed to set primary payout method" }
+  }
+
+  revalidatePath("/dashboard/financials/payout-methods")
+  return { success: true }
+}
