@@ -37,6 +37,7 @@ import {
   DollarSign,
   Megaphone,
   Radio,
+  TrendingUp,
 } from "lucide-react"
 import { signOut } from "@/lib/actions"
 import { Button } from "@/components/ui/button"
@@ -108,6 +109,10 @@ const ADMIN_FINANCIAL_ITEMS = [
 const ADS_ITEMS = [
   { label: "Ads Manager", href: "/dashboard/ads", icon: Megaphone },
   { label: "Create Campaign", href: "/dashboard/ads/create", icon: Megaphone },
+]
+
+const CREATOR_ITEMS = [
+  { label: "Creator Analytics", href: "/dashboard/creator/analytics", icon: TrendingUp },
 ]
 
 export function DashboardSidebar({
@@ -250,6 +255,32 @@ export function DashboardSidebar({
           const isActive = item.href === "/dashboard/financials"
             ? pathname === "/dashboard/financials"
             : pathname.startsWith(item.href)
+
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                isActive
+                  ? "bg-sidebar-accent text-sidebar-primary"
+                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+              )}
+              aria-current={isActive ? "page" : undefined}
+            >
+              <item.icon className="h-4 w-4" />
+              {item.label}
+            </Link>
+          )
+        })}
+
+        {/* Creator Section */}
+        <div className="my-3 border-t border-sidebar-border" />
+        <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
+          Creator
+        </p>
+        {CREATOR_ITEMS.map((item) => {
+          const isActive = pathname.startsWith(item.href)
 
           return (
             <Link
