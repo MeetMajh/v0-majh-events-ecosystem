@@ -20,12 +20,12 @@ interface AvailabilityCalendarProps {
 }
 
 const TIME_SLOTS = [
-  { value: "10:00", label: "10:00 AM" },
-  { value: "12:00", label: "12:00 PM" },
-  { value: "14:00", label: "2:00 PM" },
-  { value: "16:00", label: "4:00 PM" },
-  { value: "18:00", label: "6:00 PM" },
-  { value: "20:00", label: "8:00 PM" },
+  { value: "10:00", label: "10 AM", fullLabel: "10:00 AM" },
+  { value: "12:00", label: "12 PM", fullLabel: "12:00 PM" },
+  { value: "14:00", label: "2 PM", fullLabel: "2:00 PM" },
+  { value: "16:00", label: "4 PM", fullLabel: "4:00 PM" },
+  { value: "18:00", label: "6 PM", fullLabel: "6:00 PM" },
+  { value: "20:00", label: "8 PM", fullLabel: "8:00 PM" },
 ]
 
 export function AvailabilityCalendar({
@@ -211,7 +211,7 @@ export function AvailabilityCalendar({
                 ))}
               </div>
             ) : (
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-3 gap-2 sm:gap-3">
                 {TIME_SLOTS.map((slot) => {
                   const isAvailable = availableTimes.includes(slot.value)
                   const isSelected = selectedTime === slot.value
@@ -224,12 +224,13 @@ export function AvailabilityCalendar({
                       disabled={!isAvailable}
                       onClick={() => onTimeSelect?.(slot.value)}
                       className={cn(
-                        "h-10",
+                        "h-11 touch-manipulation text-sm sm:h-10",
                         !isAvailable && "opacity-50 line-through",
                         isSelected && "ring-2 ring-primary ring-offset-2"
                       )}
                     >
-                      {slot.label}
+                      <span className="sm:hidden">{slot.label}</span>
+                      <span className="hidden sm:inline">{slot.fullLabel}</span>
                     </Button>
                   )
                 })}

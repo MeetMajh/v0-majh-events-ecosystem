@@ -416,3 +416,148 @@ export async function sendAdminBookingNotification(data: BookingEmailData, event
     console.error("[Booking Email] Failed to send admin notification:", error)
   }
 }
+
+// ══════════════════════════════════════════
+// 24-HOUR REMINDER EMAIL (to user)
+// ══════════════════════════════════════════
+
+export async function sendEventReminderEmail(data: BookingEmailData) {
+  if (!resend) {
+    console.log("[Booking Email] Resend not configured, skipping reminder email")
+    return
+  }
+
+  const body = `
+    <h2 class="title">Your Event is Tomorrow!</h2>
+    <p class="text">Hi ${data.contactName},</p>
+    <p class="text">This is a friendly reminder that your gaming event is happening <strong>tomorrow</strong>!</p>
+    
+    <div class="details-box">
+      <h3 style="margin: 0 0 16px 0; color: #1a1a2e;">Event Details</h3>
+      <div class="detail-row">
+        <span class="detail-label">Reference</span>
+        <span class="detail-value">#${data.bookingId.slice(0, 8).toUpperCase()}</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Package</span>
+        <span class="detail-value">${data.packageName}</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Date</span>
+        <span class="detail-value">${formatDate(data.eventDate)}</span>
+      </div>
+      ${data.startTime ? `
+      <div class="detail-row">
+        <span class="detail-label">Time</span>
+        <span class="detail-value">${formatTime(data.startTime)}</span>
+      </div>
+      ` : ''}
+      <div class="detail-row">
+        <span class="detail-label">Guests</span>
+        <span class="detail-value">${data.guestCount} people</span>
+      </div>
+    </div>
+    
+    <div style="background: #e8f4fd; border-radius: 8px; padding: 16px; margin: 24px 0;">
+      <p style="margin: 0; color: #0c5460;"><strong>Arrival Tips:</strong></p>
+      <ul style="margin: 8px 0 0 0; color: #0c5460; padding-left: 20px;">
+        <li>Please arrive 15 minutes early for check-in</li>
+        <li>Bring a valid ID for verification</li>
+        <li>Remaining balance (${formatCurrency(data.totalCents - data.depositCents)}) is due at the event</li>
+      </ul>
+    </div>
+    
+    <p class="text">Questions? Reply to this email or call us anytime.</p>
+    <p class="text">We can&apos;t wait to see you tomorrow!</p>
+  `
+
+  try {
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to: data.contactEmail,
+      subject: `Reminder: Your ${data.packageName} Event is Tomorrow!`,
+      html: generateEmailTemplate({
+        title: "Event Reminder",
+        preheader: `Your ${data.packageName} event is tomorrow!`,
+        body,
+        ctaText: "View Booking Details",
+        ctaUrl: `https://majhevents.com/dashboard/my-bookings/${data.bookingId}`,
+      }),
+    })
+    return { success: true }
+  } catch (error) {
+    console.error("[Booking Email] Failed to send reminder email:", error)
+    return { error: "Failed to send reminder email" }
+  }
+}
+
+// ══════════════════════════════════════════
+// POST-EVENT FOLLOW-UP EMAIL (to user)
+// ══════════════════════════════════════════
+
+export async function sendPostEventFollowUpEmail(data: BookingEmailData) {
+  if (!resend) {
+    console.log("[Booking Email] Resend not configured, skipping follow-up email")
+    return
+  }
+
+  const body = `
+    <h2 class="title">Thanks for Celebrating with Us!</h2>
+    <p class="text">Hi ${data.contactName},</p>
+    <p class="text">We hope you and your ${data.guestCount} guests had an amazing time at your ${data.packageName} event!</p>
+    
+    <div style="background: #f8f9fa; border-radius: 8px; padding: 20px; margin: 24px 0; text-align: center;">
+      <p style="margin: 0 0 16px 0; color: #1a1a2e; font-size: 18px; font-weight: bold;">How was your experience?</p>
+      <p style="margin: 0 0 16px 0; color: #666;">Your feedback helps us improve and serve you better!</p>
+      <div style="display: inline-block;">
+        <a href="https://majhevents.com/review?booking=${data.bookingId}&rating=5" style="text-decoration: none; font-size: 28px; margin: 0 4px;">⭐</a>
+        <a href="https://majhevents.com/review?booking=${data.bookingId}&rating=4" style="text-decoration: none; font-size: 28px; margin: 0 4px;">⭐</a>
+        <a href="https://majhevents.com/review?booking=${data.bookingId}&rating=3" style="text-decoration: none; font-size: 28px; margin: 0 4px;">⭐</a>
+        <a href="https://majhevents.com/review?booking=${data.bookingId}&rating=2" style="text-decoration: none; font-size: 28px; margin: 0 4px;">⭐</a>
+        <a href="https://majhevents.com/review?booking=${data.bookingId}&rating=1" style="text-decoration: none; font-size: 28px; margin: 0 4px;">⭐</a>
+      </div>
+    </div>
+    
+    <div class="details-box">
+      <h3 style="margin: 0 0 12px 0; color: #1a1a2e;">Event Summary</h3>
+      <div class="detail-row">
+        <span class="detail-label">Package</span>
+        <span class="detail-value">${data.packageName}</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Date</span>
+        <span class="detail-value">${formatDate(data.eventDate)}</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Guests</span>
+        <span class="detail-value">${data.guestCount}</span>
+      </div>
+    </div>
+    
+    <div style="background: #d4af37; border-radius: 8px; padding: 20px; margin: 24px 0; text-align: center;">
+      <p style="margin: 0 0 8px 0; color: #1a1a2e; font-weight: bold;">Book Your Next Event</p>
+      <p style="margin: 0 0 12px 0; color: #1a1a2e; font-size: 14px;">Use code <strong>COMEBACK10</strong> for 10% off your next booking!</p>
+    </div>
+    
+    <p class="text">Thank you for choosing MAJH EVENTS. We hope to see you again soon!</p>
+  `
+
+  try {
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to: data.contactEmail,
+      subject: `Thanks for Your Event! Tell Us How We Did`,
+      html: generateEmailTemplate({
+        title: "Thanks for Celebrating!",
+        preheader: `How was your ${data.packageName} experience?`,
+        body,
+        ctaText: "Leave a Review",
+        ctaUrl: `https://majhevents.com/review?booking=${data.bookingId}`,
+      }),
+    })
+    return { success: true }
+  } catch (error) {
+    console.error("[Booking Email] Failed to send follow-up email:", error)
+    return { error: "Failed to send follow-up email" }
+  }
+}
