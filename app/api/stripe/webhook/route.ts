@@ -93,6 +93,39 @@ export async function POST(req: Request) {
       break
     }
 
+    // ── Identity Verification Events ──
+    case "identity.verification_session.verified": {
+      const session = event.data.object as Stripe.Identity.VerificationSession
+      await handleIdentityVerified(session)
+      break
+    }
+
+    case "identity.verification_session.requires_input": {
+      const session = event.data.object as Stripe.Identity.VerificationSession
+      console.log("[Stripe Webhook] Identity verification needs input:", session.id)
+      break
+    }
+
+    // ── Payment Intent Events (for escrow funding) ──
+    case "payment_intent.succeeded": {
+      const paymentIntent = event.data.object as Stripe.PaymentIntent
+      await handlePaymentIntentSucceeded(paymentIntent)
+      break
+    }
+
+    // ── Transfer Events (for payouts) ──
+    case "transfer.paid": {
+      const transfer = event.data.object as Stripe.Transfer
+      await handleTransferCompleted(transfer)
+      break
+    }
+
+    case "transfer.failed": {
+      const transfer = event.data.object as Stripe.Transfer
+      await handleTransferFailed(transfer)
+      break
+    }
+
     default:
       console.log(`[Stripe Webhook] Unhandled event type: ${event.type}`)
   }
@@ -398,5 +431,246 @@ async function handleConnectAccountUpdate(account: Stripe.Account) {
     console.error("[Stripe Webhook] Failed to update Connect account:", error)
   } else {
     console.log("[Stripe Webhook] Connect account updated:", userId, account.payouts_enabled)
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Identity Verification Handlers
+// ══════════════════════════════════════════════════════════════════════════════
+
+async function handleIdentityVerified(session: Stripe.Identity.VerificationSession) {
+  const userId = session.metadata?.user_id
+
+  if (!userId) {
+    console.error("[Stripe Webhook] No user_id in identity session metadata")
+    return
+  }
+
+  // Update KYC verification record
+  const { error: kycError } = await supabaseAdmin
+    .from("kyc_verifications")
+    .update({
+      status: "verified",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("provider_session_id", session.id)
+
+  if (kycError) {
+    console.error("[Stripe Webhook] Failed to update KYC record:", kycError)
+  }
+
+  // Update user profile
+  const { error: profileError } = await supabaseAdmin
+    .from("profiles")
+    .update({
+      kyc_verified: true,
+      kyc_verified_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", userId)
+
+  if (profileError) {
+    console.error("[Stripe Webhook] Failed to update profile KYC:", profileError)
+  } else {
+    console.log("[Stripe Webhook] Identity verified for user:", userId)
+  }
+
+  // Create notification
+  await supabaseAdmin.from("financial_alerts").insert({
+    user_id: userId,
+    alert_type: "kyc_required",
+    severity: "info",
+    title: "Identity Verified",
+    message: "Your identity has been successfully verified. You can now receive payouts.",
+    action_url: "/dashboard/financials",
+  })
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Escrow & Tournament Financial Handlers
+// ══════════════════════════════════════════════════════════════════════════════
+
+async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent) {
+  const metadata = paymentIntent.metadata
+  if (!metadata) return
+
+  // Handle escrow funding
+  if (metadata.type === "escrow_funding" && metadata.tournament_id && metadata.escrow_id) {
+    console.log("[Stripe Webhook] Escrow funding succeeded:", metadata.tournament_id)
+
+    // Update escrow account
+    const { error: escrowError } = await supabaseAdmin
+      .from("escrow_accounts")
+      .update({
+        status: "funded",
+        funded_amount_cents: paymentIntent.amount,
+        funded_at: new Date().toISOString(),
+        funding_method: "card",
+        verification_status: "verified",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", metadata.escrow_id)
+
+    if (escrowError) {
+      console.error("[Stripe Webhook] Failed to update escrow:", escrowError)
+      return
+    }
+
+    // Update tournament status
+    const { error: tournamentError } = await supabaseAdmin
+      .from("tournaments")
+      .update({
+        escrow_status: "funded",
+        escrow_funded_at: new Date().toISOString(),
+        status: "registration",
+      })
+      .eq("id", metadata.tournament_id)
+
+    if (tournamentError) {
+      console.error("[Stripe Webhook] Failed to update tournament:", tournamentError)
+      return
+    }
+
+    // Notify organizer
+    if (metadata.funded_by) {
+      const { data: tournament } = await supabaseAdmin
+        .from("tournaments")
+        .select("name")
+        .eq("id", metadata.tournament_id)
+        .single()
+
+      await supabaseAdmin.from("financial_alerts").insert({
+        user_id: metadata.funded_by,
+        tournament_id: metadata.tournament_id,
+        alert_type: "escrow_funded",
+        severity: "info",
+        title: "Prize Pool Funded",
+        message: `The $${(paymentIntent.amount / 100).toFixed(2)} prize pool for ${tournament?.name || "your tournament"} has been successfully funded. The tournament is now open for registration.`,
+        action_url: `/dashboard/tournaments/${metadata.tournament_id}`,
+      })
+    }
+
+    console.log("[Stripe Webhook] Escrow funded successfully:", metadata.tournament_id)
+  }
+
+  // Handle tournament payment
+  if (metadata.type === "tournament_payment" && metadata.tournament_id && metadata.user_id) {
+    // Record the payment
+    await supabaseAdmin.from("tournament_payments").insert({
+      tournament_id: metadata.tournament_id,
+      user_id: metadata.user_id,
+      registration_id: metadata.registration_id || null,
+      amount_cents: paymentIntent.amount,
+      platform_fee_cents: Math.floor(paymentIntent.amount * 0.05), // 5% platform fee
+      net_amount_cents: paymentIntent.amount - Math.floor(paymentIntent.amount * 0.05),
+      payment_method: "card",
+      status: "succeeded",
+      stripe_payment_intent_id: paymentIntent.id,
+    })
+
+    console.log("[Stripe Webhook] Tournament payment recorded:", paymentIntent.id)
+  }
+}
+
+async function handleTransferCompleted(transfer: Stripe.Transfer) {
+  const metadata = transfer.metadata
+  if (!metadata) return
+
+  if (metadata.type === "player_prize" && metadata.payout_id) {
+    await supabaseAdmin
+      .from("player_payouts")
+      .update({
+        status: "completed",
+        stripe_transfer_id: transfer.id,
+        completed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", metadata.payout_id)
+
+    // Notify player
+    const { data: payout } = await supabaseAdmin
+      .from("player_payouts")
+      .select("user_id, tournament_id, net_amount_cents")
+      .eq("id", metadata.payout_id)
+      .single()
+
+    if (payout) {
+      await supabaseAdmin.from("financial_alerts").insert({
+        user_id: payout.user_id,
+        tournament_id: payout.tournament_id,
+        alert_type: "payout_sent",
+        severity: "info",
+        title: "Prize Money Sent",
+        message: `Your prize of $${(payout.net_amount_cents / 100).toFixed(2)} has been sent to your account.`,
+      })
+    }
+
+    console.log("[Stripe Webhook] Player payout completed:", metadata.payout_id)
+  }
+
+  if (metadata.type === "organizer_payout" && metadata.payout_id) {
+    await supabaseAdmin
+      .from("organizer_payouts")
+      .update({
+        status: "completed",
+        stripe_transfer_id: transfer.id,
+        completed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", metadata.payout_id)
+
+    console.log("[Stripe Webhook] Organizer payout completed:", metadata.payout_id)
+  }
+}
+
+async function handleTransferFailed(transfer: Stripe.Transfer) {
+  const metadata = transfer.metadata
+  if (!metadata) return
+
+  const failureReason = "Transfer failed - please update payment details"
+
+  if (metadata.type === "player_prize" && metadata.payout_id) {
+    await supabaseAdmin
+      .from("player_payouts")
+      .update({
+        status: "failed",
+        failure_reason: failureReason,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", metadata.payout_id)
+
+    // Notify player
+    const { data: payout } = await supabaseAdmin
+      .from("player_payouts")
+      .select("user_id, tournament_id")
+      .eq("id", metadata.payout_id)
+      .single()
+
+    if (payout) {
+      await supabaseAdmin.from("financial_alerts").insert({
+        user_id: payout.user_id,
+        tournament_id: payout.tournament_id,
+        alert_type: "payout_failed",
+        severity: "error",
+        title: "Payout Failed",
+        message: "Your payout could not be processed. Please verify your payment details and try again.",
+        action_url: "/dashboard/financials",
+      })
+    }
+
+    console.log("[Stripe Webhook] Player payout failed:", metadata.payout_id)
+  }
+
+  if (metadata.type === "organizer_payout" && metadata.payout_id) {
+    await supabaseAdmin
+      .from("organizer_payouts")
+      .update({
+        status: "failed",
+        failure_reason: failureReason,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", metadata.payout_id)
+
+    console.log("[Stripe Webhook] Organizer payout failed:", metadata.payout_id)
   }
 }
