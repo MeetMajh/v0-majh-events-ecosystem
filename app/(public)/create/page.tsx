@@ -3,7 +3,6 @@
 import { useState, useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
-import { Area } from "react-easy-crop"
 import { 
   Upload, 
   X, 
@@ -39,7 +38,7 @@ import { cn } from "@/lib/utils"
 import { uploadMediaFile, createMedia } from "@/lib/media-actions"
 import { getGames } from "@/lib/esports-actions"
 import { MobileNavSpacer } from "@/components/esports/mobile-nav"
-import { VideoCropper } from "@/components/editor/video-cropper"
+import { VideoCropper, type Area } from "@/components/editor/video-cropper"
 import { ThumbnailSelector } from "@/components/editor/thumbnail-selector"
 import { TextOverlayEditor, TextOverlay } from "@/components/editor/text-overlay-editor"
 

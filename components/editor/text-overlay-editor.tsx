@@ -81,7 +81,7 @@ function DraggableText({
   isSelected: boolean
   onSelect: () => void
   onUpdate: (updates: Partial<TextOverlay>) => void
-  containerRef: React.RefObject<HTMLDivElement>
+  containerRef: React.RefObject<HTMLDivElement | null>
 }) {
   const dragControls = useDragControls()
 

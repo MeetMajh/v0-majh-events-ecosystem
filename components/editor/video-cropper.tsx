@@ -1,7 +1,10 @@
 "use client"
 
 import { useState, useCallback, useRef, useEffect } from "react"
-import Cropper, { Area } from "react-easy-crop"
+import Cropper from "react-easy-crop"
+import type { Area } from "react-easy-crop"
+
+export type { Area }
 import { motion } from "framer-motion"
 import { 
   Crop, 
