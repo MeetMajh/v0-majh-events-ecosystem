@@ -125,10 +125,10 @@ export default function MajhStudioPage() {
       setTitle(session.title || "")
       setDescription(session.description || "")
       setGameId(session.game_id || "")
-      setIsPublic(session.is_public)
-      setAllowChat(session.allow_chat)
-      setAllowClips(session.allow_clips)
-      setIsLive(session.is_live)
+      setIsPublic(session.visibility === "public")
+      setAllowChat(session.chat_enabled)
+      setAllowClips(session.clips_enabled)
+      setIsLive(session.status === "live")
     }
   }, [session])
 
