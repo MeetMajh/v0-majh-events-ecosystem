@@ -5,7 +5,9 @@ import { motion, AnimatePresence, PanInfo } from "framer-motion"
 import useSWRInfinite from "swr/infinite"
 import { cn } from "@/lib/utils"
 import { FeedItemCard } from "./feed-item-card"
-import { Loader2 } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import Link from "next/link"
+import { Loader2, Video, Upload, Trophy, Play } from "lucide-react"
 import type { UnifiedFeedItem } from "@/lib/unified-feed-service"
 
 // Swipe physics constants
@@ -170,7 +172,40 @@ export function UnifiedFeed({
   if (feed.length === 0) {
     return (
       <div className={cn("flex h-screen items-center justify-center bg-background", className)}>
-        <p className="text-muted-foreground">No content available</p>
+        <div className="flex flex-col items-center gap-6 p-8 max-w-md text-center">
+          <div className="h-20 w-20 rounded-full bg-muted flex items-center justify-center">
+            <Video className="h-10 w-10 text-muted-foreground" />
+          </div>
+          <div>
+            <h2 className="text-xl font-semibold text-foreground mb-2">No Clips Yet</h2>
+            <p className="text-muted-foreground">
+              Be the first to share your gaming moments! Upload a clip or check out our tournaments.
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <Button asChild>
+              <Link href="/dashboard/media/upload">
+                <Upload className="h-4 w-4 mr-2" />
+                Upload a Clip
+              </Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href="/esports/tournaments">
+                <Trophy className="h-4 w-4 mr-2" />
+                Browse Tournaments
+              </Link>
+            </Button>
+          </div>
+          <div className="pt-4 border-t border-border w-full">
+            <p className="text-sm text-muted-foreground mb-3">Or watch some live action</p>
+            <Button variant="secondary" size="sm" asChild>
+              <Link href="/live">
+                <Play className="h-4 w-4 mr-2" />
+                Go to Live
+              </Link>
+            </Button>
+          </div>
+        </div>
       </div>
     )
   }
