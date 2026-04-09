@@ -68,31 +68,8 @@ INSERT INTO news_categories (name, slug) VALUES
   ('Esports', 'esports')
 ON CONFLICT (slug) DO NOTHING;
 
--- ═══════════════════════════════════════════════════════════════════════════════
--- GAMES TABLE (for stream categories)
--- ═══════════════════════════════════════════════════════════════════════════════
-
-CREATE TABLE IF NOT EXISTS games (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name TEXT NOT NULL UNIQUE,
-  slug TEXT NOT NULL UNIQUE,
-  description TEXT,
-  logo_url TEXT,
-  banner_url TEXT,
-  is_active BOOLEAN DEFAULT true,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Insert default games
-INSERT INTO games (name, slug, description) VALUES
-  ('Magic: The Gathering', 'magic-the-gathering', 'The original trading card game'),
-  ('Yu-Gi-Oh!', 'yugioh', 'King of Games'),
-  ('Pokemon TCG', 'pokemon-tcg', 'Gotta catch em all'),
-  ('Flesh and Blood', 'flesh-and-blood', 'A modern TCG'),
-  ('Lorcana', 'lorcana', 'Disney trading card game'),
-  ('One Piece TCG', 'one-piece-tcg', 'Pirate adventures'),
-  ('Star Wars Unlimited', 'star-wars-unlimited', 'In a galaxy far, far away')
-ON CONFLICT (slug) DO NOTHING;
+-- GAMES TABLE - Already exists from earlier migration (003_create_core_tables.sql)
+-- Skip creating games table
 
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- PLATFORM METRICS (for ops command center)
@@ -157,13 +134,11 @@ CREATE INDEX IF NOT EXISTS idx_user_media_category ON user_media(category);
 ALTER TABLE financial_transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE financial_alerts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE news_categories ENABLE ROW LEVEL SECURITY;
-ALTER TABLE games ENABLE ROW LEVEL SECURITY;
 ALTER TABLE platform_metrics ENABLE ROW LEVEL SECURITY;
 ALTER TABLE moderation_alerts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_media ENABLE ROW LEVEL SECURITY;
 
--- Public read access to games and news categories
-CREATE POLICY "Anyone can view games" ON games FOR SELECT USING (true);
+-- Public read access to news categories
 CREATE POLICY "Anyone can view news categories" ON news_categories FOR SELECT USING (true);
 
 -- User media policies
