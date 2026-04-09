@@ -33,28 +33,4 @@ DROP POLICY IF EXISTS "Users can delete own destinations" ON stream_destinations
 CREATE POLICY "Users can delete own destinations" ON stream_destinations
   FOR DELETE USING (auth.uid() = user_id);
 
--- RLS Policies for user_streams (if not already set)
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies WHERE tablename = 'user_streams' AND policyname = 'Users can view own streams'
-  ) THEN
-    CREATE POLICY "Users can view own streams" ON user_streams
-      FOR SELECT USING (auth.uid() = user_id OR is_public = true);
-  END IF;
-  
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies WHERE tablename = 'user_streams' AND policyname = 'Users can insert own streams'
-  ) THEN
-    CREATE POLICY "Users can insert own streams" ON user_streams
-      FOR INSERT WITH CHECK (auth.uid() = user_id);
-  END IF;
-  
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies WHERE tablename = 'user_streams' AND policyname = 'Users can update own streams'
-  ) THEN
-    CREATE POLICY "Users can update own streams" ON user_streams
-      FOR UPDATE USING (auth.uid() = user_id);
-  END IF;
-END
-$$;
+
