@@ -1,11 +1,4 @@
 -- PLATFORM INTELLIGENCE SCHEMA
--- Cold Start, Onboarding, User Embeddings, Event Tracking
-
--- USER PREFERENCES (extended for onboarding)
-ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS games TEXT[] DEFAULT '{}';
-ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS intents TEXT[] DEFAULT '{}';
-ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS skill_level TEXT;
-ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS onboarding_completed BOOLEAN DEFAULT false;
 
 -- USER EMBEDDINGS for ML ranking
 CREATE TABLE IF NOT EXISTS user_embeddings (
@@ -194,32 +187,5 @@ $$ LANGUAGE plpgsql;
 -- RLS POLICIES
 ALTER TABLE user_embeddings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_events ENABLE ROW LEVEL SECURITY;
-ALTER TABLE player_follows ENABLE ROW LEVEL SECURITY;
 ALTER TABLE content_interactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE analytics_events ENABLE ROW LEVEL SECURITY;
-
--- Users can view their own embeddings
-CREATE POLICY "Users can view own embeddings" ON user_embeddings
-  FOR SELECT USING (user_id = auth.uid());
-
--- Users can view their own events
-CREATE POLICY "Users can view own events" ON user_events
-  FOR SELECT USING (user_id = auth.uid());
-
--- Users can manage their follows
-CREATE POLICY "Users can view follows" ON player_follows
-  FOR SELECT USING (follower_id = auth.uid() OR followed_id = auth.uid());
-
-CREATE POLICY "Users can create follows" ON player_follows
-  FOR INSERT WITH CHECK (follower_id = auth.uid());
-
-CREATE POLICY "Users can delete own follows" ON player_follows
-  FOR DELETE USING (follower_id = auth.uid());
-
--- Users can view their own interactions
-CREATE POLICY "Users can view own interactions" ON content_interactions
-  FOR SELECT USING (user_id = auth.uid());
-
--- Service can insert analytics
-CREATE POLICY "Service can insert analytics" ON analytics_events
-  FOR INSERT WITH CHECK (true);
