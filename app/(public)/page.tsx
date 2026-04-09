@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { ServiceCards } from "@/components/landing/service-cards"
 import { HeroStats } from "@/components/landing/hero-stats"
 import { EventGallery } from "@/components/landing/event-gallery"
+import { LivePulse } from "@/components/landing/live-pulse"
 import { IMAGES } from "@/lib/images"
 import { Crown, ArrowRight, X } from "lucide-react"
 import { getHomepageSections, getSiteInfo, HomepageSections } from "@/lib/site-settings-actions"
@@ -28,6 +29,9 @@ export default async function HomePage() {
           {siteInfo.announcement_banner}
         </div>
       )}
+
+      {/* Live Pulse - Shows real-time activity */}
+      <LivePulse />
 
       {sortedSections.map((sectionKey) => {
         switch (sectionKey) {

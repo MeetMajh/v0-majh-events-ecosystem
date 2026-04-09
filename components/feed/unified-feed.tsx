@@ -13,16 +13,29 @@ const SWIPE_THRESHOLD = 100
 const VELOCITY_THRESHOLD = 400
 
 interface UnifiedFeedProps {
+  feedType?: "foryou" | "following" | "trending"
   gameFilter?: string
+  isMuted?: boolean
+  onToggleMute?: () => void
   className?: string
 }
 
 const fetcher = (url: string) => fetch(url).then(res => res.json())
 
-export function UnifiedFeed({ gameFilter, className }: UnifiedFeedProps) {
+export function UnifiedFeed({ 
+  feedType = "foryou",
+  gameFilter, 
+  isMuted: externalMuted,
+  onToggleMute,
+  className 
+}: UnifiedFeedProps) {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [sessionId] = useState(() => `fs_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`)
-  const [isMuted, setIsMuted] = useState(true)
+  const [internalMuted, setInternalMuted] = useState(true)
+  
+  // Use external mute state if provided, otherwise internal
+  const isMuted = externalMuted !== undefined ? externalMuted : internalMuted
+  const toggleMute = onToggleMute || (() => setInternalMuted(prev => !prev))
   const [dragDirection, setDragDirection] = useState<"up" | "down" | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const viewStartTimeRef = useRef<number>(Date.now())
@@ -34,6 +47,7 @@ export function UnifiedFeed({ gameFilter, className }: UnifiedFeedProps) {
       limit: "10",
       offset: String(pageIndex * 10),
       sessionId,
+      type: feedType,
       ...(gameFilter && { game: gameFilter }),
     })
     return `/api/feed/unified?${params}`
@@ -137,7 +151,7 @@ export function UnifiedFeed({ gameFilter, className }: UnifiedFeedProps) {
       } else if (e.key === "ArrowUp" || e.key === "k") {
         goToPrev()
       } else if (e.key === "m") {
-        setIsMuted(prev => !prev)
+        toggleMute()
       }
     }
 
@@ -184,7 +198,7 @@ export function UnifiedFeed({ gameFilter, className }: UnifiedFeedProps) {
             item={feed[currentIndex]}
             isActive={true}
             isMuted={isMuted}
-            onToggleMute={() => setIsMuted(prev => !prev)}
+            onToggleMute={toggleMute}
             onLike={() => trackInteraction("like", feed[currentIndex])}
             onShare={() => trackInteraction("share", feed[currentIndex])}
             sessionId={sessionId}
