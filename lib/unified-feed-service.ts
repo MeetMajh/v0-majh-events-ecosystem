@@ -1,7 +1,7 @@
 "use server"
 
 import { createClient } from "@/lib/supabase/server"
-import { runAuction, type AuctionContext } from "@/lib/ads-auction-engine"
+import { runAdAuction, type AuctionContext } from "@/lib/ads-auction-engine"
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // UNIFIED FEED SERVICE
@@ -553,7 +553,7 @@ async function injectAds(
       }
       
       try {
-        const auctionResult = await runAuction(auctionContext)
+        const auctionResult = await runAdAuction(auctionContext)
         
         if (auctionResult.winner) {
           result.push({
