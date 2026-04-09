@@ -250,7 +250,7 @@ const BOOST_RULES: BoostRule[] = [
 /**
  * Apply boost rules to clip scores
  */
-export function applyBoostRules(
+function applyBoostRules(
   clip: ColdStartClip,
   creatorCreatedAt: Date,
   clipCreatedAt: Date,
