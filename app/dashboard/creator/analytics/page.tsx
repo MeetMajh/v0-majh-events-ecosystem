@@ -15,14 +15,20 @@ export default async function CreatorAnalyticsPage() {
   
   if (!user) redirect("/auth/login")
 
-  // Get player profile for this user
-  const { data: player } = await supabase
-    .from("players")
-    .select("id")
-    .eq("user_id", user.id)
+  // Get user profile - all users can be creators via their profile
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("id, display_name, avatar_url")
+    .eq("id", user.id)
     .single()
 
-  if (!player) {
+  // Check if user has any uploaded media (indicates they're using creator features)
+  const { count: mediaCount } = await supabase
+    .from("player_media")
+    .select("id", { count: "exact", head: true })
+    .eq("player_id", user.id)
+
+  if (!profile || mediaCount === 0) {
     return (
       <div className="max-w-2xl mx-auto py-16 px-4">
         <Card className="border-primary/20">
@@ -62,16 +68,13 @@ export default async function CreatorAnalyticsPage() {
             
             <div className="flex flex-col gap-3">
               <Button asChild size="lg" className="w-full">
-                <Link href="/dashboard/player-portal">
-                  <UserPlus className="h-5 w-5 mr-2" />
-                  Create Player Profile
+                <Link href="/dashboard/media/upload">
+                  <Video className="h-5 w-5 mr-2" />
+                  Upload Your First Clip
                 </Link>
               </Button>
               <p className="text-xs text-center text-muted-foreground">
-                Already have a profile? It may not be linked to your account.{" "}
-                <Link href="/support" className="text-primary hover:underline">
-                  Contact support
-                </Link>
+                Upload clips from your tournaments and matches to start tracking your creator analytics.
               </p>
             </div>
           </CardContent>
@@ -81,8 +84,8 @@ export default async function CreatorAnalyticsPage() {
   }
 
   const [overview, bestTimes] = await Promise.all([
-    getCreatorOverview(player.id),
-    getBestTimeToPost(player.id)
+    getCreatorOverview(user.id),
+    getBestTimeToPost(user.id)
   ])
 
   if (!overview) {
@@ -100,7 +103,7 @@ export default async function CreatorAnalyticsPage() {
     <CreatorAnalyticsDashboard 
       overview={overview} 
       bestTimes={bestTimes}
-      creatorId={player.id}
+      creatorId={user.id}
     />
   )
 }
