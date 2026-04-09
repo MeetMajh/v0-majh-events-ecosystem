@@ -47,7 +47,8 @@ import { Button } from "@/components/ui/button"
 const NAV_ITEMS = [
   { label: "Overview", href: "/dashboard", icon: LayoutDashboard },
   { label: "Profile", href: "/dashboard/profile", icon: User },
-  { label: "Go Live", href: "/dashboard/stream", icon: Radio },
+  { label: "MAJH Studio", href: "/dashboard/studio", icon: Tv },
+  { label: "Go Live (OBS)", href: "/dashboard/stream", icon: Radio },
   { label: "Points & Rewards", href: "/dashboard/rewards", icon: Gift },
   { label: "My Orders", href: "/dashboard/orders", icon: UtensilsCrossed },
   { label: "Esports", href: "/esports", icon: Gamepad2 },
