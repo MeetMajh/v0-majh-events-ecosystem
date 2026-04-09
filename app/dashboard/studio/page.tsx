@@ -68,6 +68,7 @@ import {
   Gamepad2,
 } from "lucide-react"
 import Link from "next/link"
+import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import type { StreamSession, StreamLayout } from "@/lib/majh-studio-actions"
 
@@ -124,10 +125,10 @@ export default function MajhStudioPage() {
       setTitle(session.title || "")
       setDescription(session.description || "")
       setGameId(session.game_id || "")
-      setIsPublic(session.is_public)
-      setAllowChat(session.allow_chat)
-      setAllowClips(session.allow_clips)
-      setIsLive(session.is_live)
+      setIsPublic(session.visibility === "public")
+      setAllowChat(session.chat_enabled)
+      setAllowClips(session.clips_enabled)
+      setIsLive(session.status === "live")
     }
   }, [session])
 
@@ -262,31 +263,37 @@ export default function MajhStudioPage() {
 
   const createSession = async () => {
     if (!title.trim()) {
-      alert("Please enter a stream title")
+      toast.error("Please enter a stream title")
       return
     }
 
-    const res = await fetch("/api/studio/session", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "create",
-        title,
-        description,
-        game_id: gameId || null,
-        is_public: isPublic,
-        allow_chat: allowChat,
-        allow_clips: allowClips,
-      }),
-    })
+    try {
+      const res = await fetch("/api/studio/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "create",
+          title,
+          description,
+          game_id: gameId || null,
+          is_public: isPublic,
+          allow_chat: allowChat,
+          allow_clips: allowClips,
+        }),
+      })
 
-    const result = await res.json()
-    if (result.error) {
-      alert(result.error)
-      return
+      const result = await res.json()
+      if (result.error) {
+        toast.error(result.error)
+        return
+      }
+
+      toast.success("Stream session created!")
+      mutateSession()
+    } catch (err) {
+      console.error("Error creating session:", err)
+      toast.error("Failed to create stream session. Please try again.")
     }
-
-    mutateSession()
   }
 
   const goLive = async () => {
@@ -295,47 +302,59 @@ export default function MajhStudioPage() {
       return
     }
 
-    // Start the stream
-    const res = await fetch("/api/studio/session", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "start",
-        sessionId: session.id,
-      }),
-    })
+    try {
+      // Start the stream
+      const res = await fetch("/api/studio/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "start",
+          sessionId: session.id,
+        }),
+      })
 
-    const result = await res.json()
-    if (result.error) {
-      alert(result.error)
-      return
+      const result = await res.json()
+      if (result.error) {
+        toast.error(result.error)
+        return
+      }
+
+      toast.success("You are now LIVE!")
+      setIsLive(true)
+      mutateSession()
+    } catch (err) {
+      console.error("Error going live:", err)
+      toast.error("Failed to start stream. Please try again.")
     }
-
-    setIsLive(true)
-    mutateSession()
   }
 
   const endLive = async () => {
     if (!session) return
 
-    const res = await fetch("/api/studio/session", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "end",
-        sessionId: session.id,
-      }),
-    })
+    try {
+      const res = await fetch("/api/studio/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "end",
+          sessionId: session.id,
+        }),
+      })
 
-    const result = await res.json()
-    if (result.error) {
-      alert(result.error)
-      return
+      const result = await res.json()
+      if (result.error) {
+        toast.error(result.error)
+        return
+      }
+
+      toast.success("Stream ended")
+      setIsLive(false)
+      stopStream()
+      mutateSession()
+    } catch (err) {
+      console.error("Error ending stream:", err)
+      toast.error("Failed to end stream. Please try again.")
     }
-
-    setIsLive(false)
-    stopStream()
-    mutateSession()
   }
 
   const copyStreamLink = () => {

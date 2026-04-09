@@ -126,7 +126,8 @@ export default function GoLivePage() {
         toast.error(result.error)
       } else if (result.data) {
         toast.success("Stream configuration created! Copy your stream key and RTMP URL to start streaming.")
-        mutate()
+        // Force a full refetch from the server to ensure we get the new stream data
+        await mutate(undefined, { revalidate: true })
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to create stream"

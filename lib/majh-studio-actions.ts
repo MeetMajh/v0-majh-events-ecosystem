@@ -12,19 +12,27 @@ import { nanoid } from "nanoid"
 export interface StreamSession {
   id: string
   host_id: string
+  user_id: string
   title: string
   description?: string
   game_id?: string
-  room_name: string
-  is_live: boolean
-  viewer_count: number
+  category?: string
+  livekit_room_name: string
+  status: "offline" | "live" | "ended"
+  visibility: "public" | "private" | "unlisted"
   peak_viewers: number
+  total_views: number
+  total_chat_messages: number
   started_at?: string
   ended_at?: string
   created_at: string
-  is_public: boolean
-  allow_chat: boolean
-  allow_clips: boolean
+  updated_at?: string
+  thumbnail_url?: string
+  vod_url?: string
+  stream_key?: string
+  multistream_enabled: boolean
+  chat_enabled: boolean
+  clips_enabled: boolean
   host?: {
     id: string
     display_name: string
@@ -35,6 +43,9 @@ export interface StreamSession {
     name: string
     logo_url?: string
   }
+  // Computed properties for compatibility
+  is_live?: boolean
+  is_public?: boolean
 }
 
 export interface StreamLayout {
@@ -128,28 +139,31 @@ export async function createStreamSession(input: CreateSessionInput) {
     .from("stream_sessions")
     .select("id")
     .eq("host_id", user.id)
-    .eq("is_live", true)
+    .eq("status", "live")
     .single()
 
   if (existing) {
     return { error: "You already have an active stream. End it first." }
   }
 
-  // Generate unique room name
-  const room_name = `majh-${nanoid(12)}`
+  // Generate unique room name and stream key
+  const livekit_room_name = `majh-${nanoid(12)}`
+  const stream_key = `sk_${nanoid(24)}`
 
   const { data, error } = await supabase
     .from("stream_sessions")
     .insert({
       host_id: user.id,
+      user_id: user.id,
       title: input.title,
       description: input.description,
       game_id: input.game_id,
-      room_name,
-      is_live: false,
-      is_public: input.is_public ?? true,
-      allow_chat: input.allow_chat ?? true,
-      allow_clips: input.allow_clips ?? true,
+      livekit_room_name,
+      stream_key,
+      status: "offline",
+      visibility: input.is_public !== false ? "public" : "private",
+      chat_enabled: input.allow_chat ?? true,
+      clips_enabled: input.allow_clips ?? true,
     })
     .select()
     .single()
@@ -187,8 +201,9 @@ export async function startStreamSession(sessionId: string) {
   const { data, error } = await supabase
     .from("stream_sessions")
     .update({
-      is_live: true,
+      status: "live",
       started_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     })
     .eq("id", sessionId)
     .eq("host_id", user.id)
@@ -219,8 +234,9 @@ export async function endStreamSession(sessionId: string) {
   const { data, error } = await supabase
     .from("stream_sessions")
     .update({
-      is_live: false,
+      status: "ended",
       ended_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     })
     .eq("id", sessionId)
     .eq("host_id", user.id)
@@ -305,9 +321,9 @@ export async function getLiveStreamSessions(options?: { game_id?: string; limit?
       host:profiles(id, display_name, avatar_url),
       game:games(id, name, logo_url)
     `)
-    .eq("is_live", true)
-    .eq("is_public", true)
-    .order("viewer_count", { ascending: false })
+    .eq("status", "live")
+    .eq("visibility", "public")
+    .order("peak_viewers", { ascending: false })
 
   if (options?.game_id) {
     query = query.eq("game_id", options.game_id)
@@ -436,11 +452,11 @@ export async function sendChatMessage(streamId: string, message: string) {
   // Check if chat is allowed
   const { data: session } = await supabase
     .from("stream_sessions")
-    .select("allow_chat")
+    .select("chat_enabled")
     .eq("id", streamId)
     .single()
 
-  if (!session?.allow_chat) {
+  if (!session?.chat_enabled) {
     return { error: "Chat is disabled for this stream" }
   }
 
@@ -509,11 +525,11 @@ export async function createClip(streamId: string, title: string, durationSecond
   // Check if clipping is allowed
   const { data: session } = await supabase
     .from("stream_sessions")
-    .select("allow_clips, started_at")
+    .select("clips_enabled, started_at")
     .eq("id", streamId)
     .single()
 
-  if (!session?.allow_clips) {
+  if (!session?.clips_enabled) {
     return { error: "Clipping is disabled for this stream" }
   }
 
@@ -545,7 +561,7 @@ export async function createClip(streamId: string, title: string, durationSecond
   return { data, message: "Clip is being processed. It will appear in your clips shortly." }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ──────────────────────��──────────────────────────────────────────────────────
 // Viewer Tracking
 // ─────────────────────────────────────────────────────────────────────────────
 
