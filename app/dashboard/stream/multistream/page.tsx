@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
+import useSWR from "swr"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -28,16 +29,23 @@ import {
 } from "@/components/ui/alert-dialog"
 import {
   Radio,
-  Plus,
   Trash2,
   Eye,
   EyeOff,
   CheckCircle,
-  XCircle,
   ArrowLeft,
-  ExternalLink,
   Info,
+  Loader2,
+  Plus,
 } from "lucide-react"
+import {
+  addStreamDestination,
+  updateStreamDestination,
+  deleteStreamDestination,
+  type StreamDestination,
+} from "@/lib/multistream-actions"
+
+const fetcher = (url: string) => fetch(url).then(res => res.json())
 
 // Platform configurations
 const PLATFORMS = [
@@ -46,7 +54,7 @@ const PLATFORMS = [
     name: "Twitch",
     color: "#9146FF",
     rtmpUrl: "rtmp://live.twitch.tv/live",
-    keyHelp: "Get your stream key from Twitch Dashboard > Settings > Stream",
+    keyHelp: "Get your stream key from Twitch Dashboard → Settings → Stream",
     logo: "T",
   },
   {
@@ -54,7 +62,7 @@ const PLATFORMS = [
     name: "YouTube",
     color: "#FF0000",
     rtmpUrl: "rtmp://a.rtmp.youtube.com/live2",
-    keyHelp: "Get your stream key from YouTube Studio > Go Live > Stream settings",
+    keyHelp: "Get your stream key from YouTube Studio → Go Live → Stream settings",
     logo: "Y",
   },
   {
@@ -62,7 +70,7 @@ const PLATFORMS = [
     name: "Kick",
     color: "#53FC18",
     rtmpUrl: "rtmp://fa723fc1b171.global-contribute.live-video.net/app",
-    keyHelp: "Get your stream key from Kick Dashboard > Settings > Stream",
+    keyHelp: "Get your stream key from Kick Dashboard → Settings → Stream",
     logo: "K",
   },
   {
@@ -75,47 +83,20 @@ const PLATFORMS = [
   },
 ]
 
-interface StreamDestination {
-  id: string
-  platform: string
-  streamKey: string
-  enabled: boolean
-  connected: boolean
-}
-
 export default function MultistreamPage() {
-  const [destinations, setDestinations] = useState<StreamDestination[]>([])
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({})
-  const [isStreaming, setIsStreaming] = useState(false)
+  const [pendingKeys, setPendingKeys] = useState<Record<string, string>>({})
+  const [isAdding, setIsAdding] = useState<string | null>(null)
+  const [isUpdating, setIsUpdating] = useState<string | null>(null)
+  const [isDeleting, setIsDeleting] = useState<string | null>(null)
 
-  const addDestination = (platformId: string) => {
-    if (destinations.some(d => d.platform === platformId)) return
-    
-    setDestinations([
-      ...destinations,
-      {
-        id: `dest_${Date.now()}`,
-        platform: platformId,
-        streamKey: "",
-        enabled: true,
-        connected: false,
-      },
-    ])
-  }
+  const { data, error, mutate } = useSWR<{ data: StreamDestination[] }>(
+    "/api/user/multistream",
+    fetcher
+  )
 
-  const updateDestination = (id: string, updates: Partial<StreamDestination>) => {
-    setDestinations(destinations.map(d => 
-      d.id === id ? { ...d, ...updates } : d
-    ))
-  }
-
-  const removeDestination = (id: string) => {
-    setDestinations(destinations.filter(d => d.id !== id))
-    setShowKeys(prev => {
-      const { [id]: _, ...rest } = prev
-      return rest
-    })
-  }
+  const destinations = data?.data || []
+  const isLoading = !data && !error
 
   const getPlatform = (platformId: string) => 
     PLATFORMS.find(p => p.id === platformId)
@@ -124,7 +105,63 @@ export default function MultistreamPage() {
     p => !destinations.some(d => d.platform === p.id)
   )
 
-  const enabledDestinations = destinations.filter(d => d.enabled && d.streamKey)
+  const enabledDestinations = destinations.filter(d => d.enabled && d.stream_key)
+
+  const handleAddPlatform = async (platformId: string) => {
+    setIsAdding(platformId)
+    try {
+      const result = await addStreamDestination(platformId, "")
+      if (!result.error) {
+        mutate()
+      }
+    } catch (err) {
+      console.error("Error adding platform:", err)
+    } finally {
+      setIsAdding(null)
+    }
+  }
+
+  const handleUpdateKey = async (destId: string) => {
+    const newKey = pendingKeys[destId]
+    if (!newKey) return
+
+    setIsUpdating(destId)
+    try {
+      const result = await updateStreamDestination(destId, { stream_key: newKey })
+      if (!result.error) {
+        mutate()
+        setPendingKeys(prev => {
+          const { [destId]: _, ...rest } = prev
+          return rest
+        })
+      }
+    } catch (err) {
+      console.error("Error updating key:", err)
+    } finally {
+      setIsUpdating(null)
+    }
+  }
+
+  const handleToggleEnabled = async (destId: string, enabled: boolean) => {
+    try {
+      await updateStreamDestination(destId, { enabled })
+      mutate()
+    } catch (err) {
+      console.error("Error toggling enabled:", err)
+    }
+  }
+
+  const handleDelete = async (destId: string) => {
+    setIsDeleting(destId)
+    try {
+      await deleteStreamDestination(destId)
+      mutate()
+    } catch (err) {
+      console.error("Error deleting:", err)
+    } finally {
+      setIsDeleting(null)
+    }
+  }
 
   return (
     <div className="container max-w-4xl py-8">
@@ -143,15 +180,6 @@ export default function MultistreamPage() {
               Stream to multiple platforms simultaneously
             </p>
           </div>
-          {isStreaming && (
-            <Badge variant="destructive" className="gap-1 text-sm px-3 py-1">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-white" />
-              </span>
-              LIVE
-            </Badge>
-          )}
         </div>
       </div>
 
@@ -165,41 +193,55 @@ export default function MultistreamPage() {
               <ol className="text-muted-foreground space-y-1 list-decimal list-inside">
                 <li>Add your stream keys for each platform below</li>
                 <li>Use the MAJH Events RTMP URL and stream key in OBS</li>
-                <li>When you go live, we&apos;ll rebroadcast to all enabled platforms</li>
+                <li>When you go live, we rebroadcast to all enabled platforms</li>
               </ol>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Destinations */}
-      <div className="space-y-4 mb-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Stream Destinations</h2>
-          {availablePlatforms.length > 0 && (
-            <div className="flex gap-2">
-              {availablePlatforms.map((platform) => (
-                <Button
-                  key={platform.id}
-                  size="sm"
-                  variant="outline"
-                  onClick={() => addDestination(platform.id)}
-                  className="gap-2"
-                >
+      {/* Add Platform Buttons */}
+      {availablePlatforms.length > 0 && (
+        <div className="mb-6">
+          <h2 className="text-sm font-medium mb-3">Add Platform</h2>
+          <div className="flex flex-wrap gap-2">
+            {availablePlatforms.map((platform) => (
+              <Button
+                key={platform.id}
+                size="sm"
+                variant="outline"
+                onClick={() => handleAddPlatform(platform.id)}
+                disabled={isAdding === platform.id}
+                className="gap-2"
+              >
+                {isAdding === platform.id ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
                   <div
                     className="h-4 w-4 rounded flex items-center justify-center text-white text-xs font-bold"
                     style={{ backgroundColor: platform.color }}
                   >
                     {platform.logo}
                   </div>
-                  Add {platform.name}
-                </Button>
-              ))}
-            </div>
-          )}
+                )}
+                {platform.name}
+              </Button>
+            ))}
+          </div>
         </div>
+      )}
 
-        {destinations.length === 0 ? (
+      {/* Destinations */}
+      <div className="space-y-4 mb-6">
+        <h2 className="text-lg font-semibold">Stream Destinations</h2>
+
+        {isLoading ? (
+          <Card>
+            <CardContent className="py-12 flex justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </CardContent>
+          </Card>
+        ) : destinations.length === 0 ? (
           <Card>
             <CardContent className="py-12 text-center">
               <Radio className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
@@ -214,6 +256,9 @@ export default function MultistreamPage() {
             {destinations.map((dest) => {
               const platform = getPlatform(dest.platform)
               if (!platform) return null
+
+              const currentKey = pendingKeys[dest.id] ?? dest.stream_key
+              const hasUnsavedChanges = pendingKeys[dest.id] !== undefined && pendingKeys[dest.id] !== dest.stream_key
 
               return (
                 <Card key={dest.id}>
@@ -234,7 +279,7 @@ export default function MultistreamPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        {dest.streamKey ? (
+                        {dest.stream_key ? (
                           dest.enabled ? (
                             <Badge variant="outline" className="text-green-500 border-green-500">
                               <CheckCircle className="h-3 w-3 mr-1" />
@@ -252,7 +297,7 @@ export default function MultistreamPage() {
                         )}
                         <Switch
                           checked={dest.enabled}
-                          onCheckedChange={(checked) => updateDestination(dest.id, { enabled: checked })}
+                          onCheckedChange={(checked) => handleToggleEnabled(dest.id, checked)}
                         />
                       </div>
                     </div>
@@ -263,8 +308,8 @@ export default function MultistreamPage() {
                       <div className="flex gap-2">
                         <Input
                           type={showKeys[dest.id] ? "text" : "password"}
-                          value={dest.streamKey}
-                          onChange={(e) => updateDestination(dest.id, { streamKey: e.target.value })}
+                          value={currentKey}
+                          onChange={(e) => setPendingKeys(prev => ({ ...prev, [dest.id]: e.target.value }))}
                           placeholder="Enter your stream key"
                           className="font-mono"
                         />
@@ -275,6 +320,18 @@ export default function MultistreamPage() {
                         >
                           {showKeys[dest.id] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </Button>
+                        {hasUnsavedChanges && (
+                          <Button
+                            onClick={() => handleUpdateKey(dest.id)}
+                            disabled={isUpdating === dest.id}
+                          >
+                            {isUpdating === dest.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              "Save"
+                            )}
+                          </Button>
+                        )}
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
                             <Button size="icon" variant="outline" className="text-destructive">
@@ -290,8 +347,11 @@ export default function MultistreamPage() {
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                               <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => removeDestination(dest.id)}>
-                                Remove
+                              <AlertDialogAction 
+                                onClick={() => handleDelete(dest.id)}
+                                disabled={isDeleting === dest.id}
+                              >
+                                {isDeleting === dest.id ? "Removing..." : "Remove"}
                               </AlertDialogAction>
                             </AlertDialogFooter>
                           </AlertDialogContent>
@@ -362,9 +422,9 @@ export default function MultistreamPage() {
             <div className="text-sm text-muted-foreground">
               <p className="font-medium text-foreground mb-1">About Multistreaming</p>
               <p>
-                Multistreaming requires a restreaming service to broadcast your stream to multiple platforms. 
-                We partner with Restream.io for reliable multi-destination broadcasting. Your stream keys are 
-                stored securely and only used during active streams.
+                Multistreaming broadcasts your stream to multiple platforms at once. 
+                Your stream keys are stored securely and only used during active streams.
+                Make sure you have the necessary permissions to stream on each platform.
               </p>
             </div>
           </div>
