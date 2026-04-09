@@ -39,6 +39,7 @@ import {
   Radio,
   TrendingUp,
   Activity,
+  Tv,
 } from "lucide-react"
 import { signOut } from "@/lib/actions"
 import { Button } from "@/components/ui/button"
@@ -46,6 +47,7 @@ import { Button } from "@/components/ui/button"
 const NAV_ITEMS = [
   { label: "Overview", href: "/dashboard", icon: LayoutDashboard },
   { label: "Profile", href: "/dashboard/profile", icon: User },
+  { label: "Go Live", href: "/dashboard/stream", icon: Radio },
   { label: "Points & Rewards", href: "/dashboard/rewards", icon: Gift },
   { label: "My Orders", href: "/dashboard/orders", icon: UtensilsCrossed },
   { label: "Esports", href: "/esports", icon: Gamepad2 },
@@ -104,6 +106,7 @@ const SETTINGS_ITEMS = [
 const ADMIN_FINANCIAL_ITEMS = [
   { label: "Financial Overview", href: "/dashboard/admin/financials", icon: DollarSign },
   { label: "Compliance", href: "/dashboard/admin/compliance", icon: ShieldCheck },
+  { label: "Stream Sources", href: "/dashboard/admin/streams", icon: Tv },
   { label: "Broadcast Control", href: "/dashboard/admin/broadcast", icon: Radio },
   { label: "Ops Command Center", href: "/dashboard/admin/ops", icon: Activity },
 ]
