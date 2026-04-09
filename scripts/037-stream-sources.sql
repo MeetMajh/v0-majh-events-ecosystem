@@ -52,67 +52,46 @@ CREATE INDEX IF NOT EXISTS idx_stream_sources_game ON stream_sources(game_id);
 CREATE INDEX IF NOT EXISTS idx_stream_sources_category ON stream_sources(category);
 
 -- SCHEDULED STREAM SLOTS
--- For organizations to book time slots
 CREATE TABLE IF NOT EXISTS stream_slots (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  
-  source_id UUID REFERENCES stream_sources(id) ON DELETE CASCADE,
+  source_id UUID,
   organization_id UUID,
-  
-  -- Slot timing
   slot_date DATE NOT NULL,
   start_time TIME NOT NULL,
   end_time TIME NOT NULL,
   timezone TEXT DEFAULT 'America/New_York',
-  
-  -- Status
-  status TEXT NOT NULL DEFAULT 'pending', -- 'pending', 'approved', 'rejected', 'completed'
-  
-  -- Metadata
+  status TEXT NOT NULL DEFAULT 'pending',
   notes TEXT,
   approved_by UUID,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_stream_slots_date ON stream_slots(slot_date, start_time);
-CREATE INDEX IF NOT EXISTS idx_stream_slots_source ON stream_slots(source_id);
 
 -- USER STREAMS (for Go Live feature)
 CREATE TABLE IF NOT EXISTS user_streams (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL,
-  
-  -- Stream info
   title TEXT NOT NULL,
   description TEXT,
   game_id UUID,
-  
-  -- Stream key/URL (for OBS)
   stream_key TEXT UNIQUE,
   rtmp_url TEXT,
   playback_url TEXT,
-  
-  -- Status
-  status TEXT NOT NULL DEFAULT 'offline', -- 'offline', 'live', 'ended'
+  status TEXT NOT NULL DEFAULT 'offline',
   started_at TIMESTAMPTZ,
   ended_at TIMESTAMPTZ,
-  
-  -- Stats
   peak_viewers INTEGER DEFAULT 0,
   total_views INTEGER DEFAULT 0,
-  
-  -- Settings
   is_public BOOLEAN DEFAULT true,
   allow_chat BOOLEAN DEFAULT true,
   allow_clips BOOLEAN DEFAULT true,
-  
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_user_streams_user ON user_streams(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_streams_status ON user_streams(status);
-CREATE INDEX IF NOT EXISTS idx_user_streams_live ON user_streams(status, started_at DESC) WHERE status = 'live';
 
 -- RLS
 ALTER TABLE stream_sources ENABLE ROW LEVEL SECURITY;
