@@ -1,9 +1,29 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 
 export default function TimerOverlayPage() {
+  return (
+    <Suspense fallback={<TimerFallback />}>
+      <TimerContent />
+    </Suspense>
+  )
+}
+
+function TimerFallback() {
+  return (
+    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "transparent" }}>
+      <div className="px-8 py-4 rounded-lg" style={{ backgroundColor: "#1a1a2e", border: "2px solid #D4AF37" }}>
+        <div className="font-mono font-bold text-center" style={{ color: "#D4AF37", fontSize: "4rem" }}>
+          --:--
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function TimerContent() {
   const searchParams = useSearchParams()
   
   // Get theme colors from URL params
