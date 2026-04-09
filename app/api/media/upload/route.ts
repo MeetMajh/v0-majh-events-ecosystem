@@ -23,9 +23,12 @@ export async function POST(request: Request) {
     }
     
     // Validate file type
-    const allowedTypes = ["video/mp4", "video/webm", "video/quicktime", "video/x-m4v"]
+    const allowedTypes = [
+      "video/mp4", "video/webm", "video/quicktime", "video/x-m4v",
+      "image/png", "image/jpeg", "image/gif", "image/webp"
+    ]
     if (!allowedTypes.includes(file.type)) {
-      return NextResponse.json({ error: "Invalid file type. Supported: MP4, WebM, MOV" }, { status: 400 })
+      return NextResponse.json({ error: "Invalid file type. Supported: MP4, WebM, MOV, PNG, JPG, GIF, WebP" }, { status: 400 })
     }
     
     // Validate file size (100MB max)
