@@ -52,7 +52,11 @@ import {
   ExternalLink,
   Users,
   Clock,
+  Layers,
+  Share2,
+  Tv,
 } from "lucide-react"
+import Link from "next/link"
 import {
   createStream,
   updateStream,
@@ -601,6 +605,57 @@ export default function GoLivePage() {
             )}
           </CardContent>
         </Card>
+      </div>
+
+      {/* Streamer Tools */}
+      <div className="grid gap-4 md:grid-cols-3 mt-6">
+        <Link href="/dashboard/stream/tools">
+          <Card className="h-full hover:border-primary/50 transition-colors cursor-pointer">
+            <CardContent className="flex items-center gap-4 py-6">
+              <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Layers className="h-6 w-6 text-primary" />
+              </div>
+              <div>
+                <h3 className="font-semibold">OBS Overlays</h3>
+                <p className="text-sm text-muted-foreground">
+                  Match overlays, standings, timers
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Link href="/dashboard/stream/multistream">
+          <Card className="h-full hover:border-primary/50 transition-colors cursor-pointer">
+            <CardContent className="flex items-center gap-4 py-6">
+              <div className="h-12 w-12 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                <Share2 className="h-6 w-6 text-purple-500" />
+              </div>
+              <div>
+                <h3 className="font-semibold">Multistream</h3>
+                <p className="text-sm text-muted-foreground">
+                  Stream to Twitch, YouTube, Kick
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Link href="/live">
+          <Card className="h-full hover:border-primary/50 transition-colors cursor-pointer">
+            <CardContent className="flex items-center gap-4 py-6">
+              <div className="h-12 w-12 rounded-lg bg-red-500/10 flex items-center justify-center">
+                <Tv className="h-6 w-6 text-red-500" />
+              </div>
+              <div>
+                <h3 className="font-semibold">Watch Live</h3>
+                <p className="text-sm text-muted-foreground">
+                  View all live streams
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
 
       {/* Status Banner */}

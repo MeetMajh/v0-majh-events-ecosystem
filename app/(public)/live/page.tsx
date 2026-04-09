@@ -310,6 +310,12 @@ export default function MajhLivePage() {
               </p>
             </div>
             <div className="flex items-center gap-3">
+              <Button asChild variant="default" size="sm">
+                <Link href="/dashboard/stream">
+                  <Radio className="h-4 w-4 mr-2" />
+                  Go Live
+                </Link>
+              </Button>
               <Badge variant="outline" className={cn(
                 "gap-1.5 backdrop-blur-sm",
                 connected ? "border-green-500/50 text-green-500 bg-green-500/10" : "border-destructive/50 text-destructive bg-destructive/10"
@@ -337,11 +343,19 @@ export default function MajhLivePage() {
             <Tv className="mx-auto mb-4 h-16 w-16 text-muted-foreground/30" />
             <h2 className="mb-2 text-2xl font-bold text-foreground">No Live Content</h2>
             <p className="mx-auto max-w-md text-muted-foreground">
-              There are no live tournaments or feature matches right now. Check back during scheduled events.
+              There are no live tournaments or feature matches right now. Be the first to go live!
             </p>
-            <Button asChild className="mt-6">
-              <Link href="/esports/tournaments">Browse Tournaments</Link>
-            </Button>
+            <div className="flex items-center justify-center gap-4 mt-6">
+              <Button asChild variant="default">
+                <Link href="/dashboard/stream">
+                  <Radio className="h-4 w-4 mr-2" />
+                  Go Live
+                </Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/esports/tournaments">Browse Tournaments</Link>
+              </Button>
+            </div>
           </div>
         ) : (
           <div className="space-y-8">
