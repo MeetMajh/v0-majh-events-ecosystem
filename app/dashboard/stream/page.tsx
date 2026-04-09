@@ -57,6 +57,7 @@ import {
   Tv,
 } from "lucide-react"
 import Link from "next/link"
+import { toast } from "sonner"
 import {
   createStream,
   updateStream,
@@ -74,6 +75,7 @@ export default function GoLivePage() {
   const [isUpdating, setIsUpdating] = useState(false)
   const [copiedKey, setCopiedKey] = useState(false)
   const [copiedUrl, setCopiedUrl] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
   
   // Form state for new/edit stream
   const [formData, setFormData] = useState<CreateStreamInput>({
@@ -110,15 +112,26 @@ export default function GoLivePage() {
   }, [stream])
 
   const handleCreateStream = async () => {
-    if (!formData.title) return
+    if (!formData.title) {
+      toast.error("Please enter a stream title")
+      return
+    }
     
     setIsCreating(true)
+    setErrorMessage(null)
     try {
       const result = await createStream(formData)
-      if (result.data) {
+      if (result.error) {
+        setErrorMessage(result.error)
+        toast.error(result.error)
+      } else if (result.data) {
+        toast.success("Stream configuration created! Copy your stream key and RTMP URL to start streaming.")
         mutate()
       }
     } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to create stream"
+      setErrorMessage(message)
+      toast.error(message)
       console.error("Error creating stream:", err)
     } finally {
       setIsCreating(false)
@@ -285,7 +298,12 @@ export default function GoLivePage() {
               </div>
             </div>
           </CardContent>
-          <CardFooter>
+          <CardFooter className="flex-col gap-3">
+            {errorMessage && (
+              <div className="w-full p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-sm text-destructive">
+                {errorMessage}
+              </div>
+            )}
             <Button 
               onClick={handleCreateStream} 
               disabled={isCreating || !formData.title}
