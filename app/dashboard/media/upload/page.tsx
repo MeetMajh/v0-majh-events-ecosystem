@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useCallback, useRef } from "react"
+import { useState, useCallback } from "react"
 import { useDropzone } from "react-dropzone"
-import { upload } from "@vercel/blob/client"
+import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -10,8 +10,9 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Progress } from "@/components/ui/progress"
-import { Upload, X, Film, Image as ImageIcon, FileVideo, CheckCircle2, AlertCircle } from "lucide-react"
+import { Upload, X, Film, FileVideo, CheckCircle2, AlertCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { toast } from "sonner"
 
 type UploadStatus = "idle" | "uploading" | "processing" | "complete" | "error"
 
@@ -28,16 +29,14 @@ export default function MediaUploadPage() {
   const [files, setFiles] = useState<UploadFile[]>([])
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
-  const [category, setCategory] = useState("")
+  const [category, setCategory] = useState("highlight")
   const [visibility, setVisibility] = useState("public")
   const [isUploading, setIsUploading] = useState(false)
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const newFiles = acceptedFiles.map(file => ({
       file,
-      preview: file.type.startsWith("image/") 
-        ? URL.createObjectURL(file)
-        : file.type.startsWith("video/")
+      preview: file.type.startsWith("image/") || file.type.startsWith("video/")
         ? URL.createObjectURL(file)
         : "",
       status: "idle" as UploadStatus,
@@ -52,7 +51,7 @@ export default function MediaUploadPage() {
       "image/*": [".png", ".jpg", ".jpeg", ".gif", ".webp"],
       "video/*": [".mp4", ".webm", ".mov"]
     },
-    maxSize: 100 * 1024 * 1024, // 100MB
+    maxSize: 50 * 1024 * 1024, // 50MB for Supabase
   })
 
   const removeFile = (index: number) => {
@@ -69,53 +68,99 @@ export default function MediaUploadPage() {
   const uploadFile = async (uploadFile: UploadFile, index: number) => {
     setFiles(prev => {
       const newFiles = [...prev]
-      newFiles[index] = { ...newFiles[index], status: "uploading", progress: 0 }
+      newFiles[index] = { ...newFiles[index], status: "uploading", progress: 10 }
       return newFiles
     })
 
     try {
-      // Use client-side upload to bypass body size limits
-      // This uploads directly to Vercel Blob storage
-      const blob = await upload(
-        `media/${Date.now()}-${uploadFile.file.name}`,
-        uploadFile.file,
-        {
-          access: "public",
-          handleUploadUrl: "/api/media/upload/client",
-          onUploadProgress: (progressEvent) => {
-            const percent = Math.round((progressEvent.loaded / progressEvent.total) * 100)
-            setFiles(prev => {
-              const newFiles = [...prev]
-              if (newFiles[index]) {
-                newFiles[index] = { ...newFiles[index], progress: percent }
-              }
-              return newFiles
-            })
-          },
-        }
-      )
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      
+      if (!user) {
+        throw new Error("You must be logged in to upload")
+      }
 
-      // Upload successful - blob contains the URL
+      // Generate unique filename
+      const fileExt = uploadFile.file.name.split(".").pop()?.toLowerCase() || "mp4"
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${fileExt}`
+      const filePath = `${user.id}/${fileName}`
+
+      setFiles(prev => {
+        const newFiles = [...prev]
+        newFiles[index] = { ...newFiles[index], progress: 30 }
+        return newFiles
+      })
+
+      // Upload directly to Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from("player-media")
+        .upload(filePath, uploadFile.file, {
+          cacheControl: "3600",
+          upsert: false,
+        })
+
+      if (uploadError) {
+        throw new Error(uploadError.message)
+      }
+
+      setFiles(prev => {
+        const newFiles = [...prev]
+        newFiles[index] = { ...newFiles[index], progress: 70 }
+        return newFiles
+      })
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from("player-media")
+        .getPublicUrl(filePath)
+
+      // Determine media type
+      const mediaType = uploadFile.file.type.startsWith("video/") ? "video" : "image"
+
+      // Save to database
+      const { error: dbError } = await supabase
+        .from("player_media")
+        .insert({
+          player_id: user.id,
+          title: title || uploadFile.file.name,
+          description,
+          media_type: mediaType,
+          category: category || "other",
+          url: urlData.publicUrl,
+          file_size: uploadFile.file.size,
+          mime_type: uploadFile.file.type,
+          visibility,
+        })
+
+      if (dbError) {
+        console.error("Database error:", dbError)
+        // Don't throw - file was uploaded successfully
+      }
+
       setFiles(prev => {
         const newFiles = [...prev]
         newFiles[index] = { 
           ...newFiles[index], 
           status: "complete", 
           progress: 100,
-          url: blob.url 
+          url: urlData.publicUrl 
         }
         return newFiles
       })
+
+      toast.success(`Uploaded ${uploadFile.file.name}`)
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Upload failed"
       setFiles(prev => {
         const newFiles = [...prev]
         newFiles[index] = { 
           ...newFiles[index], 
           status: "error", 
-          error: error instanceof Error ? error.message : "Upload failed"
+          error: errorMessage
         }
         return newFiles
       })
+      toast.error(errorMessage)
     }
   }
 
@@ -162,19 +207,13 @@ export default function MediaUploadPage() {
                 )}
               >
                 <input {...getInputProps()} />
-                <Upload className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                {isDragActive ? (
-                  <p className="text-lg font-medium">Drop files here...</p>
-                ) : (
-                  <>
-                    <p className="text-lg font-medium mb-1">
-                      Drag & drop files here, or click to select
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      Supports: MP4, WebM, MOV, PNG, JPG, GIF (max 100MB)
-                    </p>
-                  </>
-                )}
+                <Upload className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                <p className="text-lg font-medium">
+                  Drag &amp; drop files here, or click to select
+                </p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Supports: MP4, WebM, MOV, PNG, JPG, GIF (max 50MB)
+                </p>
               </div>
             </CardContent>
           </Card>
@@ -183,20 +222,13 @@ export default function MediaUploadPage() {
           {files.length > 0 && (
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <span>Files ({files.length})</span>
-                  {completedCount > 0 && (
-                    <span className="text-sm font-normal text-muted-foreground">
-                      {completedCount} uploaded
-                    </span>
-                  )}
-                </CardTitle>
+                <CardTitle>Files ({files.length})</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
                   {files.map((uploadFile, index) => (
                     <div
-                      key={index}
+                      key={`${uploadFile.file.name}-${index}`}
                       className="flex items-center gap-4 p-3 rounded-lg bg-muted/50"
                     >
                       {/* Preview */}
