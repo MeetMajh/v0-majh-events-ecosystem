@@ -1,10 +1,12 @@
-import { put } from "@vercel/blob"
 import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
 
 export const runtime = "nodejs"
 export const maxDuration = 60
 export const dynamic = "force-dynamic"
+
+// Configure body size limit for large file uploads
+export const fetchCache = "force-no-store"
 
 export async function POST(request: Request) {
   try {
@@ -35,22 +37,47 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid file type. Supported: MP4, WebM, MOV, PNG, JPG, GIF, WebP" }, { status: 400 })
     }
     
-    // Validate file size (100MB max)
-    const maxSize = 100 * 1024 * 1024
+    // Validate file size (50MB max for Supabase free tier)
+    const maxSize = 50 * 1024 * 1024
     if (file.size > maxSize) {
-      return NextResponse.json({ error: "File too large. Maximum size is 100MB" }, { status: 400 })
+      return NextResponse.json({ error: "File too large. Maximum size is 50MB" }, { status: 400 })
     }
     
     // Generate unique file path
     const fileExt = file.name.split(".").pop()?.toLowerCase() || "mp4"
     const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${fileExt}`
-    const filePath = `media/${user.id}/${fileName}`
+    const filePath = `${user.id}/${fileName}`
     
-    // Upload to Vercel Blob
-    const blob = await put(filePath, file, {
-      access: "public",
-      contentType: file.type,
-    })
+    // Convert File to ArrayBuffer for upload
+    const arrayBuffer = await file.arrayBuffer()
+    const buffer = new Uint8Array(arrayBuffer)
+    
+    // Upload to Supabase Storage
+    const { error: uploadError } = await supabase.storage
+      .from("player-media")
+      .upload(filePath, buffer, {
+        contentType: file.type,
+        cacheControl: "3600",
+        upsert: false,
+      })
+    
+    if (uploadError) {
+      console.error("[v0] Storage upload error:", uploadError)
+      
+      // Check for bucket not found
+      if (uploadError.message.includes("not found") || uploadError.message.includes("Bucket")) {
+        return NextResponse.json({ 
+          error: "Storage bucket 'player-media' not configured. Please create it in Supabase Storage." 
+        }, { status: 500 })
+      }
+      
+      return NextResponse.json({ error: `Upload failed: ${uploadError.message}` }, { status: 500 })
+    }
+    
+    // Get public URL
+    const { data: urlData } = supabase.storage
+      .from("player-media")
+      .getPublicUrl(filePath)
     
     // Determine media type
     const mediaType = file.type.startsWith("video/") ? "video" : "image"
@@ -64,24 +91,24 @@ export async function POST(request: Request) {
         description,
         media_type: mediaType,
         category,
-        url: blob.url,
+        url: urlData.publicUrl,
         file_size: file.size,
         mime_type: file.type,
         visibility,
       })
     
     if (dbError) {
-      console.error("Database error:", dbError)
+      console.error("[v0] Database error:", dbError)
       // Still return success since the file was uploaded
     }
     
     return NextResponse.json({ 
-      url: blob.url,
-      pathname: blob.pathname
+      url: urlData.publicUrl, 
+      storagePath: filePath 
     })
     
   } catch (error) {
-    console.error("Upload API error:", error)
+    console.error("[v0] Upload API error:", error)
     return NextResponse.json({ 
       error: error instanceof Error ? error.message : "Upload failed" 
     }, { status: 500 })

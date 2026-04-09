@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useRef } from "react"
 import { useDropzone } from "react-dropzone"
+import { upload } from "@vercel/blob/client"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -73,45 +74,35 @@ export default function MediaUploadPage() {
     })
 
     try {
-      const formData = new FormData()
-      formData.append("file", uploadFile.file)
-      formData.append("title", title || uploadFile.file.name)
-      formData.append("description", description)
-      formData.append("category", category)
-      formData.append("visibility", visibility)
+      // Use client-side upload to bypass body size limits
+      // This uploads directly to Vercel Blob storage
+      const blob = await upload(
+        `media/${Date.now()}-${uploadFile.file.name}`,
+        uploadFile.file,
+        {
+          access: "public",
+          handleUploadUrl: "/api/media/upload/client",
+          onUploadProgress: (progressEvent) => {
+            const percent = Math.round((progressEvent.loaded / progressEvent.total) * 100)
+            setFiles(prev => {
+              const newFiles = [...prev]
+              if (newFiles[index]) {
+                newFiles[index] = { ...newFiles[index], progress: percent }
+              }
+              return newFiles
+            })
+          },
+        }
+      )
 
-      // Simulate progress (real progress would need XHR or fetch with ReadableStream)
-      const progressInterval = setInterval(() => {
-        setFiles(prev => {
-          const newFiles = [...prev]
-          if (newFiles[index]?.status === "uploading" && newFiles[index].progress < 90) {
-            newFiles[index] = { ...newFiles[index], progress: newFiles[index].progress + 10 }
-          }
-          return newFiles
-        })
-      }, 200)
-
-      const response = await fetch("/api/media/upload", {
-        method: "POST",
-        body: formData
-      })
-
-      clearInterval(progressInterval)
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || "Upload failed")
-      }
-
-      const data = await response.json()
-
+      // Upload successful - blob contains the URL
       setFiles(prev => {
         const newFiles = [...prev]
         newFiles[index] = { 
           ...newFiles[index], 
           status: "complete", 
           progress: 100,
-          url: data.url 
+          url: blob.url 
         }
         return newFiles
       })
