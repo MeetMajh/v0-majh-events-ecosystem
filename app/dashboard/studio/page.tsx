@@ -512,6 +512,13 @@ export default function MajhStudioPage() {
                   </div>
 
                   <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" asChild>
+                      <Link href="/dashboard/studio/pro">
+                        <Layers className="h-4 w-4 mr-2" />
+                        Pro Mode
+                      </Link>
+                    </Button>
+                    
                     {!isLive ? (
                       <Button
                         variant="destructive"
