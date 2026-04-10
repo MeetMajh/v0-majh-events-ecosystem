@@ -119,21 +119,32 @@ export default function GoLivePage() {
     
     setIsCreating(true)
     setErrorMessage(null)
+    console.log("[v0] handleCreateStream called with:", formData)
+    
     try {
       const result = await createStream(formData)
+      console.log("[v0] createStream result:", result)
+      
       if (result.error) {
         setErrorMessage(result.error)
         toast.error(result.error)
+        console.log("[v0] Error from createStream:", result.error)
       } else if (result.data) {
-        toast.success("Stream configuration created! Copy your stream key and RTMP URL to start streaming.")
+        console.log("[v0] Stream created successfully:", result.data)
+        toast.success("Stream created! Your stream key is ready.")
         // Force a full refetch from the server to ensure we get the new stream data
         await mutate(undefined, { revalidate: true })
+      } else {
+        // No error, no data - something unexpected
+        setErrorMessage("Unexpected response - no data returned")
+        toast.error("Something went wrong")
+        console.log("[v0] Unexpected result - no error, no data:", result)
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to create stream"
       setErrorMessage(message)
       toast.error(message)
-      console.error("Error creating stream:", err)
+      console.error("[v0] Exception in handleCreateStream:", err)
     } finally {
       setIsCreating(false)
     }

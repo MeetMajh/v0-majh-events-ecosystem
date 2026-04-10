@@ -64,20 +64,26 @@ function getRtmpUrl(): string {
  * Create a new stream configuration for a user
  */
 export async function createStream(input: CreateStreamInput) {
+  console.log("[v0] createStream called with:", input)
+  
   const supabase = await createClient()
   
   const { data: { user } } = await supabase.auth.getUser()
+  console.log("[v0] user:", user?.id)
+  
   if (!user) {
     return { error: "You must be logged in to stream" }
   }
 
   // Check if user already has an active stream
-  const { data: existing } = await supabase
+  const { data: existing, error: existingError } = await supabase
     .from("user_streams")
     .select("id")
     .eq("user_id", user.id)
     .in("status", ["offline", "live"])
     .single()
+
+  console.log("[v0] existing stream check:", { existing, existingError })
 
   if (existing) {
     return { error: "You already have an active stream configuration. End your current stream first." }
@@ -85,6 +91,8 @@ export async function createStream(input: CreateStreamInput) {
 
   const stream_key = generateStreamKey()
   const rtmp_url = getRtmpUrl()
+
+  console.log("[v0] inserting stream with key:", stream_key)
 
   const { data, error } = await supabase
     .from("user_streams")
@@ -103,8 +111,10 @@ export async function createStream(input: CreateStreamInput) {
     .select()
     .single()
 
+  console.log("[v0] insert result:", { data, error })
+
   if (error) {
-    console.error("Error creating stream:", error)
+    console.error("[v0] Error creating stream:", error)
     return { error: error.message }
   }
 
@@ -147,9 +157,13 @@ export async function updateStream(streamId: string, updates: Partial<CreateStre
  * Get user's stream configuration
  */
 export async function getMyStream() {
+  console.log("[v0] getMyStream called")
+  
   const supabase = await createClient()
   
   const { data: { user } } = await supabase.auth.getUser()
+  console.log("[v0] getMyStream user:", user?.id)
+  
   if (!user) {
     return { error: "Unauthorized" }
   }
@@ -166,8 +180,10 @@ export async function getMyStream() {
     .limit(1)
     .single()
 
+  console.log("[v0] getMyStream result:", { data, error })
+
   if (error && error.code !== "PGRST116") { // PGRST116 = no rows
-    console.error("Error fetching stream:", error)
+    console.error("[v0] Error fetching stream:", error)
     return { error: error.message }
   }
 
