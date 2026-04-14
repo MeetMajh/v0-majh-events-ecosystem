@@ -78,7 +78,7 @@ export async function getTournaments(filters?: { gameId?: string; status?: strin
   const supabase = await createClient()
   let query = supabase
     .from("tournaments")
-    .select("*, games(name, slug, category, icon_url), tournament_registrations(count)")
+    .select("*, games(name, slug, category, icon_url), tournament_participants(count)")
     .order("start_date", { ascending: false })
 
   if (filters?.gameId) query = query.eq("game_id", filters.gameId)
@@ -105,10 +105,9 @@ export async function getTournamentBySlug(slug: string) {
     { data: sponsors },
   ] = await Promise.all([
     supabase
-      .from("tournament_registrations")
-      .select("*, profiles:player_id(id, first_name, last_name, avatar_url)")
-      .eq("tournament_id", tournament.id)
-      .in("status", ["registered", "checked_in"]),
+      .from("tournament_participants")
+      .select("*, profiles:user_id(id, first_name, last_name, avatar_url)")
+      .eq("tournament_id", tournament.id),
     supabase
       .from("matches")
       .select("*")
@@ -124,7 +123,6 @@ export async function getTournamentBySlug(slug: string) {
   // Map participants to include display_name from first_name/last_name
   const mappedParticipants = (participants ?? []).map((p: any) => ({
     ...p,
-    user_id: p.player_id,
     profiles: p.profiles ? {
       ...p.profiles,
       display_name: `${p.profiles.first_name || ''} ${p.profiles.last_name || ''}`.trim() || 'Unknown Player'
@@ -229,10 +227,10 @@ export async function registerForTournament(tournamentId: string) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: "You must be signed in" }
 
-  // Check capacity
+  // 1. Fetch tournament details
   const { data: tournament } = await supabase
     .from("tournaments")
-    .select("max_participants, status, entry_fee_cents, slug")
+    .select("id, name, max_participants, status, entry_fee_cents, slug")
     .eq("id", tournamentId)
     .single()
 
@@ -240,21 +238,21 @@ export async function registerForTournament(tournamentId: string) {
     return { error: "Registration is closed" }
   }
 
-  // Check existing registration using tournament_registrations table
-  const { data: existingReg } = await supabase
-    .from("tournament_registrations")
-    .select("id, status")
+  // 2. Check if already registered using tournament_participants
+  const { data: existingParticipant } = await supabase
+    .from("tournament_participants")
+    .select("id")
     .eq("tournament_id", tournamentId)
-    .eq("player_id", user.id)
+    .eq("user_id", user.id)
     .single()
 
-  if (existingReg) {
+  if (existingParticipant) {
     return { error: "Already registered for this tournament" }
   }
 
-  // Count current registrations
+  // 3. Count current participants
   const { count } = await supabase
-    .from("tournament_registrations")
+    .from("tournament_participants")
     .select("*", { count: "exact", head: true })
     .eq("tournament_id", tournamentId)
     .in("status", ["registered", "checked_in"])
@@ -263,43 +261,99 @@ export async function registerForTournament(tournamentId: string) {
     return { error: "Tournament is full" }
   }
 
-  // If there's an entry fee, create pending registration and redirect to payment
+  // 4. If there's an entry fee, check wallet and deduct
   if (tournament.entry_fee_cents > 0) {
-    const { data: registration, error } = await supabase
-      .from("tournament_registrations")
-      .insert({
-        tournament_id: tournamentId,
-        player_id: user.id,
-        registration_type: "paid",
-        payment_status: "pending",
-status: "registered",
-      })
-      .select()
+    // Get wallet
+    const { data: wallet } = await supabase
+      .from("wallets")
+      .select("user_id, balance_cents")
+      .eq("user_id", user.id)
       .single()
 
-    if (error) {
-      if (error.code === "23505") return { error: "Already registered" }
-      return { error: error.message }
+    if (!wallet) {
+      return { error: "No wallet found. Please add funds to your account first." }
+    }
+
+    if (wallet.balance_cents < tournament.entry_fee_cents) {
+      return { 
+        error: `Insufficient funds. You need $${(tournament.entry_fee_cents / 100).toFixed(2)} but have $${(wallet.balance_cents / 100).toFixed(2)}.`,
+        insufficientFunds: true,
+        required: tournament.entry_fee_cents,
+        available: wallet.balance_cents
+      }
+    }
+
+    // Deduct from wallet
+    const { error: walletError } = await supabase
+      .from("wallets")
+      .update({
+        balance_cents: wallet.balance_cents - tournament.entry_fee_cents,
+        updated_at: new Date().toISOString()
+      })
+      .eq("user_id", user.id)
+
+    if (walletError) {
+      return { error: "Failed to process payment: " + walletError.message }
+    }
+
+    // Record transaction
+    const { error: txError } = await supabase
+      .from("financial_transactions")
+      .insert({
+        user_id: user.id,
+        type: "entry_fee",
+        amount_cents: -tournament.entry_fee_cents,
+        status: "completed",
+        description: `Entry fee for ${tournament.name}`,
+        reference_type: "tournament",
+        reference_id: tournament.id
+      })
+
+    if (txError) {
+      // Rollback wallet deduction
+      await supabase
+        .from("wallets")
+        .update({ balance_cents: wallet.balance_cents })
+        .eq("user_id", user.id)
+      return { error: "Failed to record transaction: " + txError.message }
+    }
+
+    // Insert participant with paid status
+    const { error: participantError } = await supabase
+      .from("tournament_participants")
+      .insert({
+        tournament_id: tournamentId,
+        user_id: user.id,
+        status: "registered",
+        payment_status: "paid",
+        registered_at: new Date().toISOString()
+      })
+
+    if (participantError) {
+      // Rollback: refund wallet and delete transaction
+      await supabase
+        .from("wallets")
+        .update({ balance_cents: wallet.balance_cents })
+        .eq("user_id", user.id)
+      
+      if (participantError.code === "23505") return { error: "Already registered" }
+      return { error: "Failed to register: " + participantError.message }
     }
 
     revalidatePath("/esports")
-    return { 
-      success: true, 
-      requiresPayment: true,
-      registrationId: registration.id,
-      tournamentSlug: tournament.slug
-    }
+    revalidatePath("/dashboard")
+    return { success: true, paid: true }
   }
 
-  // Free tournament - register directly
+  // 5. Free tournament - register directly
   const { error } = await supabase
-    .from("tournament_registrations")
+    .from("tournament_participants")
     .insert({
       tournament_id: tournamentId,
-      player_id: user.id,
-      registration_type: "free",
-      payment_status: "free",
+      user_id: user.id,
       status: "registered",
+      payment_status: "free",
+      registered_at: new Date().toISOString()
     })
 
   if (error) {
@@ -308,6 +362,7 @@ status: "registered",
   }
 
   revalidatePath("/esports")
+  revalidatePath("/dashboard")
   return { success: true }
 }
 
@@ -316,37 +371,73 @@ export async function withdrawFromTournament(tournamentId: string) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: "You must be signed in" }
 
-  // Check if user has a paid registration that needs refund
-  const { data: registration } = await supabase
-    .from("tournament_registrations")
-    .select("id, payment_status, status")
-    .eq("tournament_id", tournamentId)
-    .eq("player_id", user.id)
+  // Get tournament info for refund amount
+  const { data: tournament } = await supabase
+    .from("tournaments")
+    .select("id, name, entry_fee_cents, status")
+    .eq("id", tournamentId)
     .single()
 
-  if (!registration) {
+  // Don't allow withdrawal if tournament already started
+  if (tournament?.status === "in_progress" || tournament?.status === "completed") {
+    return { error: "Cannot withdraw from a tournament that has already started" }
+  }
+
+  // Check if user is registered
+  const { data: participant } = await supabase
+    .from("tournament_participants")
+    .select("id, payment_status")
+    .eq("tournament_id", tournamentId)
+    .eq("user_id", user.id)
+    .single()
+
+  if (!participant) {
     return { error: "Not registered for this tournament" }
   }
 
-  if (registration.payment_status === "paid") {
-    // Mark as dropped - refund must be processed separately
-    await supabase
-      .from("tournament_registrations")
-      .update({ 
-        status: "dropped",
-        updated_at: new Date().toISOString()
-      })
-      .eq("id", registration.id)
-  } else {
-    // No payment, can delete registration
-    await supabase
-      .from("tournament_registrations")
-      .delete()
-      .eq("id", registration.id)
+  // If paid, refund to wallet
+  if (participant.payment_status === "paid" && tournament?.entry_fee_cents > 0) {
+    // Get current wallet
+    const { data: wallet } = await supabase
+      .from("wallets")
+      .select("balance_cents")
+      .eq("user_id", user.id)
+      .single()
+
+    if (wallet) {
+      // Refund to wallet
+      await supabase
+        .from("wallets")
+        .update({
+          balance_cents: wallet.balance_cents + tournament.entry_fee_cents,
+          updated_at: new Date().toISOString()
+        })
+        .eq("user_id", user.id)
+
+      // Record refund transaction
+      await supabase
+        .from("financial_transactions")
+        .insert({
+          user_id: user.id,
+          type: "refund",
+          amount_cents: tournament.entry_fee_cents,
+          status: "completed",
+          description: `Refund for withdrawing from ${tournament.name}`,
+          reference_type: "tournament",
+          reference_id: tournament.id
+        })
+    }
   }
 
+  // Remove participant
+  await supabase
+    .from("tournament_participants")
+    .delete()
+    .eq("id", participant.id)
+
   revalidatePath("/esports")
-  return { success: true }
+  revalidatePath("/dashboard")
+  return { success: true, refunded: participant.payment_status === "paid" }
 }
 
 // ── Bracket Generation ──

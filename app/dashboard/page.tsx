@@ -12,18 +12,17 @@ export default async function DashboardOverviewPage() {
 
   if (!user) redirect("/auth/login")
 
-  const [{ data: profile }, { data: myRegistrations }] = await Promise.all([
+  const [{ data: profile }, { data: myTournaments }, { data: wallet }] = await Promise.all([
     supabase
       .from("profiles")
       .select("*")
       .eq("id", user.id)
       .single(),
     supabase
-      .from("tournament_registrations")
+      .from("tournament_participants")
       .select(`
         id,
-        status,
-        payment_status,
+        paid,
         created_at,
         tournaments(
           id,
@@ -35,10 +34,14 @@ export default async function DashboardOverviewPage() {
           games(name, slug)
         )
       `)
-      .eq("player_id", user.id)
-      .in("status", ["registered", "checked_in"])
+      .eq("user_id", user.id)
       .order("created_at", { ascending: false })
-      .limit(5)
+      .limit(5),
+    supabase
+      .from("wallets")
+      .select("balance_cents")
+      .eq("user_id", user.id)
+      .single()
   ])
 
   const firstName = profile?.first_name || "there"
@@ -51,15 +54,34 @@ export default async function DashboardOverviewPage() {
         <p className="text-muted-foreground">Your MAJH EVENTS command center</p>
       </div>
 
-      {/* Points Card */}
-      <div className="rounded-xl border border-primary/20 bg-primary/5 p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium text-muted-foreground">Your Points Balance</p>
-            <p className="mt-1 text-4xl font-bold text-primary">{points.toLocaleString()}</p>
-            <p className="mt-1 text-xs text-muted-foreground">Earn points from tournaments, purchases, and events</p>
+      {/* Wallet & Points Cards */}
+      <div className="grid gap-4 sm:grid-cols-2">
+        {/* Wallet Balance */}
+        <div className="rounded-xl border border-green-500/20 bg-green-500/5 p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Wallet Balance</p>
+              <p className="mt-1 text-4xl font-bold text-green-500">
+                ${((wallet?.balance_cents ?? 0) / 100).toFixed(2)}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">Use for tournament entry fees</p>
+            </div>
+            <Link href="/dashboard/wallet" className="rounded-lg bg-green-500/10 p-2 transition-colors hover:bg-green-500/20">
+              <ChevronRight className="h-6 w-6 text-green-500" />
+            </Link>
           </div>
-          <Gift className="h-10 w-10 text-primary/50" />
+        </div>
+
+        {/* Points Balance */}
+        <div className="rounded-xl border border-primary/20 bg-primary/5 p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Points Balance</p>
+              <p className="mt-1 text-4xl font-bold text-primary">{points.toLocaleString()}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Earn from tournaments & events</p>
+            </div>
+            <Gift className="h-10 w-10 text-primary/50" />
+          </div>
         </div>
       </div>
 
@@ -111,12 +133,12 @@ export default async function DashboardOverviewPage() {
           </Button>
         </div>
         
-        {myRegistrations && myRegistrations.length > 0 ? (
+        {myTournaments && myTournaments.length > 0 ? (
           <div className="space-y-3">
-            {myRegistrations.map((reg: any) => (
+            {myTournaments.map((participant: any) => (
               <Link
-                key={reg.id}
-                href={`/esports/tournaments/${reg.tournaments?.slug}`}
+                key={participant.id}
+                href={`/esports/tournaments/${participant.tournaments?.slug}`}
                 className="flex items-center justify-between rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary/50"
               >
                 <div className="flex items-center gap-4">
@@ -124,17 +146,17 @@ export default async function DashboardOverviewPage() {
                     <Trophy className="h-5 w-5 text-primary" />
                   </div>
                   <div>
-                    <p className="font-medium text-foreground">{reg.tournaments?.name}</p>
+                    <p className="font-medium text-foreground">{participant.tournaments?.name}</p>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      {reg.tournaments?.games?.name && (
-                        <span>{reg.tournaments.games.name}</span>
+                      {participant.tournaments?.games?.name && (
+                        <span>{participant.tournaments.games.name}</span>
                       )}
-                      {reg.tournaments?.start_date && (
+                      {participant.tournaments?.start_date && (
                         <>
                           <span>•</span>
                           <span className="flex items-center gap-1">
                             <Clock className="h-3 w-3" />
-                            {formatDistanceToNow(new Date(reg.tournaments.start_date), { addSuffix: true })}
+                            {formatDistanceToNow(new Date(participant.tournaments.start_date), { addSuffix: true })}
                           </span>
                         </>
                       )}
@@ -142,21 +164,21 @@ export default async function DashboardOverviewPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  {reg.payment_status === "pending" && (
-                    <Badge variant="outline" className="bg-yellow-500/10 text-yellow-600">
-                      Payment Pending
+                  {participant.paid && (
+                    <Badge variant="outline" className="bg-green-500/10 text-green-600">
+                      Paid
                     </Badge>
                   )}
                   <Badge 
                     className={
-                      reg.tournaments?.status === "in_progress" 
+                      participant.tournaments?.status === "in_progress" 
                         ? "bg-green-500/10 text-green-600" 
-                        : reg.tournaments?.status === "registration"
+                        : participant.tournaments?.status === "registration"
                           ? "bg-blue-500/10 text-blue-600"
                           : "bg-muted text-muted-foreground"
                     }
                   >
-                    {reg.tournaments?.status === "in_progress" ? "Live" : reg.tournaments?.status?.replace("_", " ")}
+                    {participant.tournaments?.status === "in_progress" ? "Live" : participant.tournaments?.status?.replace("_", " ")}
                   </Badge>
                 </div>
               </Link>
