@@ -21,7 +21,8 @@ import {
   AlertCircle,
   Trash2,
   FileX,
-  Undo2
+  Undo2,
+  XCircle
 } from "lucide-react"
 import { findWalletInconsistencies, recalculateAllWallets, voidTransaction, reverseTransaction, findOrphanedDeposits } from "@/lib/wallet-actions"
 import { Input } from "@/components/ui/input"
@@ -513,6 +514,10 @@ export function FinancialReconciliationDashboard() {
             <FileX className="h-4 w-4" />
             Transaction Corrections
           </TabsTrigger>
+          <TabsTrigger value="audit-log" className="flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4" />
+            Audit Log
+          </TabsTrigger>
         </TabsList>
 
         {/* Stripe ↔ DB Reconciliation */}
@@ -951,6 +956,11 @@ export function FinancialReconciliationDashboard() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* Audit Log */}
+        <TabsContent value="audit-log">
+          <AuditLogPanel formatCurrency={formatCurrency} />
+        </TabsContent>
       </Tabs>
 
       {/* Void Confirmation Dialog */}
@@ -1375,5 +1385,236 @@ function RecoverStripePaymentDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+// Audit Log Panel Component
+interface AuditLogEntry {
+  id: string
+  action_type: string
+  target_type: string
+  target_id: string
+  user_id: string | null
+  performed_by: string
+  performedByEmail: string
+  amount_cents: number | null
+  previous_balance_cents: number | null
+  new_balance_cents: number | null
+  reason: string
+  documentation: string | null
+  is_test_data: boolean
+  environment: string
+  status: string
+  error_message: string | null
+  created_at: string
+  idempotency_key: string | null
+}
+
+function AuditLogPanel({ formatCurrency }: { formatCurrency: (cents: number) => string }) {
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [filter, setFilter] = useState<string>("all")
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetchAuditLogs()
+  }, [filter])
+
+  async function fetchAuditLogs() {
+    setLoading(true)
+    try {
+      const params = new URLSearchParams()
+      if (filter && filter !== "all") {
+        params.set("actionType", filter)
+      }
+      const response = await fetch(`/api/admin/reconciliation/audit-log?${params}`)
+      const result = await response.json()
+      
+      if (result.success) {
+        setAuditLogs(result.auditLogs)
+      } else {
+        setError(result.error || "Failed to fetch audit logs")
+      }
+    } catch {
+      setError("Failed to fetch audit logs")
+    }
+    setLoading(false)
+  }
+
+  const getActionIcon = (action: string) => {
+    switch (action) {
+      case "void": return <XCircle className="h-4 w-4 text-red-500" />
+      case "reversal": return <Undo2 className="h-4 w-4 text-amber-500" />
+      case "recovery": return <Database className="h-4 w-4 text-emerald-500" />
+      case "dismiss": return <Trash2 className="h-4 w-4 text-gray-500" />
+      case "wallet_sync": return <RefreshCw className="h-4 w-4 text-blue-500" />
+      default: return <ShieldCheck className="h-4 w-4" />
+    }
+  }
+
+  const getActionLabel = (action: string) => {
+    switch (action) {
+      case "void": return "Voided"
+      case "reversal": return "Reversed"
+      case "recovery": return "Recovered"
+      case "dismiss": return "Dismissed"
+      case "wallet_sync": return "Wallet Sync"
+      case "manual_credit": return "Manual Credit"
+      default: return action
+    }
+  }
+
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="py-8 flex justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <ShieldCheck className="h-5 w-5" />
+              Reconciliation Audit Log
+            </CardTitle>
+            <CardDescription>
+              Complete history of all financial corrections for compliance and accounting review
+            </CardDescription>
+          </div>
+          <div className="flex gap-2">
+            <select
+              className="px-3 py-2 border rounded-md text-sm bg-background"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+            >
+              <option value="all">All Actions</option>
+              <option value="void">Voids</option>
+              <option value="reversal">Reversals</option>
+              <option value="recovery">Recoveries</option>
+              <option value="dismiss">Dismissals</option>
+              <option value="wallet_sync">Wallet Syncs</option>
+            </select>
+            <Button variant="outline" size="sm" onClick={fetchAuditLogs}>
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {error && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {auditLogs.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            <ShieldCheck className="h-12 w-12 mx-auto mb-3" />
+            <p>No reconciliation actions recorded yet.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {auditLogs.map((log) => (
+              <div 
+                key={log.id} 
+                className={`border rounded-lg p-4 ${log.is_test_data ? "bg-amber-50/50 border-amber-200" : ""}`}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    {getActionIcon(log.action_type)}
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{getActionLabel(log.action_type)}</span>
+                        {log.is_test_data && (
+                          <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">
+                            TEST
+                          </Badge>
+                        )}
+                        {log.status === "failed" && (
+                          <Badge variant="destructive" className="text-xs">
+                            FAILED
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-sm text-muted-foreground">{log.reason}</p>
+                    </div>
+                  </div>
+                  <div className="text-right text-sm">
+                    {log.amount_cents && (
+                      <div className={`font-mono font-medium ${log.is_test_data ? "text-amber-600" : ""}`}>
+                        {log.is_test_data ? "(Test) " : ""}
+                        {formatCurrency(log.amount_cents)}
+                      </div>
+                    )}
+                    <div className="text-muted-foreground text-xs">
+                      {new Date(log.created_at).toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Expandable details */}
+                <button
+                  className="text-xs text-muted-foreground mt-2 hover:underline"
+                  onClick={() => setExpandedId(expandedId === log.id ? null : log.id)}
+                >
+                  {expandedId === log.id ? "Hide details" : "Show details"}
+                </button>
+
+                {expandedId === log.id && (
+                  <div className="mt-3 pt-3 border-t text-sm space-y-2">
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <span className="text-muted-foreground">Target:</span>{" "}
+                        <span className="font-mono">{log.target_type}: {log.target_id.slice(0, 20)}...</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Performed by:</span>{" "}
+                        {log.performedByEmail}
+                      </div>
+                      {log.previous_balance_cents !== null && (
+                        <div>
+                          <span className="text-muted-foreground">Previous balance:</span>{" "}
+                          <span className="font-mono">{formatCurrency(log.previous_balance_cents)}</span>
+                        </div>
+                      )}
+                      {log.new_balance_cents !== null && (
+                        <div>
+                          <span className="text-muted-foreground">New balance:</span>{" "}
+                          <span className="font-mono">{formatCurrency(log.new_balance_cents)}</span>
+                        </div>
+                      )}
+                      {log.idempotency_key && (
+                        <div className="col-span-2">
+                          <span className="text-muted-foreground">Idempotency key:</span>{" "}
+                          <span className="font-mono text-xs">{log.idempotency_key}</span>
+                        </div>
+                      )}
+                    </div>
+                    {log.documentation && (
+                      <div className="mt-2 p-2 bg-muted rounded text-xs font-mono whitespace-pre-wrap">
+                        {log.documentation}
+                      </div>
+                    )}
+                    {log.error_message && (
+                      <Alert variant="destructive" className="mt-2">
+                        <AlertDescription className="text-xs">{log.error_message}</AlertDescription>
+                      </Alert>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }
