@@ -4,6 +4,23 @@
 -- =============================================================================
 
 -- ============================================
+-- DROP EXISTING FUNCTIONS TO ALLOW RECREATION
+-- ============================================
+DROP FUNCTION IF EXISTS approve_withdrawal(UUID, UUID);
+DROP FUNCTION IF EXISTS reject_withdrawal(UUID, UUID, TEXT);
+DROP FUNCTION IF EXISTS release_escrow(UUID, UUID);
+DROP FUNCTION IF EXISTS process_payout(UUID, UUID);
+DROP FUNCTION IF EXISTS process_all_pending_payouts(UUID, UUID);
+DROP FUNCTION IF EXISTS void_transaction(UUID, UUID, TEXT);
+DROP FUNCTION IF EXISTS run_daily_reconciliation();
+DROP FUNCTION IF EXISTS check_risk_flags(UUID);
+DROP FUNCTION IF EXISTS toggle_system_control(TEXT, BOOLEAN, UUID, TEXT);
+DROP FUNCTION IF EXISTS check_withdrawal_allowed(UUID, INT);
+DROP FUNCTION IF EXISTS freeze_user_wallet(UUID, UUID, TEXT);
+DROP FUNCTION IF EXISTS unfreeze_user_wallet(UUID, UUID);
+
+
+-- ============================================
 -- 1. APPROVE WITHDRAWAL (Atomic)
 -- ============================================
 CREATE OR REPLACE FUNCTION approve_withdrawal(
@@ -557,6 +574,7 @@ INSERT INTO system_controls (control_type, is_enabled, threshold_value) VALUES
   ('withdrawals_enabled', true, NULL),
   ('deposits_enabled', true, NULL),
   ('payouts_enabled', true, NULL),
+  ('escrow_enabled', true, NULL),
   ('daily_withdrawal_limit', true, 100000), -- $1000 default
   ('circuit_breaker_withdrawals', true, 500000) -- $5000 triggers circuit breaker
 ON CONFLICT (control_type) DO NOTHING;
