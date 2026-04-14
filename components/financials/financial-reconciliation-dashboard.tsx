@@ -358,7 +358,24 @@ export function FinancialReconciliationDashboard() {
 
   if (!data) return null
 
-  const { systemHealth, depositReconciliation, walletMismatches, escrows, summary } = data
+  // Safely destructure with defaults to prevent crashes
+  const { 
+    systemHealth = { 
+      isHealthy: true, 
+      stripeTotalCents: 0, 
+      dbTotalCents: 0, 
+      walletsTotalCents: 0, 
+      calculatedWalletsTotalCents: 0,
+      stripeDbDelta: 0,
+      walletDelta: 0,
+      missingFromDbCount: 0,
+      walletMismatchCount: 0
+    }, 
+    depositReconciliation = [], 
+    walletMismatches = [], 
+    escrows = [], 
+    summary = { totalStripePayments: 0, totalDbRecords: 0, totalWallets: 0, activeEscrows: 0 }
+  } = data
 
   return (
     <div className="space-y-6">

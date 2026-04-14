@@ -65,7 +65,7 @@ export async function GET() {
     const { data: escrows } = await supabase
       .from("escrow_accounts")
       .select("funded_amount_cents, is_test, status")
-      .not("status", "in", '("released","dismissed")')
+      .not("status", "in", "(released,dismissed)")
     
     const liveEscrows = escrows?.filter(e => !e.is_test) || []
     const testEscrows = escrows?.filter(e => e.is_test) || []
