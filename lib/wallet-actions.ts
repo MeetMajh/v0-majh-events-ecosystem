@@ -485,12 +485,13 @@ export async function syncWalletBalance(targetUserId: string) {
     return { error: "Unauthorized - admin access required" }
   }
 
-  // Get all completed transactions for this user
+  // Get all completed transactions for this user (exclude voided)
   const { data: transactions, error: txError } = await supabase
     .from("financial_transactions")
     .select("amount_cents, type")
     .eq("user_id", targetUserId)
     .eq("status", "completed")
+    .neq("status", "voided")
 
   if (txError) {
     return { error: `Failed to fetch transactions: ${txError.message}` }
@@ -584,19 +585,22 @@ export async function findWalletInconsistencies() {
     return { error: `Failed to fetch wallets: ${walletError.message}` }
   }
 
-  // Get all completed transactions grouped by user
+  // Get all completed transactions grouped by user (exclude voided)
   const { data: transactions, error: txError } = await supabase
     .from("financial_transactions")
-    .select("user_id, amount_cents")
-    .eq("status", "completed")
+    .select("user_id, amount_cents, status")
+    .in("status", ["completed", "pending"]) // Exclude voided
 
   if (txError) {
     return { error: `Failed to fetch transactions: ${txError.message}` }
   }
 
-  // Calculate transaction sums per user
+  // Filter to only completed (not voided)
+  const validTransactions = transactions?.filter(tx => tx.status === "completed") || []
+
+  // Calculate transaction sums per user (from valid transactions only)
   const txSums: Record<string, number> = {}
-  transactions?.forEach(tx => {
+  validTransactions.forEach(tx => {
     if (tx.user_id) {
       txSums[tx.user_id] = (txSums[tx.user_id] || 0) + (tx.amount_cents || 0)
     }
@@ -654,19 +658,19 @@ export async function recalculateAllWallets() {
     return { error: `Failed to fetch wallets: ${walletError.message}` }
   }
 
-  // Get all completed transactions
+  // Get all completed transactions (exclude voided)
   const { data: transactions, error: txError } = await supabase
     .from("financial_transactions")
-    .select("user_id, amount_cents")
-    .eq("status", "completed")
+    .select("user_id, amount_cents, status")
+    .in("status", ["completed", "pending"])
 
   if (txError) {
     return { error: `Failed to fetch transactions: ${txError.message}` }
   }
 
-  // Calculate transaction sums per user
+  // Filter to only completed (not voided) and calculate sums
   const txSums: Record<string, number> = {}
-  transactions?.forEach(tx => {
+  transactions?.filter(tx => tx.status === "completed").forEach(tx => {
     if (tx.user_id) {
       txSums[tx.user_id] = (txSums[tx.user_id] || 0) + (tx.amount_cents || 0)
     }

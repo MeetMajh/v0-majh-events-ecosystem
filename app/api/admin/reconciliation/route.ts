@@ -56,11 +56,12 @@ export async function GET() {
       .from("wallets")
       .select("user_id, balance_cents")
     
-    // 4. Fetch all completed transactions for wallet integrity
+    // 4. Fetch all completed transactions for wallet integrity (exclude voided)
     const { data: allTransactions } = await supabase
       .from("financial_transactions")
       .select("user_id, amount_cents")
       .eq("status", "completed")
+      .neq("status", "voided")
     
     // 5. Fetch escrow accounts
     const { data: escrows } = await supabase
