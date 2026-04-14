@@ -12,11 +12,13 @@ import {
   ArrowDownRight,
   Wallet,
   Shield,
+  ShieldCheck,
 } from "lucide-react"
 import { AdminPayoutQueue } from "@/components/financials/admin-payout-queue"
 import { EscrowOverview } from "@/components/financials/escrow-overview"
 import { PlatformRevenue } from "@/components/financials/platform-revenue"
 import { AdminWalletCredit } from "@/components/financials/admin-wallet-credit"
+import { WalletReconciliation } from "@/components/financials/wallet-reconciliation"
 
 export default async function AdminFinancialsPage() {
   const supabase = await createClient()
@@ -220,6 +222,10 @@ export default async function AdminFinancialsPage() {
             <DollarSign className="h-4 w-4" />
             Manual Credit
           </TabsTrigger>
+          <TabsTrigger value="reconciliation" className="flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4" />
+            Reconciliation
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="payouts" className="space-y-4">
@@ -236,6 +242,10 @@ export default async function AdminFinancialsPage() {
 
         <TabsContent value="wallet-credit" className="space-y-4">
           <AdminWalletCredit />
+        </TabsContent>
+
+        <TabsContent value="reconciliation" className="space-y-4">
+          <WalletReconciliation />
         </TabsContent>
       </Tabs>
 
