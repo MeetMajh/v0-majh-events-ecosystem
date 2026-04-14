@@ -28,15 +28,25 @@ export default async function WithdrawalsPage() {
       status,
       description,
       stripe_session_id,
-      created_at,
-      profiles:user_id (
-        display_name,
-        email
-      )
+      created_at
     `)
     .eq("type", "withdrawal")
     .order("created_at", { ascending: false })
     .limit(100)
 
-  return <WithdrawalsManager withdrawals={withdrawals || []} />
+  // Fetch profiles separately
+  const userIds = [...new Set(withdrawals?.map(w => w.user_id).filter(Boolean) || [])]
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("id, display_name, email")
+    .in("id", userIds.length > 0 ? userIds : [""])
+
+  const profilesMap = new Map(profiles?.map(p => [p.id, p]) || [])
+
+  const enrichedWithdrawals = withdrawals?.map(w => ({
+    ...w,
+    profiles: w.user_id ? profilesMap.get(w.user_id) || null : null,
+  })) || []
+
+  return <WithdrawalsManager withdrawals={enrichedWithdrawals} />
 }

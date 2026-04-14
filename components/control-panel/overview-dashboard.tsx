@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useFinancialRealtime } from "@/hooks/use-financial-realtime"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -225,8 +226,8 @@ export function OverviewDashboard({ metrics }: { metrics: OverviewMetrics }) {
               <CardTitle className="text-zinc-100">Recent Transactions</CardTitle>
               <CardDescription className="text-zinc-500">Latest financial activity</CardDescription>
             </div>
-            <Button variant="outline" size="sm" className="border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700">
-              View All
+            <Button variant="outline" size="sm" asChild className="border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700">
+              <Link href="/dashboard/admin/control-panel/transactions">View All</Link>
             </Button>
           </div>
         </CardHeader>

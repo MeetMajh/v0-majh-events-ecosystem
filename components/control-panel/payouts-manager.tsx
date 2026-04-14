@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -27,8 +28,10 @@ import {
   CheckCircle,
   Clock,
   Zap,
+  Loader2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useToast } from "@/hooks/use-toast"
 
 interface Payout {
   id: string
@@ -49,8 +52,12 @@ interface Payout {
 }
 
 export function PayoutsManager({ payouts }: { payouts: Payout[] }) {
+  const router = useRouter()
+  const { toast } = useToast()
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("all")
+  const [processing, setProcessing] = useState<string | null>(null)
+  const [processingAll, setProcessingAll] = useState(false)
 
   const formatCurrency = (cents: number) => {
     return new Intl.NumberFormat("en-US", {
@@ -99,6 +106,74 @@ export function PayoutsManager({ payouts }: { payouts: Payout[] }) {
   const pendingTotal = payouts
     .filter(p => p.status === "pending")
     .reduce((sum, p) => sum + p.amount_cents, 0)
+
+  const handleProcessPayout = async (payoutId: string) => {
+    setProcessing(payoutId)
+    try {
+      const response = await fetch("/api/admin/payouts/process", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ payoutId }),
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        toast({
+          title: "Payout Processed",
+          description: result.message || "Payout has been credited to user wallet",
+        })
+        router.refresh()
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "Failed to process payout",
+          variant: "destructive",
+        })
+      }
+    } catch {
+      toast({
+        title: "Error",
+        description: "Failed to process payout",
+        variant: "destructive",
+      })
+    }
+    setProcessing(null)
+  }
+
+  const handleProcessAllPending = async () => {
+    setProcessingAll(true)
+    try {
+      const response = await fetch("/api/admin/payouts/process", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ processAll: true }),
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        toast({
+          title: "Payouts Processed",
+          description: result.message || `Processed ${result.processed} payouts`,
+        })
+        router.refresh()
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "Failed to process payouts",
+          variant: "destructive",
+        })
+      }
+    } catch {
+      toast({
+        title: "Error",
+        description: "Failed to process payouts",
+        variant: "destructive",
+      })
+    }
+    setProcessingAll(false)
+  }
 
   return (
     <div className="space-y-6">
@@ -158,9 +233,22 @@ export function PayoutsManager({ payouts }: { payouts: Payout[] }) {
               </SelectContent>
             </Select>
 
-            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white">
-              <Zap className="h-4 w-4 mr-2" />
-              Process All Pending
+            <Button 
+              onClick={handleProcessAllPending}
+              disabled={processingAll || pendingTotal === 0}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              {processingAll ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <Zap className="h-4 w-4 mr-2" />
+                  Process All Pending
+                </>
+              )}
             </Button>
           </div>
         </CardContent>
@@ -220,10 +308,18 @@ export function PayoutsManager({ payouts }: { payouts: Payout[] }) {
                         {p.status === "pending" && (
                           <Button 
                             size="sm" 
+                            onClick={() => handleProcessPayout(p.id)}
+                            disabled={processing === p.id}
                             className="bg-emerald-600 hover:bg-emerald-700 text-white h-8"
                           >
-                            <Wallet className="h-3 w-3 mr-1" />
-                            Pay
+                            {processing === p.id ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <>
+                                <Wallet className="h-3 w-3 mr-1" />
+                                Pay
+                              </>
+                            )}
                           </Button>
                         )}
                       </TableCell>

@@ -29,17 +29,28 @@ export default async function PayoutsPage() {
       amount_cents,
       status,
       paid_at,
-      created_at,
-      tournaments (
-        title
-      ),
-      profiles:user_id (
-        display_name,
-        email
-      )
+      created_at
     `)
     .order("created_at", { ascending: false })
     .limit(100)
 
-  return <PayoutsManager payouts={payouts || []} />
+  // Fetch tournaments and profiles separately
+  const tournamentIds = [...new Set(payouts?.map(p => p.tournament_id).filter(Boolean) || [])]
+  const userIds = [...new Set(payouts?.map(p => p.user_id).filter(Boolean) || [])]
+
+  const [{ data: tournaments }, { data: profiles }] = await Promise.all([
+    supabase.from("tournaments").select("id, title").in("id", tournamentIds.length > 0 ? tournamentIds : [""]),
+    supabase.from("profiles").select("id, display_name, email").in("id", userIds.length > 0 ? userIds : [""]),
+  ])
+
+  const tournamentsMap = new Map(tournaments?.map(t => [t.id, t]) || [])
+  const profilesMap = new Map(profiles?.map(p => [p.id, p]) || [])
+
+  const enrichedPayouts = payouts?.map(p => ({
+    ...p,
+    tournaments: p.tournament_id ? tournamentsMap.get(p.tournament_id) || null : null,
+    profiles: p.user_id ? profilesMap.get(p.user_id) || null : null,
+  })) || []
+
+  return <PayoutsManager payouts={enrichedPayouts} />
 }

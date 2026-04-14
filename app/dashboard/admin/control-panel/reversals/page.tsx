@@ -30,11 +30,7 @@ export default async function ReversalsPage() {
       description,
       reversal_of,
       reversal_reason,
-      created_at,
-      profiles:user_id (
-        display_name,
-        email
-      )
+      created_at
     `)
     .eq("type", "reversal")
     .order("created_at", { ascending: false })
@@ -50,11 +46,7 @@ export default async function ReversalsPage() {
       amount_cents,
       status,
       description,
-      created_at,
-      profiles:user_id (
-        display_name,
-        email
-      )
+      created_at
     `)
     .eq("status", "completed")
     .is("reversed_at", null)
@@ -62,10 +54,33 @@ export default async function ReversalsPage() {
     .order("created_at", { ascending: false })
     .limit(100)
 
+  // Fetch all relevant user profiles
+  const allUserIds = [...new Set([
+    ...(reversals?.map(r => r.user_id).filter(Boolean) || []),
+    ...(reversibleTransactions?.map(t => t.user_id).filter(Boolean) || [])
+  ])]
+
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("id, display_name, email")
+    .in("id", allUserIds.length > 0 ? allUserIds : [""])
+
+  const profilesMap = new Map(profiles?.map(p => [p.id, p]) || [])
+
+  const enrichedReversals = reversals?.map(r => ({
+    ...r,
+    profiles: r.user_id ? profilesMap.get(r.user_id) || null : null,
+  })) || []
+
+  const enrichedReversible = reversibleTransactions?.map(t => ({
+    ...t,
+    profiles: t.user_id ? profilesMap.get(t.user_id) || null : null,
+  })) || []
+
   return (
     <ReversalsManager 
-      reversals={reversals || []} 
-      reversibleTransactions={reversibleTransactions || []}
+      reversals={enrichedReversals} 
+      reversibleTransactions={enrichedReversible}
     />
   )
 }

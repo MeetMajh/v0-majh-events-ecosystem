@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -38,6 +39,7 @@ import {
   Eye,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useToast } from "@/hooks/use-toast"
 
 interface Escrow {
   id: string
@@ -55,10 +57,13 @@ interface Escrow {
 }
 
 export function EscrowManager({ escrows }: { escrows: Escrow[] }) {
+  const router = useRouter()
+  const { toast } = useToast()
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [envFilter, setEnvFilter] = useState<string>("all")
   const [selectedEscrow, setSelectedEscrow] = useState<Escrow | null>(null)
+  const [releasing, setReleasing] = useState(false)
 
   const formatCurrency = (cents: number) => {
     return new Intl.NumberFormat("en-US", {
@@ -100,6 +105,41 @@ export function EscrowManager({ escrows }: { escrows: Escrow[] }) {
     
     return matchesSearch && matchesStatus && matchesEnv
   })
+
+  const handleReleaseEscrow = async (escrowId: string) => {
+    setReleasing(true)
+    try {
+      const response = await fetch("/api/admin/escrow/release", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ escrowId }),
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        toast({
+          title: "Escrow Released",
+          description: result.message || "Escrow funds have been released",
+        })
+        setSelectedEscrow(null)
+        router.refresh()
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "Failed to release escrow",
+          variant: "destructive",
+        })
+      }
+    } catch {
+      toast({
+        title: "Error",
+        description: "Failed to release escrow",
+        variant: "destructive",
+      })
+    }
+    setReleasing(false)
+  }
 
   const liveEscrows = escrows.filter(e => !e.is_test)
   const testEscrows = escrows.filter(e => e.is_test)
@@ -345,8 +385,12 @@ export function EscrowManager({ escrows }: { escrows: Escrow[] }) {
                   Close
                 </Button>
                 {selectedEscrow.status === "funded" && (
-                  <Button className="bg-emerald-600 hover:bg-emerald-700 text-white">
-                    Release Escrow
+                  <Button 
+                    onClick={() => handleReleaseEscrow(selectedEscrow.id)}
+                    disabled={releasing}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                  >
+                    {releasing ? "Releasing..." : "Release Escrow"}
                   </Button>
                 )}
               </div>

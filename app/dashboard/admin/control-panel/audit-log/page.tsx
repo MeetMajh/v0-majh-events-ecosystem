@@ -18,7 +18,7 @@ export default async function AuditLogPage() {
 
   if (!staffRole) redirect("/dashboard")
 
-  // Fetch audit logs
+  // Fetch audit logs - query without joins first for reliability
   const { data: auditLogs } = await supabase
     .from("reconciliation_audit_log")
     .select(`
@@ -36,18 +36,30 @@ export default async function AuditLogPage() {
       is_test_data,
       environment,
       status,
-      created_at,
-      profiles:user_id (
-        display_name,
-        email
-      ),
-      admin:performed_by (
-        display_name,
-        email
-      )
+      created_at
     `)
     .order("created_at", { ascending: false })
     .limit(100)
 
-  return <AuditLogViewer logs={auditLogs || []} />
+  // Fetch profile info separately for reliability
+  const userIds = [...new Set([
+    ...(auditLogs?.map(l => l.user_id).filter(Boolean) || []),
+    ...(auditLogs?.map(l => l.performed_by).filter(Boolean) || [])
+  ])]
+
+  const { data: profilesData } = await supabase
+    .from("profiles")
+    .select("id, display_name, email")
+    .in("id", userIds.length > 0 ? userIds : [""])
+
+  const profilesMap = new Map(profilesData?.map(p => [p.id, p]) || [])
+
+  // Merge profiles into logs
+  const enrichedLogs = auditLogs?.map(log => ({
+    ...log,
+    profiles: log.user_id ? profilesMap.get(log.user_id) || null : null,
+    admin: log.performed_by ? profilesMap.get(log.performed_by) || null : null,
+  })) || []
+
+  return <AuditLogViewer logs={enrichedLogs} />
 }

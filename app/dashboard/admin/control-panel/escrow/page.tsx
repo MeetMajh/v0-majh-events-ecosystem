@@ -29,13 +29,23 @@ export default async function EscrowPage() {
       participant_count,
       status,
       is_test,
-      created_at,
-      tournaments (
-        title,
-        start_time
-      )
+      created_at
     `)
     .order("created_at", { ascending: false })
 
-  return <EscrowManager escrows={escrows || []} />
+  // Fetch tournament details separately
+  const tournamentIds = [...new Set(escrows?.map(e => e.tournament_id).filter(Boolean) || [])]
+  const { data: tournaments } = await supabase
+    .from("tournaments")
+    .select("id, title, start_time")
+    .in("id", tournamentIds.length > 0 ? tournamentIds : [""])
+
+  const tournamentsMap = new Map(tournaments?.map(t => [t.id, t]) || [])
+
+  const enrichedEscrows = escrows?.map(e => ({
+    ...e,
+    tournaments: e.tournament_id ? tournamentsMap.get(e.tournament_id) || null : null,
+  })) || []
+
+  return <EscrowManager escrows={enrichedEscrows} />
 }

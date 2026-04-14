@@ -18,7 +18,7 @@ export default async function TransactionsPage() {
 
   if (!staffRole) redirect("/dashboard")
 
-  // Fetch transactions with user info
+  // Fetch transactions
   const { data: transactions } = await supabase
     .from("financial_transactions")
     .select(`
@@ -34,14 +34,24 @@ export default async function TransactionsPage() {
       is_test,
       reversed_at,
       reversal_reason,
-      created_at,
-      profiles:user_id (
-        display_name,
-        email
-      )
+      created_at
     `)
     .order("created_at", { ascending: false })
     .limit(100)
 
-  return <TransactionsLedger transactions={transactions || []} />
+  // Fetch profiles separately
+  const userIds = [...new Set(transactions?.map(t => t.user_id).filter(Boolean) || [])]
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("id, display_name, email")
+    .in("id", userIds.length > 0 ? userIds : [""])
+
+  const profilesMap = new Map(profiles?.map(p => [p.id, p]) || [])
+
+  const enrichedTransactions = transactions?.map(tx => ({
+    ...tx,
+    profiles: tx.user_id ? profilesMap.get(tx.user_id) || null : null,
+  })) || []
+
+  return <TransactionsLedger transactions={enrichedTransactions} />
 }

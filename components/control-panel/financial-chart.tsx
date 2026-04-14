@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { createClient } from "@/lib/supabase/client"
 import { 
   LineChart, 
   Line, 
@@ -12,9 +13,6 @@ import {
   BarChart,
   Bar,
   Cell,
-  PieChart,
-  Pie,
-  Legend,
 } from "recharts"
 
 interface FinancialChartProps {
@@ -27,31 +25,98 @@ interface FinancialChartProps {
   }
 }
 
+interface DepositDataPoint {
+  date: string
+  amount: number
+}
+
 export function FinancialChart({ type, metrics }: FinancialChartProps) {
   const [mounted, setMounted] = useState(false)
+  const [depositData, setDepositData] = useState<DepositDataPoint[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     setMounted(true)
-  }, [])
+    
+    if (type === "deposits") {
+      fetchDepositData()
+    } else {
+      setLoading(false)
+    }
+  }, [type])
 
-  if (!mounted) {
+  async function fetchDepositData() {
+    try {
+      const supabase = createClient()
+      
+      // Get deposits for the last 14 days grouped by day
+      const fourteenDaysAgo = new Date()
+      fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14)
+      
+      const { data, error } = await supabase
+        .from("financial_transactions")
+        .select("amount_cents, created_at")
+        .eq("type", "deposit")
+        .eq("status", "completed")
+        .gte("created_at", fourteenDaysAgo.toISOString())
+        .order("created_at", { ascending: true })
+
+      if (error) {
+        console.error("[v0] Error fetching deposit data:", error)
+        setLoading(false)
+        return
+      }
+
+      // Group by date
+      const grouped: Record<string, number> = {}
+      
+      // Initialize all 14 days with 0
+      for (let i = 13; i >= 0; i--) {
+        const date = new Date()
+        date.setDate(date.getDate() - i)
+        const dateKey = date.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+        grouped[dateKey] = 0
+      }
+
+      // Sum deposits by day
+      data?.forEach((tx) => {
+        const date = new Date(tx.created_at)
+        const dateKey = date.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+        if (grouped[dateKey] !== undefined) {
+          grouped[dateKey] += Math.abs(tx.amount_cents || 0)
+        }
+      })
+
+      // Convert to array
+      const chartData = Object.entries(grouped).map(([date, amount]) => ({
+        date,
+        amount,
+      }))
+
+      setDepositData(chartData)
+    } catch (err) {
+      console.error("[v0] Chart data fetch error:", err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (!mounted || loading) {
     return (
       <div className="h-[300px] flex items-center justify-center text-zinc-500">
-        Loading chart...
+        <div className="animate-pulse">Loading chart...</div>
       </div>
     )
   }
 
   if (type === "deposits") {
-    // Generate mock data for deposits over time
-    const depositData = Array.from({ length: 14 }, (_, i) => {
-      const date = new Date()
-      date.setDate(date.getDate() - (13 - i))
-      return {
-        date: date.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-        amount: Math.floor(Math.random() * 50000) + 10000,
-      }
-    })
+    if (depositData.length === 0 || depositData.every(d => d.amount === 0)) {
+      return (
+        <div className="h-[300px] flex items-center justify-center text-zinc-500">
+          No deposit data for the last 14 days
+        </div>
+      )
+    }
 
     return (
       <ResponsiveContainer width="100%" height={300}>

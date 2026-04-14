@@ -121,17 +121,46 @@ export function WithdrawalsManager({ withdrawals }: { withdrawals: Withdrawal[] 
     
     setProcessing(true)
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      let endpoint = ""
+      let body: Record<string, string> = {}
       
-      toast({
-        title: actionDialog.type === "approve" ? "Withdrawal Approved" : 
-               actionDialog.type === "reject" ? "Withdrawal Rejected" : "Retry Initiated",
-        description: `Successfully processed withdrawal request`,
+      if (actionDialog.type === "approve") {
+        endpoint = "/api/admin/withdrawals/approve"
+        body = { withdrawalId: actionDialog.withdrawal.id }
+      } else if (actionDialog.type === "reject") {
+        endpoint = "/api/admin/withdrawals/reject"
+        body = { withdrawalId: actionDialog.withdrawal.id, reason: rejectionReason }
+      } else {
+        // Retry - resubmit as approve
+        endpoint = "/api/admin/withdrawals/approve"
+        body = { withdrawalId: actionDialog.withdrawal.id }
+      }
+
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
       })
-      
-      setActionDialog(null)
-      router.refresh()
+
+      const result = await response.json()
+
+      if (result.success) {
+        toast({
+          title: actionDialog.type === "approve" ? "Withdrawal Approved" : 
+                 actionDialog.type === "reject" ? "Withdrawal Rejected" : "Retry Initiated",
+          description: result.message || "Successfully processed withdrawal request",
+        })
+        
+        setActionDialog(null)
+        setRejectionReason("")
+        router.refresh()
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "Failed to process request",
+          variant: "destructive",
+        })
+      }
     } catch {
       toast({
         title: "Error",

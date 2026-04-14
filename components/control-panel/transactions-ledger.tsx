@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -44,8 +45,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
+  Loader2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useToast } from "@/hooks/use-toast"
 
 interface Transaction {
   id: string
@@ -68,12 +71,15 @@ interface Transaction {
 }
 
 export function TransactionsLedger({ transactions }: { transactions: Transaction[] }) {
+  const router = useRouter()
+  const { toast } = useToast()
   const [search, setSearch] = useState("")
   const [typeFilter, setTypeFilter] = useState<string>("all")
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [envFilter, setEnvFilter] = useState<string>("all")
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
+  const [reversing, setReversing] = useState(false)
 
   const formatCurrency = (cents: number) => {
     return new Intl.NumberFormat("en-US", {
@@ -127,6 +133,45 @@ export function TransactionsLedger({ transactions }: { transactions: Transaction
   const openDetails = (tx: Transaction) => {
     setSelectedTx(tx)
     setDetailsOpen(true)
+  }
+
+  const handleReverseTransaction = async (tx: Transaction) => {
+    setReversing(true)
+    try {
+      const response = await fetch("/api/admin/transactions/reverse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transactionId: tx.id,
+          reason: "Manual reversal from admin control panel",
+        }),
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        toast({
+          title: "Transaction Reversed",
+          description: `Successfully reversed transaction. New balance: $${((result.newBalance || 0) / 100).toFixed(2)}`,
+        })
+        setDetailsOpen(false)
+        setSelectedTx(null)
+        router.refresh()
+      } else {
+        toast({
+          title: "Reversal Failed",
+          description: result.error || "Failed to reverse transaction",
+          variant: "destructive",
+        })
+      }
+    } catch {
+      toast({
+        title: "Error",
+        description: "Failed to reverse transaction",
+        variant: "destructive",
+      })
+    }
+    setReversing(false)
   }
 
   return (
@@ -288,7 +333,10 @@ export function TransactionsLedger({ transactions }: { transactions: Transaction
                           )}
                           <DropdownMenuSeparator className="bg-zinc-800" />
                           {!tx.reversed_at && tx.status === "completed" && (
-                            <DropdownMenuItem className="text-orange-400 focus:bg-zinc-800 focus:text-orange-300">
+                            <DropdownMenuItem 
+                              onClick={() => handleReverseTransaction(tx)}
+                              className="text-orange-400 focus:bg-zinc-800 focus:text-orange-300"
+                            >
                               <Undo2 className="h-4 w-4 mr-2" />
                               Reverse Transaction
                             </DropdownMenuItem>
@@ -403,9 +451,22 @@ export function TransactionsLedger({ transactions }: { transactions: Transaction
                   Close
                 </Button>
                 {!selectedTx.reversed_at && selectedTx.status === "completed" && (
-                  <Button variant="destructive">
-                    <Undo2 className="h-4 w-4 mr-2" />
-                    Reverse Transaction
+                  <Button 
+                    variant="destructive"
+                    onClick={() => handleReverseTransaction(selectedTx)}
+                    disabled={reversing}
+                  >
+                    {reversing ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Reversing...
+                      </>
+                    ) : (
+                      <>
+                        <Undo2 className="h-4 w-4 mr-2" />
+                        Reverse Transaction
+                      </>
+                    )}
                   </Button>
                 )}
               </div>
