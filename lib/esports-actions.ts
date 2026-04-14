@@ -257,7 +257,7 @@ export async function registerForTournament(tournamentId: string) {
     .from("tournament_registrations")
     .select("*", { count: "exact", head: true })
     .eq("tournament_id", tournamentId)
-    .in("status", ["registered", "checked_in", "pending"])
+    .in("status", ["registered", "checked_in"])
 
   if (tournament.max_participants && (count ?? 0) >= tournament.max_participants) {
     return { error: "Tournament is full" }
@@ -272,7 +272,7 @@ export async function registerForTournament(tournamentId: string) {
         player_id: user.id,
         registration_type: "paid",
         payment_status: "pending",
-        status: "pending",
+status: "registered",
       })
       .select()
       .single()
