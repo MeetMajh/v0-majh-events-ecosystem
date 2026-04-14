@@ -76,19 +76,23 @@ export const SystemHealthSchema = z.object({
 })
 
 export const DepositReconciliationItemSchema = z.object({
-  stripePaymentIntentId: z.string(),
-  stripeAmount: z.number().int(),
+  stripeId: z.string(),
+  stripeAmount: z.number().int().nullable(),
+  stripeDate: z.string(),
+  stripeCustomerEmail: z.string().nullable().optional(),
+  stripePaymentIntent: z.string().nullable().optional(),
+  userId: z.string().uuid().nullable(),
+  dbRecordId: z.string().uuid().nullable(),
   dbAmount: z.number().int().nullable(),
-  status: z.enum(["matched", "missing_from_db", "amount_mismatch"]),
-  createdAt: z.string(),
+  status: z.enum(["matched", "missing_db_record", "amount_mismatch", "dismissed"]),
 })
 
 export const WalletMismatchSchema = z.object({
   userId: z.string().uuid(),
   email: z.string().nullable().optional(),
   walletBalance: z.number().int(),
-  transactionSum: z.number().int(),
-  discrepancy: z.number().int(),
+  calculatedBalance: z.number().int(),
+  delta: z.number().int(),
 })
 
 export const EscrowSummarySchema = z.object({
@@ -244,7 +248,7 @@ export function determineHealthState(data: z.infer<typeof ReconciliationDataSche
 
   // Check for wallet mismatches
   if (data.walletMismatches.length > 0) {
-    const totalDiscrepancy = data.walletMismatches.reduce((sum, w) => sum + Math.abs(w.discrepancy), 0)
+    const totalDiscrepancy = data.walletMismatches.reduce((sum, w) => sum + Math.abs(w.delta), 0)
     issues.push({
       severity: totalDiscrepancy > 10000 ? "critical" : "warning", // > $100 is critical
       type: "WALLET_MISMATCH",
@@ -253,10 +257,10 @@ export function determineHealthState(data: z.infer<typeof ReconciliationDataSche
     })
   }
 
-  // Check for missing deposits in DB
-  const missingDeposits = data.depositReconciliation.filter(d => d.status === "missing_from_db")
+  // Check for missing deposits in DB (use correct status value)
+  const missingDeposits = data.depositReconciliation.filter(d => d.status === "missing_db_record")
   if (missingDeposits.length > 0) {
-    const totalMissing = missingDeposits.reduce((sum, d) => sum + d.stripeAmount, 0)
+    const totalMissing = missingDeposits.reduce((sum, d) => sum + (d.stripeAmount || 0), 0)
     issues.push({
       severity: "critical",
       type: "MISSING_DEPOSITS",
