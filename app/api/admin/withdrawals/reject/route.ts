@@ -29,74 +29,34 @@ export async function POST(req: Request) {
     }
 
     if (!reason || reason.trim().length < 5) {
-      return NextResponse.json({ error: "Rejection reason is required" }, { status: 400 })
+      return NextResponse.json({ error: "Rejection reason is required (min 5 characters)" }, { status: 400 })
     }
 
-    // Get the withdrawal
-    const { data: withdrawal, error: fetchError } = await supabase
-      .from("financial_transactions")
-      .select("*")
-      .eq("id", withdrawalId)
-      .eq("type", "withdrawal")
-      .eq("status", "pending")
-      .single()
-
-    if (fetchError || !withdrawal) {
-      return NextResponse.json({ error: "Withdrawal not found or not pending" }, { status: 404 })
-    }
-
-    // Mark as failed/rejected
-    const { error: updateError } = await supabase
-      .from("financial_transactions")
-      .update({ 
-        status: "failed",
-        description: `Rejected: ${reason.trim()}`
-      })
-      .eq("id", withdrawalId)
-
-    if (updateError) {
-      return NextResponse.json({ error: updateError.message }, { status: 500 })
-    }
-
-    // Return funds to wallet (withdrawal amounts are negative)
-    const amountToReturn = Math.abs(withdrawal.amount_cents)
-    
-    const { error: walletError } = await supabase.rpc("adjust_wallet_balance", {
-      p_user_id: withdrawal.user_id,
-      p_amount_cents: amountToReturn,
-      p_reason: `Withdrawal rejected: ${reason.trim()}`
+    // Use atomic RPC function for withdrawal rejection
+    const { data: result, error: rpcError } = await supabase.rpc("reject_withdrawal", {
+      p_withdrawal_id: withdrawalId,
+      p_admin_id: user.id,
+      p_reason: reason.trim()
     })
 
-    // If RPC doesn't exist, do direct update
-    if (walletError) {
-      await supabase
-        .from("wallets")
-        .update({ 
-          balance_cents: supabase.rpc("add_cents", { 
-            current: supabase.sql`balance_cents`, 
-            add: amountToReturn 
-          })
-        })
-        .eq("user_id", withdrawal.user_id)
+    if (rpcError) {
+      console.error("RPC error:", rpcError)
+      return NextResponse.json({ error: rpcError.message }, { status: 500 })
     }
 
-    // Log to audit trail
-    await supabase
-      .from("reconciliation_audit_log")
-      .insert({
-        action_type: "withdrawal_rejected",
-        target_type: "transaction",
-        target_id: withdrawalId,
-        user_id: withdrawal.user_id,
-        performed_by: user.id,
-        amount_cents: withdrawal.amount_cents,
-        reason: reason.trim(),
-        status: "completed",
-      })
+    if (!result?.success) {
+      return NextResponse.json({ 
+        success: false,
+        error: result?.error || "Failed to reject withdrawal" 
+      }, { status: 400 })
+    }
 
     return NextResponse.json({
       success: true,
-      message: "Withdrawal rejected and funds returned to wallet"
+      message: "Withdrawal rejected and funds returned to wallet",
+      withdrawal_id: result.withdrawal_id,
+      refunded_amount: result.refunded_amount,
+      new_balance: result.new_balance
     })
 
   } catch (error) {

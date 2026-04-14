@@ -50,11 +50,13 @@ export async function POST(req: Request) {
       }, { status: 400 })
     }
 
-    // Call the atomic reversal function
-    const { data, error } = await supabase.rpc("reverse_transaction", {
+    // Call the atomic reversal function (perform_reversal supports idempotency)
+    const idempotencyKey = `reversal_${transactionId}_${Date.now()}`
+    const { data, error } = await supabase.rpc("perform_reversal", {
       p_transaction_id: transactionId,
       p_reason: reason.trim(),
       p_admin_id: user.id,
+      p_idempotency_key: idempotencyKey
     })
 
     if (error) {
@@ -75,10 +77,12 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
-      reversalId: data.reversalId,
-      previousBalance: data.previousBalance,
-      newBalance: data.newBalance,
-      message: "Transaction reversed successfully"
+      reversalId: data.reversal_id,
+      originalAmount: data.original_amount,
+      newBalance: data.new_balance,
+      userId: data.user_id,
+      alreadyProcessed: data.already_processed || false,
+      message: data.already_processed ? "Reversal was already processed" : "Transaction reversed successfully"
     })
 
   } catch (error) {

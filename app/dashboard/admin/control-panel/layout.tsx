@@ -18,6 +18,7 @@ import {
   Receipt,
   ArrowLeftRight,
   Shield,
+  ShieldAlert,
   Wallet,
   ArrowDownToLine,
   Undo2,
@@ -69,6 +70,11 @@ const sidebarNav = [
     title: "Audit Log",
     href: "/dashboard/admin/control-panel/audit-log",
     icon: ScrollText,
+  },
+  {
+    title: "System Controls",
+    href: "/dashboard/admin/control-panel/system",
+    icon: ShieldAlert,
   },
 ]
 
