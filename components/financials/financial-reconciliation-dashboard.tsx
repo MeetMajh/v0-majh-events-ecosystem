@@ -71,6 +71,8 @@ interface Escrow {
   fundedAmount: number
   participantCount: number
   status: string
+  isTestMode?: boolean
+  environment?: "test" | "live" | "unknown"
 }
 
 interface OrphanedDeposit {
@@ -268,6 +270,33 @@ export function FinancialReconciliationDashboard() {
     setDismissDialogOpen(false)
     setSelectedStripeItem(null)
     setDismissReason("")
+  }
+
+  async function handleDismissEscrow(escrow: Escrow) {
+    try {
+      const response = await fetch("/api/admin/reconciliation/dismiss", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetType: "escrow",
+          targetId: escrow.tournamentId,
+          reason: "Test escrow - not real funds",
+          amountCents: escrow.fundedAmount,
+          isTestData: true,
+          environment: "test"
+        }),
+      })
+      
+      const result = await response.json()
+      
+      if (result.success) {
+        await fetchReconciliationData()
+      } else {
+        setError(result.error || "Failed to dismiss escrow")
+      }
+    } catch {
+      setError("Failed to dismiss escrow")
+    }
   }
 
   async function confirmRecoverStripePayment(userId: string) {
@@ -508,6 +537,7 @@ export function FinancialReconciliationDashboard() {
                       <TableRow>
                         <TableHead>Date</TableHead>
                         <TableHead>Stripe ID</TableHead>
+                        <TableHead>Env</TableHead>
                         <TableHead>Customer</TableHead>
                         <TableHead className="text-right">Stripe Amount</TableHead>
                         <TableHead className="text-right">DB Amount</TableHead>
@@ -516,13 +546,25 @@ export function FinancialReconciliationDashboard() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {depositReconciliation.map((item) => (
-                        <TableRow key={item.stripeId}>
+                      {depositReconciliation.map((item) => {
+                        const isTestMode = item.stripeId.startsWith("cs_test_")
+                        return (
+                        <TableRow key={item.stripeId} className={isTestMode ? "bg-amber-50/50" : ""}>
                           <TableCell className="text-sm">
                             {formatDate(item.stripeDate)}
                           </TableCell>
                           <TableCell className="font-mono text-xs">
-                            {item.stripeId.slice(0, 20)}...
+                            {item.stripeId.slice(0, 20)}...</TableCell>
+                          <TableCell>
+                            {isTestMode ? (
+                              <Badge variant="outline" className="text-amber-600 border-amber-300 text-xs">
+                                TEST
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-emerald-600 border-emerald-300 text-xs">
+                                LIVE
+                              </Badge>
+                            )}
                           </TableCell>
                           <TableCell className="text-sm">
                             {item.stripeCustomerEmail || "N/A"}
@@ -601,7 +643,7 @@ export function FinancialReconciliationDashboard() {
                             )}
                           </TableCell>
                         </TableRow>
-                      ))}
+                      )})}
                     </TableBody>
                   </Table>
                 </div>
@@ -676,10 +718,21 @@ export function FinancialReconciliationDashboard() {
             <CardHeader>
               <CardTitle>Active Escrow Accounts</CardTitle>
               <CardDescription>
-                Tournament funds held in escrow
+                Tournament funds held in escrow. Test escrows do not represent real money.
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {/* Test data notice */}
+              {escrows.some(e => e.isTestMode) && (
+                <Alert className="mb-4 border-amber-200 bg-amber-50">
+                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                  <AlertDescription className="text-amber-800">
+                    <strong>Test Data Detected:</strong> Some escrow accounts are from test/development. 
+                    These do not represent real funds and should be dismissed or ignored in financial reporting.
+                  </AlertDescription>
+                </Alert>
+              )}
+              
               {escrows.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <DollarSign className="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
@@ -691,18 +744,35 @@ export function FinancialReconciliationDashboard() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Tournament</TableHead>
+                        <TableHead>Env</TableHead>
                         <TableHead className="text-right">Funded Amount</TableHead>
                         <TableHead className="text-right">Participants</TableHead>
                         <TableHead>Status</TableHead>
+                        <TableHead>Action</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {escrows.map((item) => (
-                        <TableRow key={item.tournamentId}>
+                        <TableRow 
+                          key={item.tournamentId}
+                          className={item.isTestMode ? "bg-amber-50/50" : ""}
+                        >
                           <TableCell className="font-medium">
                             {item.tournamentName}
                           </TableCell>
+                          <TableCell>
+                            {item.isTestMode ? (
+                              <Badge variant="outline" className="text-amber-600 border-amber-300 text-xs">
+                                TEST
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-emerald-600 border-emerald-300 text-xs">
+                                LIVE
+                              </Badge>
+                            )}
+                          </TableCell>
                           <TableCell className="text-right font-mono">
+                            {item.isTestMode && <span className="text-amber-600">[TEST] </span>}
                             {formatCurrency(item.fundedAmount)}
                           </TableCell>
                           <TableCell className="text-right">
@@ -713,10 +783,42 @@ export function FinancialReconciliationDashboard() {
                               {item.status}
                             </Badge>
                           </TableCell>
+                          <TableCell>
+                            {item.isTestMode && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-muted-foreground hover:text-amber-600"
+                                onClick={() => handleDismissEscrow(item)}
+                                title="Mark as test data"
+                              >
+                                <Trash2 className="h-4 w-4 mr-1" />
+                                Dismiss
+                              </Button>
+                            )}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
                   </Table>
+                </div>
+              )}
+              
+              {/* Summary for live vs test */}
+              {escrows.length > 0 && (
+                <div className="mt-4 pt-4 border-t grid grid-cols-2 gap-4 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Live Escrow Total:</span>
+                    <span className="font-mono font-medium text-emerald-600">
+                      {formatCurrency(escrows.filter(e => !e.isTestMode).reduce((sum, e) => sum + e.fundedAmount, 0))}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Test Escrow Total:</span>
+                    <span className="font-mono font-medium text-amber-600">
+                      {formatCurrency(escrows.filter(e => e.isTestMode).reduce((sum, e) => sum + e.fundedAmount, 0))}
+                    </span>
+                  </div>
                 </div>
               )}
             </CardContent>

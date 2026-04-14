@@ -80,9 +80,34 @@ ADD COLUMN IF NOT EXISTS is_test_mode BOOLEAN DEFAULT false;
 ALTER TABLE financial_transactions 
 ADD COLUMN IF NOT EXISTS environment TEXT CHECK (environment IN ('test', 'live', 'unknown'));
 
--- Add is_test_mode to escrow_accounts
+-- Add test mode tracking to escrow_accounts
 ALTER TABLE escrow_accounts 
 ADD COLUMN IF NOT EXISTS is_test_mode BOOLEAN DEFAULT false;
+
+ALTER TABLE escrow_accounts 
+ADD COLUMN IF NOT EXISTS environment TEXT CHECK (environment IN ('test', 'live', 'unknown'));
+
+ALTER TABLE escrow_accounts 
+ADD COLUMN IF NOT EXISTS dismissed_at TIMESTAMPTZ;
+
+ALTER TABLE escrow_accounts 
+ADD COLUMN IF NOT EXISTS dismissed_by UUID REFERENCES profiles(id);
+
+ALTER TABLE escrow_accounts 
+ADD COLUMN IF NOT EXISTS dismiss_reason TEXT;
+
+-- Add dismiss tracking to financial_transactions
+ALTER TABLE financial_transactions 
+ADD COLUMN IF NOT EXISTS dismissed_at TIMESTAMPTZ;
+
+ALTER TABLE financial_transactions 
+ADD COLUMN IF NOT EXISTS dismissed_by UUID REFERENCES profiles(id);
+
+ALTER TABLE financial_transactions 
+ADD COLUMN IF NOT EXISTS dismiss_reason TEXT;
+
+ALTER TABLE financial_transactions 
+ADD COLUMN IF NOT EXISTS is_test BOOLEAN DEFAULT false;
 
 -- Create view for reconciliation summary (useful for dashboards)
 CREATE OR REPLACE VIEW reconciliation_summary AS
