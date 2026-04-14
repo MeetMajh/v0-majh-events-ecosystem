@@ -63,10 +63,10 @@ export async function GET() {
       .eq("status", "completed")
       .neq("status", "voided")
     
-    // 5. Fetch escrow accounts
+    // 5. Fetch escrow accounts (include test mode flags)
     const { data: escrows } = await supabase
       .from("escrow_accounts")
-      .select("tournament_id, funded_amount_cents, status, tournaments(name)")
+      .select("tournament_id, funded_amount_cents, status, is_test, environment, tournaments(name)")
       .neq("status", "released")
     
     // 6. Fetch tournament participants for escrow validation
@@ -97,11 +97,23 @@ export async function GET() {
     
     const totalCalculatedWallets = Object.values(txSums).reduce((sum, v) => sum + v, 0)
     
+    // Find dismissed payments (voided deposit records with the stripe_session_id)
+    const { data: dismissedPayments } = await supabase
+      .from("financial_transactions")
+      .select("stripe_session_id")
+      .eq("status", "voided")
+      .eq("type", "deposit")
+      .not("stripe_session_id", "is", null)
+    
+    const dismissedSessionIds = new Set(dismissedPayments?.map(d => d.stripe_session_id) || [])
+    
     // Find mismatches
     
-    // A. Stripe payments missing from DB
+    // A. Stripe payments missing from DB (exclude dismissed)
     const dbSessionIds = new Set(dbDeposits?.map(d => d.stripe_session_id) || [])
-    const missingFromDb = stripeDeposits.filter(s => !dbSessionIds.has(s.id))
+    const missingFromDb = stripeDeposits.filter(s => 
+      !dbSessionIds.has(s.id) && !dismissedSessionIds.has(s.id)
+    )
     
     // B. Wallet balance mismatches
     const walletMismatches = wallets?.filter(w => {
@@ -125,17 +137,25 @@ export async function GET() {
     // Build reconciliation report
     const depositReconciliation = stripeDeposits.map(stripe => {
       const dbRecord = dbDeposits?.find(d => d.stripe_session_id === stripe.id)
+      const isDismissed = dismissedSessionIds.has(stripe.id)
+      
+      let status: "matched" | "missing_db_record" | "amount_mismatch" | "dismissed" = "missing_db_record"
+      if (isDismissed) {
+        status = "dismissed"
+      } else if (dbRecord) {
+        status = dbRecord.amount_cents === stripe.amount_total ? "matched" : "amount_mismatch"
+      }
+      
       return {
         stripeId: stripe.id,
         stripeAmount: stripe.amount_total,
         stripeDate: new Date(stripe.created * 1000).toISOString(),
-        stripeCustomerEmail: stripe.customer_email,
-        userId: stripe.metadata?.user_id,
+        stripeCustomerEmail: stripe.customer_email || stripe.customer_details?.email,
+        stripePaymentIntent: stripe.payment_intent,
+        userId: stripe.metadata?.user_id || null, // Pre-populated from checkout metadata
         dbRecordId: dbRecord?.id || null,
         dbAmount: dbRecord?.amount_cents || null,
-        status: dbRecord 
-          ? (dbRecord.amount_cents === stripe.amount_total ? "matched" : "amount_mismatch")
-          : "missing_db_record"
+        status
       }
     })
     
@@ -161,7 +181,10 @@ export async function GET() {
         tournamentName: (e.tournaments as { name: string })?.name || "Unknown",
         fundedAmount: e.funded_amount_cents,
         participantCount: participantsByTournament[e.tournament_id] || 0,
-        status: e.status
+        status: e.status,
+        // Detect test mode - check is_test column or infer from environment
+        isTestMode: e.is_test || e.environment === "test" || false,
+        environment: e.environment || (e.is_test ? "test" : "live")
       })),
       summary: {
         totalStripePayments: stripeDeposits.length,
