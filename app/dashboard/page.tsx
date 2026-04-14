@@ -36,7 +36,7 @@ export default async function DashboardOverviewPage() {
         )
       `)
       .eq("player_id", user.id)
-      .in("status", ["registered", "checked_in", "pending_payment"])
+      .in("status", ["registered", "checked_in", "pending"])
       .order("created_at", { ascending: false })
       .limit(5)
   ])
