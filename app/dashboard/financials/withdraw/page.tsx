@@ -12,7 +12,7 @@ export default async function WithdrawPage() {
 
   // Get wallet data
   const { data: wallet } = await supabase
-    .from("user_wallets")
+    .from("wallets")
     .select("*")
     .eq("user_id", user.id)
     .single()
@@ -39,7 +39,7 @@ export default async function WithdrawPage() {
 
   // Get recent withdrawals for history
   const { data: recentWithdrawals } = await supabase
-    .from("wallet_transactions")
+    .from("financial_transactions")
     .select("*")
     .eq("user_id", user.id)
     .eq("type", "withdrawal")

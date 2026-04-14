@@ -140,11 +140,70 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
     return
   }
 
-  const { type, booking_id, rental_id, invoice_id, tournament_id, registration_id, player_id } = metadata
+  const { type, booking_id, rental_id, invoice_id, tournament_id, registration_id, player_id, user_id, amount_cents } = metadata
 
-  console.log("[Stripe Webhook] Processing checkout complete:", { type, booking_id, rental_id, invoice_id, tournament_id })
+  console.log("[Stripe Webhook] Processing checkout complete:", { type, booking_id, rental_id, invoice_id, tournament_id, user_id })
 
   try {
+    // ── Wallet Deposit ──
+    if (type === "wallet_deposit" && user_id && amount_cents) {
+      const amountCentsNum = parseInt(amount_cents, 10)
+      
+      // Check for idempotency
+      const { data: existingTx } = await supabaseAdmin
+        .from("financial_transactions")
+        .select("id")
+        .eq("stripe_session_id", session.id)
+        .single()
+
+      if (existingTx) {
+        console.log("[Stripe Webhook] Duplicate wallet deposit prevented:", session.id)
+        return
+      }
+
+      // Get or create wallet
+      let { data: wallet } = await supabaseAdmin
+        .from("wallets")
+        .select("*")
+        .eq("user_id", user_id)
+        .single()
+
+      if (!wallet) {
+        const { data: newWallet } = await supabaseAdmin
+          .from("wallets")
+          .insert({ user_id, balance_cents: 0 })
+          .select()
+          .single()
+        wallet = newWallet
+      }
+
+      // Update wallet balance
+      const newBalance = (wallet?.balance_cents ?? 0) + amountCentsNum
+      await supabaseAdmin
+        .from("wallets")
+        .update({ 
+          balance_cents: newBalance,
+          updated_at: new Date().toISOString()
+        })
+        .eq("user_id", user_id)
+
+      // Record transaction
+      await supabaseAdmin
+        .from("financial_transactions")
+        .insert({
+          user_id,
+          amount_cents: amountCentsNum,
+          type: "deposit",
+          status: "completed",
+          description: "Stripe wallet deposit",
+          stripe_session_id: session.id,
+          stripe_payment_intent: session.payment_intent as string,
+        })
+
+      console.log("[Stripe Webhook] Wallet deposit processed:", { user_id, amountCentsNum, newBalance })
+      return
+    }
+
     if (type === "event_booking" && booking_id) {
       // Update event booking: mark deposit as paid and status to confirmed
       const { error } = await supabaseAdmin
