@@ -29,7 +29,7 @@ export async function POST(request: Request) {
 
     // Get wallet
     const { data: wallet, error: walletError } = await supabase
-      .from("user_wallets")
+      .from("wallets")
       .select("*")
       .eq("user_id", user.id)
       .single()
@@ -89,40 +89,35 @@ export async function POST(request: Request) {
     // Begin transaction
     // 1. Deduct from wallet
     const { error: deductError } = await supabase
-      .from("user_wallets")
+      .from("wallets")
       .update({ 
         balance_cents: wallet.balance_cents - amountCents,
         updated_at: new Date().toISOString()
       })
-      .eq("id", wallet.id)
+      .eq("user_id", user.id)
       .eq("balance_cents", wallet.balance_cents) // Optimistic lock
 
     if (deductError) {
       return NextResponse.json({ message: "Failed to process withdrawal" }, { status: 500 })
     }
 
-    // 2. Create wallet transaction
+    // 2. Create financial transaction
     const { error: txError } = await supabase
-      .from("wallet_transactions")
+      .from("financial_transactions")
       .insert({
         user_id: user.id,
         type: "withdrawal",
-        amount_cents: amountCents,
+        amount_cents: -amountCents,
         status: "pending",
         description: `Withdrawal via ${payoutMethod}`,
-        metadata: {
-          payoutMethod,
-          payoutMethodId,
-          ...payoutDetails,
-        },
       })
 
     if (txError) {
       // Rollback
       await supabase
-        .from("user_wallets")
+        .from("wallets")
         .update({ balance_cents: wallet.balance_cents })
-        .eq("id", wallet.id)
+        .eq("user_id", user.id)
 
       return NextResponse.json({ message: "Failed to create transaction" }, { status: 500 })
     }
@@ -143,10 +138,10 @@ export async function POST(request: Request) {
 
         // Update transaction with transfer ID
         await supabase
-          .from("wallet_transactions")
+          .from("financial_transactions")
           .update({
             status: "processing",
-            metadata: { stripeTransferId: transfer.id },
+            stripe_transfer_id: transfer.id,
           })
           .eq("user_id", user.id)
           .eq("type", "withdrawal")
@@ -158,13 +153,13 @@ export async function POST(request: Request) {
         
         // Rollback wallet
         await supabase
-          .from("user_wallets")
+          .from("wallets")
           .update({ balance_cents: wallet.balance_cents })
-          .eq("id", wallet.id)
+          .eq("user_id", user.id)
 
         // Mark transaction as failed
         await supabase
-          .from("wallet_transactions")
+          .from("financial_transactions")
           .update({ status: "failed" })
           .eq("user_id", user.id)
           .eq("type", "withdrawal")
