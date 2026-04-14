@@ -28,46 +28,30 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Escrow ID is required" }, { status: 400 })
     }
 
-    // Get the escrow account
-    const { data: escrow, error: fetchError } = await supabase
-      .from("escrow_accounts")
-      .select("*, tournaments(title)")
-      .eq("id", escrowId)
-      .eq("status", "funded")
-      .single()
+    // Use atomic RPC function for escrow release
+    const { data: result, error: rpcError } = await supabase.rpc("release_escrow", {
+      p_escrow_id: escrowId,
+      p_admin_id: user.id
+    })
 
-    if (fetchError || !escrow) {
-      return NextResponse.json({ error: "Escrow not found or not in funded status" }, { status: 404 })
+    if (rpcError) {
+      console.error("RPC error:", rpcError)
+      return NextResponse.json({ error: rpcError.message }, { status: 500 })
     }
 
-    // Update escrow status to released
-    const { error: updateError } = await supabase
-      .from("escrow_accounts")
-      .update({ status: "released" })
-      .eq("id", escrowId)
-
-    if (updateError) {
-      return NextResponse.json({ error: updateError.message }, { status: 500 })
+    if (!result?.success) {
+      return NextResponse.json({ 
+        success: false,
+        error: result?.error || "Failed to release escrow" 
+      }, { status: 400 })
     }
-
-    // Log to audit trail
-    await supabase
-      .from("reconciliation_audit_log")
-      .insert({
-        action_type: "escrow_release",
-        target_type: "escrow",
-        target_id: escrowId,
-        performed_by: user.id,
-        amount_cents: escrow.funded_amount_cents,
-        reason: `Manual release by admin for tournament: ${escrow.tournaments?.title || escrow.tournament_id}`,
-        status: "completed",
-        is_test_data: escrow.is_test,
-      })
 
     return NextResponse.json({
       success: true,
       message: "Escrow released successfully",
-      amount: escrow.funded_amount_cents
+      escrow_id: result.escrow_id,
+      tournament_id: result.tournament_id,
+      released_amount: result.released_amount
     })
 
   } catch (error) {
