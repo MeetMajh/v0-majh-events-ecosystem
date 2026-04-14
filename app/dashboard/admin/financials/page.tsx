@@ -3,18 +3,15 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
   DollarSign, 
   TrendingUp, 
-  Users, 
   Clock,
   ArrowUpRight,
   ArrowDownRight,
   Wallet,
   Shield,
-  AlertTriangle,
 } from "lucide-react"
 import { AdminPayoutQueue } from "@/components/financials/admin-payout-queue"
 import { EscrowOverview } from "@/components/financials/escrow-overview"
@@ -37,37 +34,42 @@ export default async function AdminFinancialsPage() {
 
   if (!staffRole) redirect("/dashboard")
 
-  // Fetch financial metrics
+  // Get first day of current month
+  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
+
+  // Fetch financial metrics from actual data tables
   const [
-    { data: totalPayments },
-    { data: pendingPayouts },
+    { data: deposits },
+    { data: entryFees },
+    { data: pendingWithdrawals },
     { data: activeEscrows },
-    { data: platformFees },
     { data: recentTransactions },
-    { data: alerts },
   ] = await Promise.all([
-    // Total payments this month
+    // Total deposits this month (revenue in)
     supabase
-      .from("tournament_payments")
+      .from("financial_transactions")
       .select("amount_cents")
-      .gte("created_at", new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString())
-      .eq("status", "succeeded"),
-    // Pending payouts
+      .eq("type", "deposit")
+      .eq("status", "completed")
+      .gte("created_at", monthStart),
+    // Total entry fees this month (platform revenue)
     supabase
-      .from("player_payouts")
-      .select("id, gross_amount_cents")
+      .from("financial_transactions")
+      .select("amount_cents")
+      .eq("type", "entry_fee")
+      .eq("status", "completed")
+      .gte("created_at", monthStart),
+    // Pending withdrawals
+    supabase
+      .from("financial_transactions")
+      .select("id, amount_cents")
+      .eq("type", "withdrawal")
       .eq("status", "pending"),
     // Active escrows
     supabase
       .from("escrow_accounts")
-      .select("id, funded_amount_cents")
-      .in("status", ["funded", "partially_released"]),
-    // Platform fees collected this month
-    supabase
-      .from("tournament_payments")
-      .select("platform_fee_cents")
-      .gte("created_at", new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString())
-      .eq("status", "succeeded"),
+      .select("id, funded_amount_cents, status")
+      .neq("status", "released"),
     // Recent transactions
     supabase
       .from("financial_transactions")
@@ -81,19 +83,16 @@ export default async function AdminFinancialsPage() {
       `)
       .order("created_at", { ascending: false })
       .limit(10),
-    // Urgent alerts
-    supabase
-      .from("financial_alerts")
-      .select("id, alert_type, severity, title")
-      .eq("is_read", false)
-      .in("severity", ["error", "warning"])
-      .limit(5),
   ])
 
-  const totalPaymentsAmount = totalPayments?.reduce((sum, p) => sum + (p.amount_cents || 0), 0) || 0
-  const pendingPayoutsAmount = pendingPayouts?.reduce((sum, p) => sum + (p.gross_amount_cents || 0), 0) || 0
+  // Calculate totals - entry fees are stored as negative, so we use Math.abs
+  const totalDepositsAmount = deposits?.reduce((sum, d) => sum + Math.abs(d.amount_cents || 0), 0) || 0
+  const totalEntryFeesAmount = entryFees?.reduce((sum, f) => sum + Math.abs(f.amount_cents || 0), 0) || 0
+  const pendingWithdrawalsAmount = pendingWithdrawals?.reduce((sum, w) => sum + Math.abs(w.amount_cents || 0), 0) || 0
   const activeEscrowsAmount = activeEscrows?.reduce((sum, e) => sum + (e.funded_amount_cents || 0), 0) || 0
-  const platformFeesAmount = platformFees?.reduce((sum, f) => sum + (f.platform_fee_cents || 0), 0) || 0
+  
+  // Platform fee is 5% of entry fees
+  const platformFeesAmount = Math.round(totalEntryFeesAmount * 0.05)
 
   const formatCurrency = (cents: number) => {
     return new Intl.NumberFormat("en-US", {
@@ -111,52 +110,45 @@ export default async function AdminFinancialsPage() {
             Monitor platform revenue, payouts, and escrow accounts
           </p>
         </div>
-        {alerts && alerts.length > 0 && (
-          <Badge variant="destructive" className="flex items-center gap-1">
-            <AlertTriangle className="h-3 w-3" />
-            {alerts.length} Alert{alerts.length !== 1 ? "s" : ""}
-          </Badge>
-        )}
       </div>
 
       {/* Key Metrics */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Monthly Revenue</CardTitle>
+            <CardTitle className="text-sm font-medium">Monthly Deposits</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(totalPaymentsAmount)}</div>
+            <div className="text-2xl font-bold">{formatCurrency(totalDepositsAmount)}</div>
             <p className="flex items-center text-xs text-muted-foreground">
-              <ArrowUpRight className="mr-1 h-3 w-3 text-emerald-500" />
-              <span className="text-emerald-500">+12.5%</span> from last month
+              {deposits?.length || 0} deposits this month
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Platform Fees</CardTitle>
+            <CardTitle className="text-sm font-medium">Entry Fees</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(platformFeesAmount)}</div>
+            <div className="text-2xl font-bold">{formatCurrency(totalEntryFeesAmount)}</div>
             <p className="text-xs text-muted-foreground">
-              5% of total transactions
+              Platform fee: {formatCurrency(platformFeesAmount)} (5%)
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending Payouts</CardTitle>
+            <CardTitle className="text-sm font-medium">Pending Withdrawals</CardTitle>
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(pendingPayoutsAmount)}</div>
+            <div className="text-2xl font-bold">{formatCurrency(pendingWithdrawalsAmount)}</div>
             <p className="text-xs text-muted-foreground">
-              {pendingPayouts?.length || 0} payouts awaiting processing
+              {pendingWithdrawals?.length || 0} withdrawals awaiting processing
             </p>
           </CardContent>
         </Card>
