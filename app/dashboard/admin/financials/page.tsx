@@ -41,6 +41,7 @@ export default async function AdminFinancialsPage() {
   const [
     { data: deposits },
     { data: entryFees },
+    { data: platformFees },
     { data: pendingWithdrawals },
     { data: activeEscrows },
     { data: recentTransactions },
@@ -52,11 +53,18 @@ export default async function AdminFinancialsPage() {
       .eq("type", "deposit")
       .eq("status", "completed")
       .gte("created_at", monthStart),
-    // Total entry fees this month (platform revenue)
+    // Total entry fees this month
     supabase
       .from("financial_transactions")
       .select("amount_cents")
       .eq("type", "entry_fee")
+      .eq("status", "completed")
+      .gte("created_at", monthStart),
+    // Platform fees (actual revenue)
+    supabase
+      .from("financial_transactions")
+      .select("amount_cents")
+      .eq("type", "platform_fee")
       .eq("status", "completed")
       .gte("created_at", monthStart),
     // Pending withdrawals
@@ -91,8 +99,10 @@ export default async function AdminFinancialsPage() {
   const pendingWithdrawalsAmount = pendingWithdrawals?.reduce((sum, w) => sum + Math.abs(w.amount_cents || 0), 0) || 0
   const activeEscrowsAmount = activeEscrows?.reduce((sum, e) => sum + (e.funded_amount_cents || 0), 0) || 0
   
-  // Platform fee is 5% of entry fees
-  const platformFeesAmount = Math.round(totalEntryFeesAmount * 0.05)
+  // Platform fees - actual recorded revenue from tournament payouts
+  // Falls back to 5% estimate if no platform_fee transactions recorded yet
+  const recordedPlatformFees = platformFees?.reduce((sum, f) => sum + (f.amount_cents || 0), 0) || 0
+  const platformFeesAmount = recordedPlatformFees > 0 ? recordedPlatformFees : Math.round(totalEntryFeesAmount * 0.05)
 
   const formatCurrency = (cents: number) => {
     return new Intl.NumberFormat("en-US", {

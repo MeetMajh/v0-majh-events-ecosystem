@@ -460,3 +460,90 @@ export async function adminCreditWallet(
     credited: amountCents
   }
 }
+
+/**
+ * Sync wallet balance from transactions (no new entry created)
+ * Used when transactions exist but wallet balance is out of sync
+ * This recalculates the balance from all completed transactions
+ */
+export async function syncWalletBalance(targetUserId: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  if (!user) {
+    return { error: "You must be signed in" }
+  }
+
+  // Check if user is admin
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("is_admin")
+    .eq("id", user.id)
+    .single()
+
+  if (!profile?.is_admin) {
+    return { error: "Unauthorized - admin access required" }
+  }
+
+  // Get all completed transactions for this user
+  const { data: transactions, error: txError } = await supabase
+    .from("financial_transactions")
+    .select("amount_cents, type")
+    .eq("user_id", targetUserId)
+    .eq("status", "completed")
+
+  if (txError) {
+    return { error: `Failed to fetch transactions: ${txError.message}` }
+  }
+
+  // Calculate correct balance from transactions
+  // Deposits and prizes are positive, entry_fee and withdrawal are negative (stored as negative)
+  const calculatedBalance = transactions?.reduce((sum, tx) => {
+    return sum + (tx.amount_cents || 0)
+  }, 0) || 0
+
+  // Get current wallet
+  let { data: wallet } = await supabase
+    .from("wallets")
+    .select("*")
+    .eq("user_id", targetUserId)
+    .single()
+
+  const previousBalance = wallet?.balance_cents || 0
+
+  if (!wallet) {
+    // Create wallet with calculated balance
+    const { error: createError } = await supabase
+      .from("wallets")
+      .insert({ user_id: targetUserId, balance_cents: calculatedBalance })
+    
+    if (createError) {
+      return { error: `Failed to create wallet: ${createError.message}` }
+    }
+  } else {
+    // Update wallet to calculated balance
+    const { error: updateError } = await supabase
+      .from("wallets")
+      .update({ 
+        balance_cents: calculatedBalance,
+        updated_at: new Date().toISOString()
+      })
+      .eq("user_id", targetUserId)
+
+    if (updateError) {
+      return { error: updateError.message }
+    }
+  }
+
+  revalidatePath("/dashboard")
+  revalidatePath("/dashboard/wallet")
+  revalidatePath("/admin")
+  
+  return { 
+    success: true, 
+    previousBalance,
+    newBalance: calculatedBalance,
+    transactionCount: transactions?.length || 0,
+    adjustment: calculatedBalance - previousBalance
+  }
+}
