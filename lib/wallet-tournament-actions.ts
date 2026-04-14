@@ -64,12 +64,11 @@ export async function getWallet() {
 
 /**
  * Join a tournament using wallet balance
- * Flow:
- * 1. Fetch wallet
- * 2. Check balance >= entry_fee_cents
- * 3. Insert financial_transaction (-entry_fee)
- * 4. Update wallet balance
- * 5. Insert tournament_participant (paid = true)
+ * Uses a database transaction (RPC) to ensure atomicity:
+ * - wallet deduction
+ * - financial_transaction insert
+ * - tournament_participant insert
+ * All succeed or all fail together.
  */
 export async function joinTournament(tournamentId: string) {
   const supabase = await createClient()
@@ -79,132 +78,26 @@ export async function joinTournament(tournamentId: string) {
     return { error: "You must be signed in" }
   }
 
-  // 1. Get tournament details
-  const { data: tournament, error: tournamentError } = await supabase
-    .from("tournaments")
-    .select("id, name, slug, entry_fee_cents, max_participants, status")
-    .eq("id", tournamentId)
-    .single()
+  // Call the atomic database function
+  const { data, error } = await supabase.rpc("join_tournament", {
+    p_user_id: user.id,
+    p_tournament_id: tournamentId
+  })
 
-  if (tournamentError || !tournament) {
-    return { error: "Tournament not found" }
+  if (error) {
+    return { error: error.message }
   }
 
-  if (tournament.status !== "registration") {
-    return { error: "Registration is closed for this tournament" }
-  }
+  // The RPC returns a JSON object with either { success: true } or { error: "..." }
+  const result = data as { success?: boolean; error?: string; insufficientFunds?: boolean; balanceCents?: number; requiredCents?: number }
 
-  // 2. Check if already registered
-  const { data: existingParticipant } = await supabase
-    .from("tournament_participants")
-    .select("id")
-    .eq("tournament_id", tournamentId)
-    .eq("user_id", user.id)
-    .single()
-
-  if (existingParticipant) {
-    return { error: "You are already registered for this tournament" }
-  }
-
-  // 3. Check capacity
-  if (tournament.max_participants) {
-    const { count } = await supabase
-      .from("tournament_participants")
-      .select("*", { count: "exact", head: true })
-      .eq("tournament_id", tournamentId)
-
-    if ((count ?? 0) >= tournament.max_participants) {
-      return { error: "Tournament is full" }
+  if (result.error) {
+    return {
+      error: result.error,
+      insufficientFunds: result.insufficientFunds,
+      balanceCents: result.balanceCents,
+      requiredCents: result.requiredCents
     }
-  }
-
-  // 4. Get wallet
-  const { data: wallet, error: walletError } = await supabase
-    .from("wallets")
-    .select("*")
-    .eq("user_id", user.id)
-    .single()
-
-  // If no wallet exists and tournament has entry fee, return error
-  if (walletError?.code === "PGRST116" && tournament.entry_fee_cents > 0) {
-    return { error: "No wallet found. Please add funds first." }
-  }
-
-  if (walletError && walletError.code !== "PGRST116") {
-    return { error: walletError.message }
-  }
-
-  // 5. Check balance if paid tournament
-  if (tournament.entry_fee_cents > 0) {
-    if (!wallet || wallet.balance_cents < tournament.entry_fee_cents) {
-      const needed = tournament.entry_fee_cents - (wallet?.balance_cents ?? 0)
-      return { 
-        error: `Insufficient funds. You need $${(needed / 100).toFixed(2)} more.`,
-        insufficientFunds: true,
-        balanceCents: wallet?.balance_cents ?? 0,
-        requiredCents: tournament.entry_fee_cents
-      }
-    }
-
-    // 6. Deduct funds from wallet
-    const newBalance = wallet.balance_cents - tournament.entry_fee_cents
-    const { error: updateWalletError } = await supabase
-      .from("wallets")
-      .update({ 
-        balance_cents: newBalance,
-        updated_at: new Date().toISOString()
-      })
-      .eq("user_id", user.id)
-
-    if (updateWalletError) {
-      return { error: `Failed to deduct funds: ${updateWalletError.message}` }
-    }
-
-    // 7. Record transaction
-    const { error: transactionError } = await supabase
-      .from("financial_transactions")
-      .insert({
-        user_id: user.id,
-        amount_cents: -tournament.entry_fee_cents,
-        type: "entry_fee",
-        description: `Entry fee for ${tournament.name}`,
-        reference_id: tournamentId,
-        reference_type: "tournament",
-      })
-
-    if (transactionError) {
-      // Rollback wallet update
-      await supabase
-        .from("wallets")
-        .update({ balance_cents: wallet.balance_cents })
-        .eq("user_id", user.id)
-      return { error: `Failed to record transaction: ${transactionError.message}` }
-    }
-  }
-
-  // 8. Join tournament
-  const { error: joinError } = await supabase
-    .from("tournament_participants")
-    .insert({
-      tournament_id: tournamentId,
-      user_id: user.id,
-      status: "registered",
-      payment_status: tournament.entry_fee_cents > 0 ? "paid" : "free",
-      registered_at: new Date().toISOString()
-    })
-
-  if (joinError) {
-    // Rollback if paid tournament
-    if (tournament.entry_fee_cents > 0 && wallet) {
-      await supabase
-        .from("wallets")
-        .update({ balance_cents: wallet.balance_cents })
-        .eq("user_id", user.id)
-    }
-    if (joinError.code === "23505") {
-      return { error: "You are already registered for this tournament" }
-    }
-    return { error: `Failed to join tournament: ${joinError.message}` }
   }
 
   revalidatePath("/esports")
