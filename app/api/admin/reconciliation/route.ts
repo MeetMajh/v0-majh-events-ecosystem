@@ -66,7 +66,7 @@ export async function GET() {
     // 5. Fetch escrow accounts (include test mode flags)
     const { data: escrows } = await supabase
       .from("escrow_accounts")
-      .select("tournament_id, funded_amount_cents, status, is_test, environment, tournaments(name)")
+      .select("tournament_id, funded_amount_cents, status, is_test, environment, tournaments(title)")
       .neq("status", "released")
     
     // 6. Fetch tournament participants for escrow validation
@@ -178,14 +178,14 @@ export async function GET() {
       walletMismatches,
       escrows: escrows?.map(e => ({
         tournamentId: e.tournament_id,
-        tournamentName: (e.tournaments as { name: string })?.name || "Unknown",
+        tournamentName: (e.tournaments as { title: string } | null)?.title || "Unknown",
         fundedAmount: e.funded_amount_cents,
         participantCount: participantsByTournament[e.tournament_id] || 0,
         status: e.status,
         // Detect test mode - check is_test column or infer from environment
         isTestMode: e.is_test || e.environment === "test" || false,
         environment: e.environment || (e.is_test ? "test" : "live")
-      })),
+      })) || [],
       summary: {
         totalStripePayments: stripeDeposits.length,
         totalDbRecords: dbDeposits?.length || 0,

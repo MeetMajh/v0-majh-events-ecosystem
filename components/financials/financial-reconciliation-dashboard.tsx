@@ -358,7 +358,30 @@ export function FinancialReconciliationDashboard() {
 
   if (!data) return null
 
+  // Validate required data exists - no fake defaults allowed in financial systems
   const { systemHealth, depositReconciliation, walletMismatches, escrows, summary } = data
+
+  // Validate all required fields are present and correct type
+  const missingFields: string[] = []
+  if (!systemHealth) missingFields.push("systemHealth")
+  if (summary === undefined || summary === null) missingFields.push("summary")
+  if (!Array.isArray(depositReconciliation)) missingFields.push("depositReconciliation")
+  if (!Array.isArray(walletMismatches)) missingFields.push("walletMismatches")
+  if (!Array.isArray(escrows)) missingFields.push("escrows")
+
+  // If critical financial data is missing, show explicit error - never hide with zeros
+  if (missingFields.length > 0) {
+    return (
+      <Alert variant="destructive" className="bg-red-50 border-red-200">
+        <AlertCircle className="h-4 w-4" />
+        <AlertTitle>Data Integrity Error</AlertTitle>
+        <AlertDescription>
+          Critical financial data is missing or malformed: {missingFields.join(", ")}.
+          This must be investigated before proceeding. Contact system administrator.
+        </AlertDescription>
+      </Alert>
+    )
+  }
 
   return (
     <div className="space-y-6">
