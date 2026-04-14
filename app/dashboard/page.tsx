@@ -22,8 +22,9 @@ export default async function DashboardOverviewPage() {
       .from("tournament_participants")
       .select(`
         id,
-        paid,
-        created_at,
+        status,
+        payment_status,
+        registered_at,
         tournaments(
           id,
           name,
@@ -35,7 +36,8 @@ export default async function DashboardOverviewPage() {
         )
       `)
       .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
+      .in("status", ["registered", "checked_in"])
+      .order("registered_at", { ascending: false })
       .limit(5),
     supabase
       .from("wallets")
