@@ -19,6 +19,7 @@ import {
 import { AdminPayoutQueue } from "@/components/financials/admin-payout-queue"
 import { EscrowOverview } from "@/components/financials/escrow-overview"
 import { PlatformRevenue } from "@/components/financials/platform-revenue"
+import { AdminWalletCredit } from "@/components/financials/admin-wallet-credit"
 
 export default async function AdminFinancialsPage() {
   const supabase = await createClient()
@@ -189,6 +190,10 @@ export default async function AdminFinancialsPage() {
             <TrendingUp className="h-4 w-4" />
             Revenue
           </TabsTrigger>
+          <TabsTrigger value="wallet-credit" className="flex items-center gap-2">
+            <DollarSign className="h-4 w-4" />
+            Manual Credit
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="payouts" className="space-y-4">
@@ -201,6 +206,10 @@ export default async function AdminFinancialsPage() {
 
         <TabsContent value="revenue" className="space-y-4">
           <PlatformRevenue />
+        </TabsContent>
+
+        <TabsContent value="wallet-credit" className="space-y-4">
+          <AdminWalletCredit />
         </TabsContent>
       </Tabs>
 
