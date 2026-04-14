@@ -113,6 +113,9 @@ export function FinancialReconciliationDashboard() {
   const [reversingId, setReversingId] = useState<string | null>(null)
   const [stripeWarningOpen, setStripeWarningOpen] = useState(false)
   const [forceVoid, setForceVoid] = useState(false)
+  const [recoveringId, setRecoveringId] = useState<string | null>(null)
+  const [recoverDialogOpen, setRecoverDialogOpen] = useState(false)
+  const [selectedStripeItem, setSelectedStripeItem] = useState<DepositReconciliation | null>(null)
 
   const formatCurrency = (cents: number) => {
     return new Intl.NumberFormat("en-US", {
@@ -216,6 +219,46 @@ export function FinancialReconciliationDashboard() {
     setReverseDialogOpen(false)
     setSelectedTransaction(null)
     setReverseReason("")
+  }
+
+  async function handleRecoverStripePayment(item: DepositReconciliation) {
+    // For missing DB records, we need user info to create the transaction
+    // Open dialog to collect user ID or look it up
+    setSelectedStripeItem(item)
+    setRecoverDialogOpen(true)
+  }
+
+  async function confirmRecoverStripePayment(userId: string) {
+    if (!selectedStripeItem || !userId) return
+    
+    setRecoveringId(selectedStripeItem.stripeId)
+    
+    try {
+      const response = await fetch("/api/admin/reconciliation/recover", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          stripeSessionId: selectedStripeItem.stripeId,
+          userId,
+          amountCents: selectedStripeItem.stripeAmount,
+          stripeCustomerEmail: selectedStripeItem.stripeCustomerEmail,
+        }),
+      })
+      
+      const result = await response.json()
+      
+      if (result.success) {
+        await fetchReconciliationData()
+      } else {
+        setError(result.error || "Failed to recover payment")
+      }
+    } catch (err) {
+      setError("Failed to recover payment")
+    }
+    
+    setRecoveringId(null)
+    setRecoverDialogOpen(false)
+    setSelectedStripeItem(null)
   }
 
   useEffect(() => {
@@ -427,6 +470,7 @@ export function FinancialReconciliationDashboard() {
                         <TableHead className="text-right">Stripe Amount</TableHead>
                         <TableHead className="text-right">DB Amount</TableHead>
                         <TableHead>Status</TableHead>
+                        <TableHead>Action</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -462,6 +506,28 @@ export function FinancialReconciliationDashboard() {
                               <Badge variant="outline" className="text-amber-600 border-amber-300">
                                 <AlertTriangle className="mr-1 h-3 w-3" /> Amount Mismatch
                               </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {item.status === "missing_db_record" && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleRecoverStripePayment(item)}
+                                disabled={recoveringId === item.stripeId}
+                              >
+                                {recoveringId === item.stripeId ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <>
+                                    <Database className="h-4 w-4 mr-1" />
+                                    Recover
+                                  </>
+                                )}
+                              </Button>
+                            )}
+                            {item.status === "matched" && (
+                              <span className="text-muted-foreground text-sm">—</span>
                             )}
                           </TableCell>
                         </TableRow>
@@ -892,6 +958,174 @@ export function FinancialReconciliationDashboard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Recover Stripe Payment Dialog */}
+      <RecoverStripePaymentDialog
+        open={recoverDialogOpen}
+        onOpenChange={setRecoverDialogOpen}
+        stripeItem={selectedStripeItem}
+        onConfirm={confirmRecoverStripePayment}
+        formatCurrency={formatCurrency}
+        recovering={recoveringId !== null}
+      />
     </div>
+  )
+}
+
+// Separate component for recover dialog to manage its own state
+function RecoverStripePaymentDialog({
+  open,
+  onOpenChange,
+  stripeItem,
+  onConfirm,
+  formatCurrency,
+  recovering,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  stripeItem: DepositReconciliation | null
+  onConfirm: (userId: string) => void
+  formatCurrency: (cents: number) => string
+  recovering: boolean
+}) {
+  const [userId, setUserId] = useState("")
+  const [lookupEmail, setLookupEmail] = useState("")
+  const [lookingUp, setLookingUp] = useState(false)
+  const [lookupResult, setLookupResult] = useState<{ id: string; email: string } | null>(null)
+  const [lookupError, setLookupError] = useState<string | null>(null)
+
+  // Reset state when dialog opens/closes
+  useEffect(() => {
+    if (!open) {
+      setUserId("")
+      setLookupEmail("")
+      setLookupResult(null)
+      setLookupError(null)
+    } else if (stripeItem?.stripeCustomerEmail) {
+      setLookupEmail(stripeItem.stripeCustomerEmail)
+    }
+  }, [open, stripeItem])
+
+  async function lookupUserByEmail() {
+    if (!lookupEmail.trim()) return
+    
+    setLookingUp(true)
+    setLookupError(null)
+    setLookupResult(null)
+    
+    try {
+      const response = await fetch(`/api/admin/users/lookup?email=${encodeURIComponent(lookupEmail)}`)
+      const result = await response.json()
+      
+      if (result.success && result.user) {
+        setLookupResult(result.user)
+        setUserId(result.user.id)
+      } else {
+        setLookupError(result.error || "User not found")
+      }
+    } catch {
+      setLookupError("Failed to lookup user")
+    }
+    
+    setLookingUp(false)
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Recover Missing Stripe Payment</DialogTitle>
+          <DialogDescription>
+            Create a database record for this Stripe payment that was not recorded due to a webhook failure.
+          </DialogDescription>
+        </DialogHeader>
+        
+        {stripeItem && (
+          <div className="space-y-4">
+            <div className="bg-muted p-3 rounded-lg space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Stripe ID:</span>
+                <span className="font-mono text-xs">{stripeItem.stripeId.slice(0, 25)}...</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Amount:</span>
+                <span className="font-mono font-medium text-emerald-600">
+                  {formatCurrency(stripeItem.stripeAmount || 0)}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Customer Email:</span>
+                <span>{stripeItem.stripeCustomerEmail || "N/A"}</span>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <Label>Lookup User by Email</Label>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="user@example.com"
+                    value={lookupEmail}
+                    onChange={(e) => setLookupEmail(e.target.value)}
+                  />
+                  <Button 
+                    variant="outline" 
+                    onClick={lookupUserByEmail}
+                    disabled={lookingUp || !lookupEmail.trim()}
+                  >
+                    {lookingUp ? <Loader2 className="h-4 w-4 animate-spin" /> : "Lookup"}
+                  </Button>
+                </div>
+              </div>
+
+              {lookupResult && (
+                <Alert>
+                  <CheckCircle className="h-4 w-4 text-emerald-500" />
+                  <AlertDescription>
+                    Found user: <strong>{lookupResult.email}</strong>
+                    <br />
+                    <span className="font-mono text-xs">{lookupResult.id}</span>
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {lookupError && (
+                <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>{lookupError}</AlertDescription>
+                </Alert>
+              )}
+
+              <div className="space-y-2">
+                <Label htmlFor="userId">User ID (required)</Label>
+                <Input
+                  id="userId"
+                  placeholder="UUID of the user to credit"
+                  value={userId}
+                  onChange={(e) => setUserId(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button 
+            onClick={() => onConfirm(userId)}
+            disabled={!userId.trim() || recovering}
+          >
+            {recovering ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Database className="h-4 w-4 mr-2" />
+            )}
+            Recover Payment
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
