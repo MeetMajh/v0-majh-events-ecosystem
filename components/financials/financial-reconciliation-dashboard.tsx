@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { FinancialHealthCard } from "./financial-health-card"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -361,6 +362,9 @@ export function FinancialReconciliationDashboard() {
 
   return (
     <div className="space-y-6">
+      {/* Financial Health Score Card */}
+      <FinancialHealthCard />
+
       {/* System Health Status */}
       <Card className={systemHealth.isHealthy ? "border-emerald-500" : "border-red-500"}>
         <CardHeader className="pb-3">
