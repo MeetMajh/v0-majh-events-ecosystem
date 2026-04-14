@@ -55,7 +55,7 @@ interface DepositReconciliation {
   userId: string | null
   dbRecordId: string | null
   dbAmount: number | null
-  status: "matched" | "missing_db_record" | "amount_mismatch"
+  status: "matched" | "missing_db_record" | "amount_mismatch" | "dismissed"
 }
 
 interface WalletMismatch {
@@ -114,8 +114,11 @@ export function FinancialReconciliationDashboard() {
   const [stripeWarningOpen, setStripeWarningOpen] = useState(false)
   const [forceVoid, setForceVoid] = useState(false)
   const [recoveringId, setRecoveringId] = useState<string | null>(null)
+  const [dismissingId, setDismissingId] = useState<string | null>(null)
   const [recoverDialogOpen, setRecoverDialogOpen] = useState(false)
+  const [dismissDialogOpen, setDismissDialogOpen] = useState(false)
   const [selectedStripeItem, setSelectedStripeItem] = useState<DepositReconciliation | null>(null)
+  const [dismissReason, setDismissReason] = useState("")
 
   const formatCurrency = (cents: number) => {
     return new Intl.NumberFormat("en-US", {
@@ -226,6 +229,45 @@ export function FinancialReconciliationDashboard() {
     // Open dialog to collect user ID or look it up
     setSelectedStripeItem(item)
     setRecoverDialogOpen(true)
+  }
+
+  function openDismissDialog(item: DepositReconciliation) {
+    setSelectedStripeItem(item)
+    setDismissReason("")
+    setDismissDialogOpen(true)
+  }
+
+  async function handleDismissStripePayment() {
+    if (!selectedStripeItem || !dismissReason.trim()) return
+    
+    setDismissingId(selectedStripeItem.stripeId)
+    
+    try {
+      const response = await fetch("/api/admin/reconciliation/dismiss", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          stripeSessionId: selectedStripeItem.stripeId,
+          stripeAmount: selectedStripeItem.stripeAmount,
+          reason: dismissReason,
+        }),
+      })
+      
+      const result = await response.json()
+      
+      if (result.success) {
+        await fetchReconciliationData()
+      } else {
+        setError(result.error || "Failed to dismiss payment")
+      }
+    } catch (err) {
+      setError("Failed to dismiss payment")
+    }
+    
+    setDismissingId(null)
+    setDismissDialogOpen(false)
+    setSelectedStripeItem(null)
+    setDismissReason("")
   }
 
   async function confirmRecoverStripePayment(userId: string) {
@@ -507,27 +549,55 @@ export function FinancialReconciliationDashboard() {
                                 <AlertTriangle className="mr-1 h-3 w-3" /> Amount Mismatch
                               </Badge>
                             )}
+                            {item.status === "dismissed" && (
+                              <Badge variant="secondary" className="bg-gray-100 text-gray-600">
+                                <Trash2 className="mr-1 h-3 w-3" /> Dismissed
+                              </Badge>
+                            )}
                           </TableCell>
                           <TableCell>
                             {item.status === "missing_db_record" && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleRecoverStripePayment(item)}
-                                disabled={recoveringId === item.stripeId}
-                              >
-                                {recoveringId === item.stripeId ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <>
-                                    <Database className="h-4 w-4 mr-1" />
-                                    Recover
-                                  </>
-                                )}
-                              </Button>
+                              <div className="flex gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleRecoverStripePayment(item)}
+                                  disabled={recoveringId === item.stripeId || dismissingId === item.stripeId}
+                                  title="Create DB record and credit wallet"
+                                >
+                                  {recoveringId === item.stripeId ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <>
+                                      <Database className="h-4 w-4 mr-1" />
+                                      Recover
+                                    </>
+                                  )}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-muted-foreground hover:text-red-600"
+                                  onClick={() => openDismissDialog(item)}
+                                  disabled={recoveringId === item.stripeId || dismissingId === item.stripeId}
+                                  title="Mark as invalid/test payment"
+                                >
+                                  {dismissingId === item.stripeId ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <>
+                                      <Trash2 className="h-4 w-4 mr-1" />
+                                      Dismiss
+                                    </>
+                                  )}
+                                </Button>
+                              </div>
                             )}
                             {item.status === "matched" && (
                               <span className="text-muted-foreground text-sm">—</span>
+                            )}
+                            {item.status === "dismissed" && (
+                              <span className="text-muted-foreground text-sm">Dismissed</span>
                             )}
                           </TableCell>
                         </TableRow>
@@ -968,6 +1038,75 @@ export function FinancialReconciliationDashboard() {
         formatCurrency={formatCurrency}
         recovering={recoveringId !== null}
       />
+
+      {/* Dismiss Stripe Payment Dialog */}
+      <Dialog open={dismissDialogOpen} onOpenChange={setDismissDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Trash2 className="h-5 w-5 text-red-500" />
+              Dismiss Stripe Payment
+            </DialogTitle>
+            <DialogDescription>
+              Mark this payment as invalid/test so it won&apos;t appear in reconciliation. 
+              No funds will be credited.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedStripeItem && (
+            <div className="space-y-4">
+              <div className="bg-muted p-3 rounded-lg space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Stripe ID:</span>
+                  <span className="font-mono text-xs">{selectedStripeItem.stripeId.slice(0, 25)}...</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Amount:</span>
+                  <span className="font-mono font-medium">
+                    {formatCurrency(selectedStripeItem.stripeAmount || 0)}
+                  </span>
+                </div>
+              </div>
+
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  This payment will be marked as dismissed. The user will NOT receive funds. 
+                  Only use this for test payments or invalid charges.
+                </AlertDescription>
+              </Alert>
+
+              <div className="space-y-2">
+                <Label htmlFor="dismissReason">Reason for dismissal (required)</Label>
+                <Input
+                  id="dismissReason"
+                  placeholder="e.g., Test payment, Invalid charge, Duplicate"
+                  value={dismissReason}
+                  onChange={(e) => setDismissReason(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDismissDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive"
+              onClick={handleDismissStripePayment}
+              disabled={!dismissReason.trim() || dismissingId !== null}
+            >
+              {dismissingId ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4 mr-2" />
+              )}
+              Dismiss Payment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -1001,8 +1140,15 @@ function RecoverStripePaymentDialog({
       setLookupEmail("")
       setLookupResult(null)
       setLookupError(null)
-    } else if (stripeItem?.stripeCustomerEmail) {
-      setLookupEmail(stripeItem.stripeCustomerEmail)
+    } else if (stripeItem) {
+      // Auto-populate userId if available in Stripe metadata
+      if (stripeItem.userId) {
+        setUserId(stripeItem.userId)
+      }
+      // Auto-populate email for lookup
+      if (stripeItem.stripeCustomerEmail) {
+        setLookupEmail(stripeItem.stripeCustomerEmail)
+      }
     }
   }, [open, stripeItem])
 
