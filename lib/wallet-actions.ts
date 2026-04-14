@@ -363,3 +363,100 @@ export async function addFundsToWallet(amountCents: number) {
   
   return { success: true, newBalance }
 }
+
+/**
+ * Admin function to manually credit a wallet
+ * Used for failed webhook recovery or manual adjustments
+ */
+export async function adminCreditWallet(
+  targetUserId: string,
+  amountCents: number,
+  description: string,
+  stripeSessionId?: string
+) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  if (!user) {
+    return { error: "You must be signed in" }
+  }
+
+  // Check if user is admin
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("is_admin")
+    .eq("id", user.id)
+    .single()
+
+  if (!profile?.is_admin) {
+    return { error: "Unauthorized - admin access required" }
+  }
+
+  // Check for duplicate if stripe session ID provided
+  if (stripeSessionId) {
+    const { data: existingTx } = await supabase
+      .from("financial_transactions")
+      .select("id")
+      .eq("stripe_session_id", stripeSessionId)
+      .single()
+
+    if (existingTx) {
+      return { error: "This payment has already been processed" }
+    }
+  }
+
+  // Get or create wallet
+  let { data: wallet } = await supabase
+    .from("wallets")
+    .select("*")
+    .eq("user_id", targetUserId)
+    .single()
+
+  if (!wallet) {
+    const { data: newWallet, error: createError } = await supabase
+      .from("wallets")
+      .insert({ user_id: targetUserId, balance_cents: 0 })
+      .select()
+      .single()
+    
+    if (createError) {
+      return { error: `Failed to create wallet: ${createError.message}` }
+    }
+    wallet = newWallet
+  }
+
+  // Update wallet balance
+  const newBalance = wallet.balance_cents + amountCents
+  const { error: updateError } = await supabase
+    .from("wallets")
+    .update({ 
+      balance_cents: newBalance,
+      updated_at: new Date().toISOString()
+    })
+    .eq("user_id", targetUserId)
+
+  if (updateError) {
+    return { error: updateError.message }
+  }
+
+  // Record transaction
+  await supabase.from("financial_transactions").insert({
+    user_id: targetUserId,
+    amount_cents: amountCents,
+    type: "deposit",
+    status: "completed",
+    description: description || "Admin manual credit",
+    stripe_session_id: stripeSessionId,
+  })
+
+  revalidatePath("/dashboard")
+  revalidatePath("/dashboard/wallet")
+  revalidatePath("/admin")
+  
+  return { 
+    success: true, 
+    previousBalance: wallet.balance_cents,
+    newBalance,
+    credited: amountCents
+  }
+}
