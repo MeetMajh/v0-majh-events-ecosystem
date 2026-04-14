@@ -439,11 +439,11 @@ export async function adminCreditWallet(
     return { error: updateError.message }
   }
 
-  // Record transaction
+  // Record transaction as manual_credit (separate from Stripe deposits)
   await supabase.from("financial_transactions").insert({
     user_id: targetUserId,
     amount_cents: amountCents,
-    type: "deposit",
+    type: "manual_credit",
     status: "completed",
     description: description || "Admin manual credit",
     stripe_session_id: stripeSessionId,
@@ -545,5 +545,172 @@ export async function syncWalletBalance(targetUserId: string) {
     newBalance: calculatedBalance,
     transactionCount: transactions?.length || 0,
     adjustment: calculatedBalance - previousBalance
+  }
+}
+
+/**
+ * Find wallets where balance doesn't match transaction sum
+ * Used for auditing and identifying reconciliation needs
+ */
+export async function findWalletInconsistencies() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  if (!user) {
+    return { error: "You must be signed in" }
+  }
+
+  // Check if user is admin
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("is_admin")
+    .eq("id", user.id)
+    .single()
+
+  if (!profile?.is_admin) {
+    return { error: "Unauthorized - admin access required" }
+  }
+
+  // Get all wallets with user info
+  const { data: wallets, error: walletError } = await supabase
+    .from("wallets")
+    .select(`
+      user_id,
+      balance_cents,
+      profiles!inner(email)
+    `)
+
+  if (walletError) {
+    return { error: `Failed to fetch wallets: ${walletError.message}` }
+  }
+
+  // Get all completed transactions grouped by user
+  const { data: transactions, error: txError } = await supabase
+    .from("financial_transactions")
+    .select("user_id, amount_cents")
+    .eq("status", "completed")
+
+  if (txError) {
+    return { error: `Failed to fetch transactions: ${txError.message}` }
+  }
+
+  // Calculate transaction sums per user
+  const txSums: Record<string, number> = {}
+  transactions?.forEach(tx => {
+    if (tx.user_id) {
+      txSums[tx.user_id] = (txSums[tx.user_id] || 0) + (tx.amount_cents || 0)
+    }
+  })
+
+  // Find inconsistencies
+  const inconsistencies = wallets?.filter(wallet => {
+    const txSum = txSums[wallet.user_id] || 0
+    return wallet.balance_cents !== txSum
+  }).map(wallet => ({
+    userId: wallet.user_id,
+    email: (wallet.profiles as unknown as { email: string })?.email || "Unknown",
+    walletBalance: wallet.balance_cents,
+    transactionSum: txSums[wallet.user_id] || 0,
+    difference: (txSums[wallet.user_id] || 0) - wallet.balance_cents
+  })) || []
+
+  return { 
+    success: true, 
+    inconsistencies,
+    totalWallets: wallets?.length || 0,
+    inconsistentCount: inconsistencies.length
+  }
+}
+
+/**
+ * Recalculate all wallet balances from transactions
+ * Nuclear option for full reconciliation
+ */
+export async function recalculateAllWallets() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  if (!user) {
+    return { error: "You must be signed in" }
+  }
+
+  // Check if user is admin
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("is_admin")
+    .eq("id", user.id)
+    .single()
+
+  if (!profile?.is_admin) {
+    return { error: "Unauthorized - admin access required" }
+  }
+
+  // Get all wallets
+  const { data: wallets, error: walletError } = await supabase
+    .from("wallets")
+    .select("user_id, balance_cents")
+
+  if (walletError) {
+    return { error: `Failed to fetch wallets: ${walletError.message}` }
+  }
+
+  // Get all completed transactions
+  const { data: transactions, error: txError } = await supabase
+    .from("financial_transactions")
+    .select("user_id, amount_cents")
+    .eq("status", "completed")
+
+  if (txError) {
+    return { error: `Failed to fetch transactions: ${txError.message}` }
+  }
+
+  // Calculate transaction sums per user
+  const txSums: Record<string, number> = {}
+  transactions?.forEach(tx => {
+    if (tx.user_id) {
+      txSums[tx.user_id] = (txSums[tx.user_id] || 0) + (tx.amount_cents || 0)
+    }
+  })
+
+  // Update each wallet and track changes
+  const details: Array<{
+    userId: string
+    previousBalance: number
+    newBalance: number
+    adjustment: number
+  }> = []
+
+  for (const wallet of wallets || []) {
+    const correctBalance = txSums[wallet.user_id] || 0
+    
+    if (wallet.balance_cents !== correctBalance) {
+      const { error: updateError } = await supabase
+        .from("wallets")
+        .update({ 
+          balance_cents: correctBalance,
+          updated_at: new Date().toISOString()
+        })
+        .eq("user_id", wallet.user_id)
+
+      if (!updateError) {
+        details.push({
+          userId: wallet.user_id,
+          previousBalance: wallet.balance_cents,
+          newBalance: correctBalance,
+          adjustment: correctBalance - wallet.balance_cents
+        })
+      }
+    }
+  }
+
+  revalidatePath("/dashboard")
+  revalidatePath("/dashboard/wallet")
+  revalidatePath("/admin")
+
+  return {
+    success: true,
+    total: wallets?.length || 0,
+    fixed: details.length,
+    details
   }
 }
