@@ -39,18 +39,26 @@ export default async function AdminFinancialsPage() {
 
   // Fetch financial metrics from actual data tables
   const [
-    { data: deposits },
+    { data: stripeDeposits },
+    { data: manualCredits },
     { data: entryFees },
     { data: platformFees },
     { data: pendingWithdrawals },
     { data: activeEscrows },
     { data: recentTransactions },
   ] = await Promise.all([
-    // Total deposits this month (revenue in)
+    // Stripe deposits only (actual money in)
     supabase
       .from("financial_transactions")
       .select("amount_cents")
       .eq("type", "deposit")
+      .eq("status", "completed")
+      .gte("created_at", monthStart),
+    // Manual admin credits (separate tracking)
+    supabase
+      .from("financial_transactions")
+      .select("amount_cents")
+      .eq("type", "manual_credit")
       .eq("status", "completed")
       .gte("created_at", monthStart),
     // Total entry fees this month
@@ -93,16 +101,19 @@ export default async function AdminFinancialsPage() {
       .limit(10),
   ])
 
-  // Calculate totals - entry fees are stored as negative, so we use Math.abs
-  const totalDepositsAmount = deposits?.reduce((sum, d) => sum + Math.abs(d.amount_cents || 0), 0) || 0
+  // Calculate totals - separate Stripe deposits from manual credits
+  const stripeDepositsAmount = stripeDeposits?.reduce((sum, d) => sum + Math.abs(d.amount_cents || 0), 0) || 0
+  const manualCreditsAmount = manualCredits?.reduce((sum, c) => sum + Math.abs(c.amount_cents || 0), 0) || 0
   const totalEntryFeesAmount = entryFees?.reduce((sum, f) => sum + Math.abs(f.amount_cents || 0), 0) || 0
   const pendingWithdrawalsAmount = pendingWithdrawals?.reduce((sum, w) => sum + Math.abs(w.amount_cents || 0), 0) || 0
   const activeEscrowsAmount = activeEscrows?.reduce((sum, e) => sum + (e.funded_amount_cents || 0), 0) || 0
   
   // Platform fees - actual recorded revenue from tournament payouts
-  // Falls back to 5% estimate if no platform_fee transactions recorded yet
   const recordedPlatformFees = platformFees?.reduce((sum, f) => sum + (f.amount_cents || 0), 0) || 0
   const platformFeesAmount = recordedPlatformFees > 0 ? recordedPlatformFees : Math.round(totalEntryFeesAmount * 0.05)
+  
+  // Net wallet volume = Stripe deposits + manual credits (shows total user funds)
+  const netWalletVolume = stripeDepositsAmount + manualCreditsAmount
 
   const formatCurrency = (cents: number) => {
     return new Intl.NumberFormat("en-US", {
@@ -122,43 +133,56 @@ export default async function AdminFinancialsPage() {
         </div>
       </div>
 
-      {/* Key Metrics */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {/* Key Metrics - Separated for clarity */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Monthly Deposits</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Stripe Deposits</CardTitle>
+            <DollarSign className="h-4 w-4 text-emerald-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(totalDepositsAmount)}</div>
+            <div className="text-2xl font-bold text-emerald-600">{formatCurrency(stripeDepositsAmount)}</div>
             <p className="flex items-center text-xs text-muted-foreground">
-              {deposits?.length || 0} deposits this month
+              {stripeDeposits?.length || 0} payments this month
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Entry Fees</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Manual Adjustments</CardTitle>
+            <ArrowUpRight className="h-4 w-4 text-amber-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(totalEntryFeesAmount)}</div>
-            <p className="text-xs text-muted-foreground">
-              Platform fee: {formatCurrency(platformFeesAmount)} (5%)
+            <div className="text-2xl font-bold text-amber-600">{formatCurrency(manualCreditsAmount)}</div>
+            <p className="flex items-center text-xs text-muted-foreground">
+              {manualCredits?.length || 0} admin credits
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending Withdrawals</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Net Wallet Volume</CardTitle>
+            <TrendingUp className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(pendingWithdrawalsAmount)}</div>
+            <div className="text-2xl font-bold text-blue-600">{formatCurrency(netWalletVolume)}</div>
             <p className="text-xs text-muted-foreground">
-              {pendingWithdrawals?.length || 0} withdrawals awaiting processing
+              Total user funds deposited
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Platform Revenue</CardTitle>
+            <DollarSign className="h-4 w-4 text-purple-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-purple-600">{formatCurrency(platformFeesAmount)}</div>
+            <p className="text-xs text-muted-foreground">
+              5% of {formatCurrency(totalEntryFeesAmount)} entry fees
             </p>
           </CardContent>
         </Card>
@@ -171,7 +195,7 @@ export default async function AdminFinancialsPage() {
           <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(activeEscrowsAmount)}</div>
             <p className="text-xs text-muted-foreground">
-              {activeEscrows?.length || 0} tournaments in escrow
+              {activeEscrows?.length || 0} tournaments
             </p>
           </CardContent>
         </Card>

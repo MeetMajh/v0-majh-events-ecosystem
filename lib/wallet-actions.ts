@@ -439,11 +439,11 @@ export async function adminCreditWallet(
     return { error: updateError.message }
   }
 
-  // Record transaction
+  // Record transaction as manual_credit (separate from Stripe deposits)
   await supabase.from("financial_transactions").insert({
     user_id: targetUserId,
     amount_cents: amountCents,
-    type: "deposit",
+    type: "manual_credit",
     status: "completed",
     description: description || "Admin manual credit",
     stripe_session_id: stripeSessionId,
