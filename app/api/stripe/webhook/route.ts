@@ -187,7 +187,7 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
         })
         .eq("user_id", user_id)
 
-      // Record transaction
+      // Record transaction with full Stripe tracking
       await supabaseAdmin
         .from("financial_transactions")
         .insert({
@@ -198,6 +198,7 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
           description: "Stripe wallet deposit",
           stripe_session_id: session.id,
           stripe_payment_intent: session.payment_intent as string,
+          stripe_event_id: event.id, // For reconciliation
         })
 
       console.log("[Stripe Webhook] Wallet deposit processed:", { user_id, amountCentsNum, newBalance })

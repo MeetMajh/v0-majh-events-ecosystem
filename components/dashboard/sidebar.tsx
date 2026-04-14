@@ -106,6 +106,7 @@ const SETTINGS_ITEMS = [
 
 const ADMIN_FINANCIAL_ITEMS = [
   { label: "Financial Overview", href: "/dashboard/admin/financials", icon: DollarSign },
+  { label: "Reconciliation", href: "/dashboard/admin/reconciliation", icon: ShieldCheck },
   { label: "Compliance", href: "/dashboard/admin/compliance", icon: ShieldCheck },
   { label: "Stream Sources", href: "/dashboard/admin/streams", icon: Tv },
   { label: "Broadcast Control", href: "/dashboard/admin/broadcast", icon: Radio },
