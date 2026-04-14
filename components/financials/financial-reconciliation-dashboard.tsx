@@ -1,10 +1,10 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { FinancialHealthCard } from "./financial-health-card"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -23,9 +23,23 @@ import {
   Trash2,
   FileX,
   Undo2,
-  XCircle
+  XCircle,
+  ShieldAlert,
+  Lock
 } from "lucide-react"
 import { findWalletInconsistencies, recalculateAllWallets, voidTransaction, reverseTransaction, findOrphanedDeposits } from "@/lib/wallet-actions"
+import { 
+  validateReconciliationData, 
+  determineHealthState,
+  type IntegrityCheckResult,
+  type FinancialHealthState
+} from "@/lib/financial-schemas"
+import { 
+  reportIntegrityFailure, 
+  reportValidationFailure,
+  reportApiError,
+  checkSystemLockdown 
+} from "@/lib/integrity-monitor"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -123,6 +137,12 @@ export function FinancialReconciliationDashboard() {
   const [dismissDialogOpen, setDismissDialogOpen] = useState(false)
   const [selectedStripeItem, setSelectedStripeItem] = useState<DepositReconciliation | null>(null)
   const [dismissReason, setDismissReason] = useState("")
+  
+  // Integrity monitoring state
+  const [integrityResult, setIntegrityResult] = useState<IntegrityCheckResult | null>(null)
+  const [healthState, setHealthState] = useState<FinancialHealthState>("healthy")
+  const [isSystemLocked, setIsSystemLocked] = useState(false)
+  const [validationError, setValidationError] = useState<string | null>(null)
 
   const formatCurrency = (cents: number) => {
     return new Intl.NumberFormat("en-US", {
@@ -135,18 +155,69 @@ export function FinancialReconciliationDashboard() {
     return new Date(dateString).toLocaleString()
   }
 
+  // Check system lockdown status
+  const checkLockdownStatus = useCallback(async () => {
+    const result = await checkSystemLockdown()
+    setIsSystemLocked(result.isLocked)
+  }, [])
+
   async function fetchReconciliationData() {
     setLoading(true)
     setError(null)
+    setValidationError(null)
     
     try {
       const response = await fetch("/api/admin/reconciliation")
       if (!response.ok) {
         const errorData = await response.json()
+        // Report API error
+        await reportApiError(
+          "reconciliation_dashboard",
+          "/api/admin/reconciliation",
+          errorData.error || "Failed to fetch",
+          response.status
+        )
         throw new Error(errorData.error || "Failed to fetch reconciliation data")
       }
+      
       const result = await response.json()
+      
+      // Validate the data structure with Zod
+      const validation = validateReconciliationData(result)
+      
+      if (!validation.success) {
+        // Report validation failure to backend
+        await reportValidationFailure(
+          "reconciliation_dashboard",
+          "ReconciliationData",
+          validation.issues.map(i => ({ path: i.path, message: i.message })),
+          result
+        )
+        setValidationError(`Data validation failed: ${validation.issues.map(i => i.message).join(", ")}`)
+        setData(null)
+        return
+      }
+      
+      // Data is valid - check integrity
+      const integrity = determineHealthState(validation.data)
+      setIntegrityResult(integrity)
+      setHealthState(integrity.state)
+      
+      // If critical issues found, report them (but don't auto-lock from dashboard view)
+      if (integrity.issues.length > 0) {
+        await reportIntegrityFailure(
+          "reconciliation_dashboard",
+          `Integrity check found ${integrity.issues.length} issue(s)`,
+          integrity.issues,
+          false // Don't auto-lock from read-only view
+        )
+      }
+      
       setData(result)
+      
+      // Also check lockdown status
+      await checkLockdownStatus()
+      
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error")
     } finally {
@@ -356,35 +427,79 @@ export function FinancialReconciliationDashboard() {
     )
   }
 
-  if (!data) return null
-
-  // Validate required data exists - no fake defaults allowed in financial systems
-  const { systemHealth, depositReconciliation, walletMismatches, escrows, summary } = data
-
-  // Validate all required fields are present and correct type
-  const missingFields: string[] = []
-  if (!systemHealth) missingFields.push("systemHealth")
-  if (summary === undefined || summary === null) missingFields.push("summary")
-  if (!Array.isArray(depositReconciliation)) missingFields.push("depositReconciliation")
-  if (!Array.isArray(walletMismatches)) missingFields.push("walletMismatches")
-  if (!Array.isArray(escrows)) missingFields.push("escrows")
-
-  // If critical financial data is missing, show explicit error - never hide with zeros
-  if (missingFields.length > 0) {
+  // Show validation error if Zod validation failed
+  if (validationError) {
     return (
       <Alert variant="destructive" className="bg-red-50 border-red-200">
         <AlertCircle className="h-4 w-4" />
-        <AlertTitle>Data Integrity Error</AlertTitle>
+        <AlertTitle>Schema Validation Failed</AlertTitle>
         <AlertDescription>
-          Critical financial data is missing or malformed: {missingFields.join(", ")}.
-          This must be investigated before proceeding. Contact system administrator.
+          {validationError}
+          <br />
+          <span className="text-xs mt-2 block">
+            This error has been logged to the system alerts. Data structure does not match expected format.
+          </span>
         </AlertDescription>
       </Alert>
     )
   }
 
+  if (!data) return null
+
+  // Data has been validated by Zod at fetch time - safe to destructure
+  const { systemHealth, depositReconciliation, walletMismatches, escrows, summary } = data
+
   return (
     <div className="space-y-6">
+      {/* System Lockdown Banner */}
+      {isSystemLocked && (
+        <Alert variant="destructive" className="bg-red-900 border-red-700 text-white">
+          <Lock className="h-4 w-4" />
+          <AlertTitle>System Lockdown Active</AlertTitle>
+          <AlertDescription>
+            Financial operations have been disabled due to integrity concerns. 
+            Review issues below and contact administrator to re-enable.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Integrity Health State Banner */}
+      {integrityResult && integrityResult.state !== "healthy" && (
+        <Alert 
+          variant={integrityResult.state === "critical" ? "destructive" : "default"}
+          className={integrityResult.state === "critical" 
+            ? "bg-red-50 border-red-300" 
+            : "bg-amber-50 border-amber-300"
+          }
+        >
+          <ShieldAlert className="h-4 w-4" />
+          <AlertTitle>
+            {integrityResult.state === "critical" ? "Critical Integrity Issues" : "Integrity Warnings"}
+          </AlertTitle>
+          <AlertDescription>
+            <div className="mt-2 space-y-1">
+              {integrityResult.issues.map((issue, i) => (
+                <div key={i} className="flex items-center gap-2 text-sm">
+                  <Badge variant={issue.severity === "critical" ? "destructive" : "outline"}>
+                    {issue.severity}
+                  </Badge>
+                  <span>{issue.message}</span>
+                  {issue.value !== undefined && (
+                    <span className="font-mono text-xs">
+                      ({formatCurrency(issue.value)})
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+            <p className="text-xs mt-3 opacity-75">
+              Checked at {new Date(integrityResult.timestamp).toLocaleString()}
+              {!integrityResult.canProceed && " - Financial operations should be paused until resolved"}
+            </p>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Financial Health Score Card */}
       <FinancialHealthCard />
 
