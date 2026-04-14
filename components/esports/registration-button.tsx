@@ -3,9 +3,8 @@
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { registerForTournament, withdrawFromTournament } from "@/lib/esports-actions"
-import { createTournamentCheckoutSession } from "@/lib/tournament-payment-actions"
-import { Loader2 } from "lucide-react"
+import { joinTournament, leaveTournament } from "@/lib/wallet-tournament-actions"
+import { Loader2, Wallet } from "lucide-react"
 import { toast } from "sonner"
 
 export function RegistrationButton({
@@ -34,36 +33,41 @@ export function RegistrationButton({
     setError(null)
     startTransition(async () => {
       if (registered) {
-        // Withdraw
-        const result = await withdrawFromTournament(tournamentId)
+        // Leave tournament
+        const result = await leaveTournament(tournamentId)
         if (result.error) {
           setError(result.error)
           toast.error(result.error)
         } else {
           setRegistered(false)
-          toast.success("Successfully withdrawn from tournament")
+          if (result.refunded) {
+            toast.success("Withdrawn and refunded to wallet")
+          } else {
+            toast.success("Successfully withdrawn from tournament")
+          }
+          router.refresh()
         }
       } else {
-        // Register
-        const result = await registerForTournament(tournamentId)
+        // Join tournament using wallet
+        const result = await joinTournament(tournamentId)
         
         if (result.error) {
           setError(result.error)
           toast.error(result.error)
-        } else if (result.requiresPayment) {
-          // Redirect to payment
-          toast.loading("Redirecting to payment...")
-          const paymentResult = await createTournamentCheckoutSession(tournamentId)
           
-          if (paymentResult.error) {
-            setError(paymentResult.error)
-            toast.error(paymentResult.error)
-          } else if (paymentResult.checkoutUrl) {
-            window.location.href = paymentResult.checkoutUrl
+          // If insufficient funds, suggest adding funds
+          if (result.insufficientFunds) {
+            toast.info("Add funds to your wallet to register", {
+              action: {
+                label: "Add Funds",
+                onClick: () => router.push("/dashboard/wallet")
+              }
+            })
           }
         } else {
           setRegistered(true)
-          toast.success("Successfully registered for tournament!")
+          toast.success("Successfully joined tournament!")
+          router.refresh()
         }
       }
     })
@@ -74,8 +78,8 @@ export function RegistrationButton({
     : isFull 
       ? "Tournament Full" 
       : entryFeeCents > 0 
-        ? `Register ($${(entryFeeCents / 100).toFixed(2)})` 
-        : "Register Now"
+        ? `Join ($${(entryFeeCents / 100).toFixed(2)})` 
+        : "Join Free"
 
   return (
     <div>
@@ -83,8 +87,13 @@ export function RegistrationButton({
         onClick={handleAction}
         disabled={pending || (isFull && !registered)}
         variant={registered ? "outline" : "default"}
+        className="gap-2"
       >
-        {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+        {pending ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : entryFeeCents > 0 && !registered ? (
+          <Wallet className="h-4 w-4" />
+        ) : null}
         {buttonText}
       </Button>
       {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
