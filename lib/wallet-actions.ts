@@ -485,12 +485,13 @@ export async function syncWalletBalance(targetUserId: string) {
     return { error: "Unauthorized - admin access required" }
   }
 
-  // Get all completed transactions for this user
+  // Get all completed transactions for this user (exclude voided)
   const { data: transactions, error: txError } = await supabase
     .from("financial_transactions")
     .select("amount_cents, type")
     .eq("user_id", targetUserId)
     .eq("status", "completed")
+    .neq("status", "voided")
 
   if (txError) {
     return { error: `Failed to fetch transactions: ${txError.message}` }
@@ -584,19 +585,22 @@ export async function findWalletInconsistencies() {
     return { error: `Failed to fetch wallets: ${walletError.message}` }
   }
 
-  // Get all completed transactions grouped by user
+  // Get all completed transactions grouped by user (exclude voided)
   const { data: transactions, error: txError } = await supabase
     .from("financial_transactions")
-    .select("user_id, amount_cents")
-    .eq("status", "completed")
+    .select("user_id, amount_cents, status")
+    .in("status", ["completed", "pending"]) // Exclude voided
 
   if (txError) {
     return { error: `Failed to fetch transactions: ${txError.message}` }
   }
 
-  // Calculate transaction sums per user
+  // Filter to only completed (not voided)
+  const validTransactions = transactions?.filter(tx => tx.status === "completed") || []
+
+  // Calculate transaction sums per user (from valid transactions only)
   const txSums: Record<string, number> = {}
-  transactions?.forEach(tx => {
+  validTransactions.forEach(tx => {
     if (tx.user_id) {
       txSums[tx.user_id] = (txSums[tx.user_id] || 0) + (tx.amount_cents || 0)
     }
@@ -654,19 +658,19 @@ export async function recalculateAllWallets() {
     return { error: `Failed to fetch wallets: ${walletError.message}` }
   }
 
-  // Get all completed transactions
+  // Get all completed transactions (exclude voided)
   const { data: transactions, error: txError } = await supabase
     .from("financial_transactions")
-    .select("user_id, amount_cents")
-    .eq("status", "completed")
+    .select("user_id, amount_cents, status")
+    .in("status", ["completed", "pending"])
 
   if (txError) {
     return { error: `Failed to fetch transactions: ${txError.message}` }
   }
 
-  // Calculate transaction sums per user
+  // Filter to only completed (not voided) and calculate sums
   const txSums: Record<string, number> = {}
-  transactions?.forEach(tx => {
+  transactions?.filter(tx => tx.status === "completed").forEach(tx => {
     if (tx.user_id) {
       txSums[tx.user_id] = (txSums[tx.user_id] || 0) + (tx.amount_cents || 0)
     }
@@ -712,5 +716,175 @@ export async function recalculateAllWallets() {
     total: wallets?.length || 0,
     fixed: details.length,
     details
+  }
+}
+
+/**
+ * Void an erroneous transaction (e.g., failed webhook deposit)
+ * Changes status to 'voided' so it's excluded from balance calculations
+ * but preserved for audit trail
+ */
+export async function voidTransaction(transactionId: string, reason: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  if (!user) {
+    return { error: "You must be signed in" }
+  }
+
+  // Check if user is admin
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("is_admin")
+    .eq("id", user.id)
+    .single()
+
+  if (!profile?.is_admin) {
+    return { error: "Unauthorized - admin access required" }
+  }
+
+  // Get the transaction
+  const { data: transaction, error: txError } = await supabase
+    .from("financial_transactions")
+    .select("*")
+    .eq("id", transactionId)
+    .single()
+
+  if (txError || !transaction) {
+    return { error: "Transaction not found" }
+  }
+
+  if (transaction.status === "voided") {
+    return { error: "Transaction is already voided" }
+  }
+
+  // Update transaction to voided status with reason
+  const { error: updateError } = await supabase
+    .from("financial_transactions")
+    .update({ 
+      status: "voided",
+      description: `${transaction.description} [VOIDED: ${reason}]`,
+      updated_at: new Date().toISOString()
+    })
+    .eq("id", transactionId)
+
+  if (updateError) {
+    return { error: `Failed to void transaction: ${updateError.message}` }
+  }
+
+  revalidatePath("/dashboard")
+  revalidatePath("/dashboard/wallet")
+  revalidatePath("/dashboard/admin/financials")
+  revalidatePath("/dashboard/admin/reconciliation")
+  
+  return { 
+    success: true, 
+    transaction: {
+      id: transactionId,
+      type: transaction.type,
+      amount_cents: transaction.amount_cents,
+      previousStatus: transaction.status,
+      newStatus: "voided"
+    }
+  }
+}
+
+/**
+ * Find orphaned deposits - transactions recorded as deposits
+ * but wallet was never credited (webhook failures)
+ */
+export async function findOrphanedDeposits() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  if (!user) {
+    return { error: "You must be signed in" }
+  }
+
+  // Check if user is admin
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("is_admin")
+    .eq("id", user.id)
+    .single()
+
+  if (!profile?.is_admin) {
+    return { error: "Unauthorized - admin access required" }
+  }
+
+  // Get all completed deposits
+  const { data: deposits, error: depError } = await supabase
+    .from("financial_transactions")
+    .select(`
+      id,
+      user_id,
+      amount_cents,
+      type,
+      status,
+      description,
+      stripe_session_id,
+      created_at
+    `)
+    .eq("type", "deposit")
+    .eq("status", "completed")
+    .order("created_at", { ascending: false })
+
+  if (depError) {
+    return { error: `Failed to fetch deposits: ${depError.message}` }
+  }
+
+  // Get all wallets
+  const { data: wallets, error: walletError } = await supabase
+    .from("wallets")
+    .select("user_id, balance_cents")
+
+  if (walletError) {
+    return { error: `Failed to fetch wallets: ${walletError.message}` }
+  }
+
+  // Get all transactions per user to calculate expected balance
+  const { data: allTransactions, error: txError } = await supabase
+    .from("financial_transactions")
+    .select("user_id, amount_cents, type")
+    .eq("status", "completed")
+
+  if (txError) {
+    return { error: `Failed to fetch transactions: ${txError.message}` }
+  }
+
+  // Calculate expected balance per user from transactions
+  const expectedBalances: Record<string, number> = {}
+  allTransactions?.forEach(tx => {
+    if (tx.user_id) {
+      expectedBalances[tx.user_id] = (expectedBalances[tx.user_id] || 0) + (tx.amount_cents || 0)
+    }
+  })
+
+  // Build wallet balance map
+  const walletBalances: Record<string, number> = {}
+  wallets?.forEach(w => {
+    walletBalances[w.user_id] = w.balance_cents
+  })
+
+  // Find users where wallet balance is LESS than expected (deposits didn't credit)
+  const usersWithOrphanedDeposits = Object.keys(expectedBalances).filter(userId => {
+    const expected = expectedBalances[userId] || 0
+    const actual = walletBalances[userId] || 0
+    return actual < expected
+  })
+
+  // Find deposits that might be orphaned (users with balance discrepancy)
+  const potentialOrphans = deposits?.filter(d => 
+    d.user_id && usersWithOrphanedDeposits.includes(d.user_id)
+  ) || []
+
+  return {
+    success: true,
+    orphanedDeposits: potentialOrphans,
+    summary: {
+      totalDeposits: deposits?.length || 0,
+      potentialOrphans: potentialOrphans.length,
+      usersAffected: usersWithOrphanedDeposits.length
+    }
   }
 }
