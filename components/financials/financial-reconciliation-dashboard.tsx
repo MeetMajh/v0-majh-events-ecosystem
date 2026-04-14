@@ -18,9 +18,21 @@ import {
   Wallet,
   CreditCard,
   TrendingUp,
-  AlertCircle
+  AlertCircle,
+  Trash2,
+  FileX
 } from "lucide-react"
-import { findWalletInconsistencies, recalculateAllWallets } from "@/lib/wallet-actions"
+import { findWalletInconsistencies, recalculateAllWallets, voidTransaction, findOrphanedDeposits } from "@/lib/wallet-actions"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 interface SystemHealth {
   isHealthy: boolean
@@ -58,6 +70,17 @@ interface Escrow {
   fundedAmount: number
   participantCount: number
   status: string
+}
+
+interface OrphanedDeposit {
+  id: string
+  user_id: string
+  amount_cents: number
+  type: string
+  status: string
+  description: string
+  stripe_session_id: string | null
+  created_at: string
 }
 
 interface ReconciliationData {
