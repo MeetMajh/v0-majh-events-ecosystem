@@ -723,8 +723,11 @@ export async function recalculateAllWallets() {
  * Void an erroneous transaction (e.g., failed webhook deposit)
  * Changes status to 'voided' so it's excluded from balance calculations
  * but preserved for audit trail
+ * 
+ * USE FOR: Test payments, ghost webhook records, invalid transactions
+ * DO NOT USE FOR: Real money that needs refund (use reverseTransaction instead)
  */
-export async function voidTransaction(transactionId: string, reason: string) {
+export async function voidTransaction(transactionId: string, reason: string, forceVoidStripe = false) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   
@@ -758,12 +761,24 @@ export async function voidTransaction(transactionId: string, reason: string) {
     return { error: "Transaction is already voided" }
   }
 
-  // Update transaction to voided status with reason
+  // SAFETY CHECK: Warn if voiding a real Stripe transaction
+  if (transaction.stripe_event_id && !forceVoidStripe) {
+    return { 
+      error: "This transaction is linked to a real Stripe event. Use REVERSAL for real money corrections, or confirm force void.",
+      hasStripeLink: true,
+      stripeEventId: transaction.stripe_event_id
+    }
+  }
+
+  // Update transaction to voided status with audit trail
   const { error: updateError } = await supabase
     .from("financial_transactions")
     .update({ 
       status: "voided",
       description: `${transaction.description} [VOIDED: ${reason}]`,
+      void_reason: reason,
+      voided_by: user.id,
+      voided_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     })
     .eq("id", transactionId)
@@ -785,6 +800,139 @@ export async function voidTransaction(transactionId: string, reason: string) {
       amount_cents: transaction.amount_cents,
       previousStatus: transaction.status,
       newStatus: "voided"
+    }
+  }
+}
+
+/**
+ * Reverse a transaction (for refunds, chargebacks, admin corrections)
+ * Creates an opposing transaction to maintain ledger balance
+ * 
+ * USE FOR: Real money that needs to be undone (refund, chargeback, correction)
+ * This keeps ledger balanced: +100 deposit, -100 reversal = net 0
+ */
+export async function reverseTransaction(transactionId: string, reason: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  if (!user) {
+    return { error: "You must be signed in" }
+  }
+
+  // Check if user is admin
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("is_admin")
+    .eq("id", user.id)
+    .single()
+
+  if (!profile?.is_admin) {
+    return { error: "Unauthorized - admin access required" }
+  }
+
+  // Get the original transaction
+  const { data: transaction, error: txError } = await supabase
+    .from("financial_transactions")
+    .select("*")
+    .eq("id", transactionId)
+    .single()
+
+  if (txError || !transaction) {
+    return { error: "Transaction not found" }
+  }
+
+  if (transaction.status === "voided") {
+    return { error: "Cannot reverse a voided transaction" }
+  }
+
+  if (transaction.type === "reversal") {
+    return { error: "Cannot reverse a reversal transaction" }
+  }
+
+  // Check if already reversed
+  const { data: existingReversal } = await supabase
+    .from("financial_transactions")
+    .select("id")
+    .eq("reference_id", transactionId)
+    .eq("type", "reversal")
+    .single()
+
+  if (existingReversal) {
+    return { error: "This transaction has already been reversed" }
+  }
+
+  // Create reversal transaction (negative of original amount)
+  const reversalAmount = -Math.abs(transaction.amount_cents)
+  
+  const { data: reversal, error: insertError } = await supabase
+    .from("financial_transactions")
+    .insert({
+      user_id: transaction.user_id,
+      amount_cents: reversalAmount,
+      type: "reversal",
+      status: "completed",
+      description: `Reversal: ${reason} (original: ${transaction.description})`,
+      reference_type: "reversal",
+      reference_id: transactionId,
+    })
+    .select()
+    .single()
+
+  if (insertError) {
+    return { error: `Failed to create reversal: ${insertError.message}` }
+  }
+
+  // Update wallet balance (subtract the original amount)
+  if (transaction.user_id) {
+    const { error: walletError } = await supabase
+      .from("wallets")
+      .update({ 
+        balance_cents: supabase.rpc ? undefined : undefined, // Will use raw SQL below
+        updated_at: new Date().toISOString()
+      })
+      .eq("user_id", transaction.user_id)
+
+    // Use RPC or direct update for atomic balance change
+    await supabase.rpc("adjust_wallet_balance", {
+      p_user_id: transaction.user_id,
+      p_amount: reversalAmount
+    }).catch(() => {
+      // Fallback: manual update if RPC doesn't exist
+      return supabase
+        .from("wallets")
+        .select("balance_cents")
+        .eq("user_id", transaction.user_id)
+        .single()
+        .then(({ data: wallet }) => {
+          if (wallet) {
+            return supabase
+              .from("wallets")
+              .update({ 
+                balance_cents: wallet.balance_cents + reversalAmount,
+                updated_at: new Date().toISOString()
+              })
+              .eq("user_id", transaction.user_id)
+          }
+        })
+    })
+  }
+
+  revalidatePath("/dashboard")
+  revalidatePath("/dashboard/wallet")
+  revalidatePath("/dashboard/admin/financials")
+  revalidatePath("/dashboard/admin/reconciliation")
+  
+  return { 
+    success: true, 
+    originalTransaction: {
+      id: transactionId,
+      type: transaction.type,
+      amount_cents: transaction.amount_cents,
+    },
+    reversalTransaction: {
+      id: reversal.id,
+      type: "reversal",
+      amount_cents: reversalAmount,
     }
   }
 }

@@ -20,9 +20,10 @@ import {
   TrendingUp,
   AlertCircle,
   Trash2,
-  FileX
+  FileX,
+  Undo2
 } from "lucide-react"
-import { findWalletInconsistencies, recalculateAllWallets, voidTransaction, findOrphanedDeposits } from "@/lib/wallet-actions"
+import { findWalletInconsistencies, recalculateAllWallets, voidTransaction, reverseTransaction, findOrphanedDeposits } from "@/lib/wallet-actions"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -105,8 +106,13 @@ export function FinancialReconciliationDashboard() {
   const [loadingOrphans, setLoadingOrphans] = useState(false)
   const [voidingId, setVoidingId] = useState<string | null>(null)
   const [voidDialogOpen, setVoidDialogOpen] = useState(false)
+  const [reverseDialogOpen, setReverseDialogOpen] = useState(false)
   const [selectedTransaction, setSelectedTransaction] = useState<OrphanedDeposit | null>(null)
   const [voidReason, setVoidReason] = useState("")
+  const [reverseReason, setReverseReason] = useState("")
+  const [reversingId, setReversingId] = useState<string | null>(null)
+  const [stripeWarningOpen, setStripeWarningOpen] = useState(false)
+  const [forceVoid, setForceVoid] = useState(false)
 
   const formatCurrency = (cents: number) => {
     return new Intl.NumberFormat("en-US", {
@@ -164,7 +170,15 @@ export function FinancialReconciliationDashboard() {
     if (!selectedTransaction || !voidReason.trim()) return
     
     setVoidingId(selectedTransaction.id)
-    const result = await voidTransaction(selectedTransaction.id, voidReason)
+    const result = await voidTransaction(selectedTransaction.id, voidReason, forceVoid)
+    
+    // Check if Stripe warning
+    if (result.hasStripeLink && !forceVoid) {
+      setVoidingId(null)
+      setVoidDialogOpen(false)
+      setStripeWarningOpen(true)
+      return
+    }
     
     if (result.success) {
       // Remove from list and refresh data
@@ -174,8 +188,34 @@ export function FinancialReconciliationDashboard() {
     
     setVoidingId(null)
     setVoidDialogOpen(false)
+    setStripeWarningOpen(false)
     setSelectedTransaction(null)
     setVoidReason("")
+    setForceVoid(false)
+  }
+
+  function openReverseDialog(transaction: OrphanedDeposit) {
+    setSelectedTransaction(transaction)
+    setReverseReason("")
+    setReverseDialogOpen(true)
+  }
+
+  async function handleReverseTransaction() {
+    if (!selectedTransaction || !reverseReason.trim()) return
+    
+    setReversingId(selectedTransaction.id)
+    const result = await reverseTransaction(selectedTransaction.id, reverseReason)
+    
+    if (result.success) {
+      // Remove from list and refresh data
+      setOrphanedDeposits(prev => prev.filter(d => d.id !== selectedTransaction.id))
+      await fetchReconciliationData()
+    }
+    
+    setReversingId(null)
+    setReverseDialogOpen(false)
+    setSelectedTransaction(null)
+    setReverseReason("")
   }
 
   useEffect(() => {
@@ -573,14 +613,22 @@ export function FinancialReconciliationDashboard() {
               </div>
             </CardHeader>
             <CardContent>
-              <Alert className="mb-4">
-                <AlertTriangle className="h-4 w-4" />
-                <AlertDescription>
-                  <strong>When to void transactions:</strong> Use this when a deposit was recorded in the database 
-                  (e.g., from a test Stripe webhook) but the payment never actually went through or was from test mode. 
-                  Voiding marks the transaction as invalid so it is excluded from balance calculations.
-                </AlertDescription>
-              </Alert>
+              <div className="grid gap-4 mb-4 md:grid-cols-2">
+                <Alert>
+                  <Trash2 className="h-4 w-4" />
+                  <AlertDescription>
+                    <strong>Void (Invalid):</strong> Use when transaction never happened (test webhook, ghost record). 
+                    Marks as invalid and excludes from calculations.
+                  </AlertDescription>
+                </Alert>
+                <Alert>
+                  <Undo2 className="h-4 w-4" />
+                  <AlertDescription>
+                    <strong>Reverse (Refund):</strong> Use when real money needs to be undone (refund, chargeback). 
+                    Creates opposite entry to keep ledger balanced.
+                  </AlertDescription>
+                </Alert>
+              </div>
 
               {orphanedDeposits.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
@@ -598,7 +646,7 @@ export function FinancialReconciliationDashboard() {
                         <TableHead>Description</TableHead>
                         <TableHead className="text-right">Amount</TableHead>
                         <TableHead>Stripe Session</TableHead>
-                        <TableHead>Action</TableHead>
+                        <TableHead>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -623,21 +671,38 @@ export function FinancialReconciliationDashboard() {
                             }
                           </TableCell>
                           <TableCell>
-                            <Button 
-                              variant="destructive" 
-                              size="sm"
-                              onClick={() => openVoidDialog(deposit)}
-                              disabled={voidingId === deposit.id}
-                            >
-                              {voidingId === deposit.id ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <>
-                                  <Trash2 className="h-4 w-4 mr-1" />
-                                  Void
-                                </>
-                              )}
-                            </Button>
+                            <div className="flex gap-2">
+                              <Button 
+                                variant="destructive" 
+                                size="sm"
+                                onClick={() => openVoidDialog(deposit)}
+                                disabled={voidingId === deposit.id || reversingId === deposit.id}
+                              >
+                                {voidingId === deposit.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <>
+                                    <Trash2 className="h-4 w-4 mr-1" />
+                                    Void
+                                  </>
+                                )}
+                              </Button>
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => openReverseDialog(deposit)}
+                                disabled={voidingId === deposit.id || reversingId === deposit.id}
+                              >
+                                {reversingId === deposit.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <>
+                                    <Undo2 className="h-4 w-4 mr-1" />
+                                    Reverse
+                                  </>
+                                )}
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -707,6 +772,122 @@ export function FinancialReconciliationDashboard() {
                 <Trash2 className="h-4 w-4 mr-2" />
               )}
               Void Transaction
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Stripe Warning Dialog */}
+      <Dialog open={stripeWarningOpen} onOpenChange={setStripeWarningOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-600">
+              <AlertTriangle className="h-5 w-5" />
+              Stripe Transaction Detected
+            </DialogTitle>
+            <DialogDescription>
+              This transaction is linked to a real Stripe payment. Voiding it may cause reconciliation issues.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Recommended:</strong> Use REVERSE instead of VOID for real money transactions. 
+              Reversing creates an opposing entry to maintain ledger balance.
+            </AlertDescription>
+          </Alert>
+
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={() => {
+              setStripeWarningOpen(false)
+              setSelectedTransaction(null)
+            }}>
+              Cancel
+            </Button>
+            <Button 
+              variant="default"
+              onClick={() => {
+                setStripeWarningOpen(false)
+                if (selectedTransaction) openReverseDialog(selectedTransaction)
+              }}
+            >
+              <Undo2 className="h-4 w-4 mr-2" />
+              Reverse Instead
+            </Button>
+            <Button 
+              variant="destructive"
+              onClick={() => {
+                setForceVoid(true)
+                setStripeWarningOpen(false)
+                setVoidDialogOpen(true)
+              }}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Force Void Anyway
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reverse Transaction Dialog */}
+      <Dialog open={reverseDialogOpen} onOpenChange={setReverseDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reverse Transaction</DialogTitle>
+            <DialogDescription>
+              This will create an opposing transaction to undo the original amount. 
+              The ledger will remain balanced (+{formatCurrency(selectedTransaction?.amount_cents || 0)} original, -{formatCurrency(selectedTransaction?.amount_cents || 0)} reversal = net $0).
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedTransaction && (
+            <div className="space-y-4">
+              <div className="bg-muted p-3 rounded-lg space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Original Amount:</span>
+                  <span className="font-mono font-medium text-emerald-600">
+                    +{formatCurrency(selectedTransaction.amount_cents)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Reversal Amount:</span>
+                  <span className="font-mono font-medium text-red-600">
+                    -{formatCurrency(selectedTransaction.amount_cents)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm border-t pt-2">
+                  <span className="text-muted-foreground">Net Effect:</span>
+                  <span className="font-mono font-medium">$0.00</span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="reverseReason">Reason for reversal (required)</Label>
+                <Input
+                  id="reverseReason"
+                  placeholder="e.g., Customer refund, Chargeback, Admin correction"
+                  value={reverseReason}
+                  onChange={(e) => setReverseReason(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReverseDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleReverseTransaction}
+              disabled={!reverseReason.trim() || reversingId !== null}
+            >
+              {reversingId ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Undo2 className="h-4 w-4 mr-2" />
+              )}
+              Reverse Transaction
             </Button>
           </DialogFooter>
         </DialogContent>
