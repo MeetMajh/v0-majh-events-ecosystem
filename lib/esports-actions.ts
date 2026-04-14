@@ -78,7 +78,7 @@ export async function getTournaments(filters?: { gameId?: string; status?: strin
   const supabase = await createClient()
   let query = supabase
     .from("tournaments")
-    .select("*, games(name, slug, category, icon_url), tournament_participants(count)")
+    .select("*, games(name, slug, category, icon_url), tournament_registrations(count)")
     .order("start_date", { ascending: false })
 
   if (filters?.gameId) query = query.eq("game_id", filters.gameId)
@@ -232,7 +232,7 @@ export async function registerForTournament(tournamentId: string) {
   // Check capacity
   const { data: tournament } = await supabase
     .from("tournaments")
-    .select("max_participants, status, entry_fee_cents")
+    .select("max_participants, status, entry_fee_cents, slug")
     .eq("id", tournamentId)
     .single()
 
@@ -240,20 +240,67 @@ export async function registerForTournament(tournamentId: string) {
     return { error: "Registration is closed" }
   }
 
+  // Check existing registration using tournament_registrations table
+  const { data: existingReg } = await supabase
+    .from("tournament_registrations")
+    .select("id, status")
+    .eq("tournament_id", tournamentId)
+    .eq("player_id", user.id)
+    .single()
+
+  if (existingReg) {
+    return { error: "Already registered for this tournament" }
+  }
+
+  // Count current registrations
   const { count } = await supabase
-    .from("tournament_participants")
+    .from("tournament_registrations")
     .select("*", { count: "exact", head: true })
     .eq("tournament_id", tournamentId)
+    .in("status", ["registered", "checked_in", "pending_payment"])
 
   if (tournament.max_participants && (count ?? 0) >= tournament.max_participants) {
     return { error: "Tournament is full" }
   }
 
-  const { error } = await supabase.from("tournament_participants").insert({
-    tournament_id: tournamentId,
-    user_id: user.id,
-    payment_status: tournament.entry_fee_cents > 0 ? "pending" : "free",
-  })
+  // If there's an entry fee, create pending registration and redirect to payment
+  if (tournament.entry_fee_cents > 0) {
+    const { data: registration, error } = await supabase
+      .from("tournament_registrations")
+      .insert({
+        tournament_id: tournamentId,
+        player_id: user.id,
+        registration_type: "paid",
+        payment_status: "pending",
+        status: "pending_payment",
+      })
+      .select()
+      .single()
+
+    if (error) {
+      if (error.code === "23505") return { error: "Already registered" }
+      return { error: error.message }
+    }
+
+    revalidatePath("/esports")
+    return { 
+      success: true, 
+      requiresPayment: true,
+      registrationId: registration.id,
+      tournamentSlug: tournament.slug
+    }
+  }
+
+  // Free tournament - register directly
+  const { error } = await supabase
+    .from("tournament_registrations")
+    .insert({
+      tournament_id: tournamentId,
+      player_id: user.id,
+      registration_type: "free",
+      payment_status: "free",
+      status: "registered",
+    })
 
   if (error) {
     if (error.code === "23505") return { error: "Already registered" }
@@ -269,11 +316,34 @@ export async function withdrawFromTournament(tournamentId: string) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: "You must be signed in" }
 
-  await supabase
-    .from("tournament_participants")
-    .delete()
+  // Check if user has a paid registration that needs refund
+  const { data: registration } = await supabase
+    .from("tournament_registrations")
+    .select("id, payment_status, status")
     .eq("tournament_id", tournamentId)
-    .eq("user_id", user.id)
+    .eq("player_id", user.id)
+    .single()
+
+  if (!registration) {
+    return { error: "Not registered for this tournament" }
+  }
+
+  if (registration.payment_status === "paid") {
+    // Mark as dropped - refund must be processed separately
+    await supabase
+      .from("tournament_registrations")
+      .update({ 
+        status: "dropped",
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", registration.id)
+  } else {
+    // No payment, can delete registration
+    await supabase
+      .from("tournament_registrations")
+      .delete()
+      .eq("id", registration.id)
+  }
 
   revalidatePath("/esports")
   return { success: true }

@@ -107,6 +107,7 @@ export default async function TournamentDetailPage({ params }: { params: Promise
               isRegistered={isRegistered}
               isOpen={tournament.status === "registration"}
               isFull={isFull}
+              entryFeeCents={tournament.entry_fee_cents || 0}
             />
           ) : (
             tournament.status === "registration" && (
