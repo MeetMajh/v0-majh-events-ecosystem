@@ -76,6 +76,11 @@ const sidebarNav = [
     href: "/dashboard/admin/control-panel/system",
     icon: ShieldAlert,
   },
+  {
+    title: "Chaos Testing",
+    href: "/dashboard/admin/control-panel/chaos",
+    icon: Zap,
+  },
 ]
 
 export default function ControlPanelLayout({
