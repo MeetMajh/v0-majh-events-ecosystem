@@ -40,6 +40,7 @@ import {
   TrendingUp,
   Activity,
   Tv,
+  Sliders,
 } from "lucide-react"
 import { signOut } from "@/lib/actions"
 import { Button } from "@/components/ui/button"
@@ -108,6 +109,7 @@ const ADMIN_FINANCIAL_ITEMS = [
   { label: "Financial Overview", href: "/dashboard/admin/financials", icon: DollarSign },
   { label: "Reconciliation", href: "/dashboard/admin/reconciliation", icon: ShieldCheck },
   { label: "Compliance", href: "/dashboard/admin/compliance", icon: ShieldCheck },
+  { label: "Control Panel", href: "/dashboard/admin/control-panel", icon: Sliders },
   { label: "Stream Sources", href: "/dashboard/admin/streams", icon: Tv },
   { label: "Broadcast Control", href: "/dashboard/admin/broadcast", icon: Radio },
   { label: "Ops Command Center", href: "/dashboard/admin/ops", icon: Activity },

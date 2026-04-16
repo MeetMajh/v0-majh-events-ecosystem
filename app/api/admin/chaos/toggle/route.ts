@@ -26,7 +26,7 @@ export async function POST(request: Request) {
   // Toggle chaos mode via system controls
   const { error } = await supabase.rpc("toggle_system_control", {
     p_control_type: "chaos_mode_enabled",
-    p_is_enabled: enabled,
+    p_enabled: enabled,
     p_admin_id: user.id,
     p_reason: enabled ? "Chaos testing enabled" : "Chaos testing disabled"
   })

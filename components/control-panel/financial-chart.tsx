@@ -62,7 +62,6 @@ export function FinancialChart({ type, metrics }: FinancialChartProps) {
         .order("created_at", { ascending: true })
 
       if (error) {
-        console.error("[v0] Error fetching deposit data:", error)
         setLoading(false)
         return
       }
@@ -94,8 +93,8 @@ export function FinancialChart({ type, metrics }: FinancialChartProps) {
       }))
 
       setDepositData(chartData)
-    } catch (err) {
-      console.error("[v0] Chart data fetch error:", err)
+    } catch {
+      // Silent fail - chart will show empty state
     } finally {
       setLoading(false)
     }
