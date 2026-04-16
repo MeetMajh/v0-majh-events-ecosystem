@@ -103,6 +103,29 @@ export function useFinancialRealtime() {
         { event: "INSERT", schema: "public", table: "reconciliation_audit_log" },
         () => debouncedRefresh()
       )
+      // System alerts - critical notifications
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "system_alerts" },
+        () => debouncedRefresh()
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "system_alerts" },
+        () => debouncedRefresh()
+      )
+      // Chaos test runs - track test results
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "chaos_test_runs" },
+        () => debouncedRefresh()
+      )
+      // Deployment integrity runs
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "deployment_integrity_runs" },
+        () => debouncedRefresh()
+      )
       .subscribe()
 
     return () => {

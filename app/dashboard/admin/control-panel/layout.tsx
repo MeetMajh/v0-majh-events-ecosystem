@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { MissionControlStatus } from "@/components/control-panel/mission-control-status"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -76,6 +77,11 @@ const sidebarNav = [
     title: "System Controls",
     href: "/dashboard/admin/control-panel/system",
     icon: ShieldAlert,
+  },
+  {
+    title: "Incidents",
+    href: "/dashboard/admin/control-panel/incidents",
+    icon: Bell,
   },
   {
     title: "Chaos Testing",
@@ -240,6 +246,10 @@ export default function ControlPanelLayout({
 
         {/* Page Content */}
         <main className="p-6 bg-zinc-950 min-h-[calc(100vh-4rem)]">
+          {/* Mission Control Status Bar */}
+          <div className="mb-6">
+            <MissionControlStatus />
+          </div>
           {children}
         </main>
       </div>
