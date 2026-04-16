@@ -10,16 +10,29 @@ export async function GET() {
   const supabase = await createClient()
   
   // Check admin access
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+  
+  console.log("[v0] Reconciliation API - Auth check:", { 
+    userId: user?.id, 
+    email: user?.email,
+    authError: authError?.message 
+  })
+  
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
   
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("is_admin")
     .eq("id", user.id)
     .single()
+  
+  console.log("[v0] Reconciliation API - Profile check:", { 
+    profile, 
+    profileError: profileError?.message,
+    isAdmin: profile?.is_admin 
+  })
     
   if (!profile?.is_admin) {
     return NextResponse.json({ error: "Admin access required" }, { status: 403 })
