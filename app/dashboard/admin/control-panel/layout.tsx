@@ -28,6 +28,7 @@ import {
   Zap,
   ChevronDown,
   Bell,
+  Rocket,
 } from "lucide-react"
 
 const sidebarNav = [
@@ -80,6 +81,11 @@ const sidebarNav = [
     title: "Chaos Testing",
     href: "/dashboard/admin/control-panel/chaos",
     icon: Zap,
+  },
+  {
+    title: "Pre-Deploy Check",
+    href: "/dashboard/admin/control-panel/predeploy",
+    icon: Rocket,
   },
 ]
 
