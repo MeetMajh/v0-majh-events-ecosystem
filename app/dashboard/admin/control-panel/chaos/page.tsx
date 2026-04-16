@@ -54,6 +54,14 @@ interface ChaosState {
   history: ChaosRun[]
 }
 
+interface SimulationResult {
+  success: boolean
+  simulation: string
+  note?: string
+  error?: string
+  [key: string]: unknown
+}
+
 const TEST_DESCRIPTIONS: Record<string, string> = {
   wallet_corruption: "Injects balance corruption and verifies reconciliation detects it",
   lockdown_enforcement: "Triggers emergency lockdown and verifies operations are blocked",
@@ -71,6 +79,8 @@ export default function ChaosTestPage() {
   const [confirmText, setConfirmText] = useState("")
   const [currentResults, setCurrentResults] = useState<TestResult[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [simulationLoading, setSimulationLoading] = useState<string | null>(null)
+  const [simulationResult, setSimulationResult] = useState<SimulationResult | null>(null)
 
   const fetchState = async () => {
     try {
@@ -130,6 +140,32 @@ export default function ChaosTestPage() {
       setError(err instanceof Error ? err.message : "Unknown error")
     } finally {
       setRunning(false)
+    }
+  }
+
+  const runSimulation = async (type: string) => {
+    setSimulationLoading(type)
+    setSimulationResult(null)
+    setError(null)
+
+    try {
+      const res = await fetch("/api/admin/chaos/simulate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type })
+      })
+      const data = await res.json()
+      
+      if (!res.ok) {
+        throw new Error(data.error || "Simulation failed")
+      }
+      
+      setSimulationResult(data)
+      await fetchState()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Simulation failed")
+    } finally {
+      setSimulationLoading(null)
     }
   }
 
@@ -260,6 +296,89 @@ export default function ChaosTestPage() {
               </>
             )}
           </Button>
+        </CardContent>
+      </Card>
+
+      {/* Individual Simulations */}
+      <Card className="bg-zinc-900 border-zinc-800">
+        <CardHeader>
+          <CardTitle className="text-zinc-100 flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-amber-400" />
+            Chaos Simulations
+          </CardTitle>
+          <CardDescription className="text-zinc-400">
+            Run individual failure simulations to test specific detection systems
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            <SimulationButton
+              type="wallet_corruption"
+              title="Wallet Corruption"
+              description="Inject +$99.99 into a wallet"
+              icon={<ShieldAlert className="h-5 w-5" />}
+              loading={simulationLoading === "wallet_corruption"}
+              disabled={!state?.chaosModeEnabled || simulationLoading !== null}
+              onClick={() => runSimulation("wallet_corruption")}
+            />
+            <SimulationButton
+              type="missing_payment"
+              title="Missing Payment"
+              description="Simulate Stripe payment not in DB"
+              icon={<AlertCircle className="h-5 w-5" />}
+              loading={simulationLoading === "missing_payment"}
+              disabled={!state?.chaosModeEnabled || simulationLoading !== null}
+              onClick={() => runSimulation("missing_payment")}
+            />
+            <SimulationButton
+              type="lockdown_trigger"
+              title="Emergency Lockdown"
+              description="Trigger system-wide lockdown"
+              icon={<Shield className="h-5 w-5" />}
+              loading={simulationLoading === "lockdown_trigger"}
+              disabled={!state?.chaosModeEnabled || simulationLoading !== null}
+              onClick={() => runSimulation("lockdown_trigger")}
+              variant="destructive"
+            />
+            <SimulationButton
+              type="risk_spike"
+              title="Risk Spike"
+              description="Create 5 suspicious transactions"
+              icon={<Activity className="h-5 w-5" />}
+              loading={simulationLoading === "risk_spike"}
+              disabled={!state?.chaosModeEnabled || simulationLoading !== null}
+              onClick={() => runSimulation("risk_spike")}
+            />
+            <SimulationButton
+              type="escrow_mismatch"
+              title="Escrow Mismatch"
+              description="Create underfunded escrow"
+              icon={<AlertTriangle className="h-5 w-5" />}
+              loading={simulationLoading === "escrow_mismatch"}
+              disabled={!state?.chaosModeEnabled || simulationLoading !== null}
+              onClick={() => runSimulation("escrow_mismatch")}
+            />
+          </div>
+
+          {/* Simulation Result */}
+          {simulationResult && (
+            <Alert className={simulationResult.success 
+              ? "bg-emerald-900/20 border-emerald-900/50" 
+              : "bg-red-900/20 border-red-900/50"
+            }>
+              {simulationResult.success ? (
+                <CheckCircle className="h-4 w-4 text-emerald-400" />
+              ) : (
+                <XCircle className="h-4 w-4 text-red-400" />
+              )}
+              <AlertTitle className={simulationResult.success ? "text-emerald-200" : "text-red-200"}>
+                {simulationResult.simulation?.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())}
+              </AlertTitle>
+              <AlertDescription className={simulationResult.success ? "text-emerald-300/80" : "text-red-300/80"}>
+                {simulationResult.note || simulationResult.error || "Simulation completed"}
+              </AlertDescription>
+            </Alert>
+          )}
         </CardContent>
       </Card>
 
@@ -446,5 +565,50 @@ export default function ChaosTestPage() {
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+function SimulationButton({
+  type,
+  title,
+  description,
+  icon,
+  loading,
+  disabled,
+  onClick,
+  variant = "default"
+}: {
+  type: string
+  title: string
+  description: string
+  icon: React.ReactNode
+  loading: boolean
+  disabled: boolean
+  onClick: () => void
+  variant?: "default" | "destructive"
+}) {
+  return (
+    <Button
+      variant="outline"
+      onClick={onClick}
+      disabled={disabled}
+      className={`h-auto p-4 flex flex-col items-start gap-2 ${
+        variant === "destructive" 
+          ? "border-red-500/30 hover:bg-red-500/10 hover:border-red-500/50" 
+          : "border-zinc-700 hover:bg-zinc-800 hover:border-zinc-600"
+      }`}
+    >
+      <div className="flex items-center gap-2 w-full">
+        {loading ? (
+          <Loader2 className="h-5 w-5 animate-spin text-amber-400" />
+        ) : (
+          <span className={variant === "destructive" ? "text-red-400" : "text-amber-400"}>
+            {icon}
+          </span>
+        )}
+        <span className="font-medium text-zinc-200">{title}</span>
+      </div>
+      <p className="text-xs text-zinc-500 text-left">{description}</p>
+    </Button>
   )
 }
