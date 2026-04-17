@@ -148,6 +148,7 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
     // ── Wallet Deposit ──
     if (type === "wallet_deposit" && user_id && amount_cents) {
       const amountCentsNum = parseInt(amount_cents, 10)
+      const tenantId = metadata.tenant_id
       
       // Check for idempotency
       const { data: existingTx } = await supabaseAdmin
@@ -161,7 +162,7 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
         return
       }
 
-      // Get or create wallet
+      // Get or create wallet (legacy table support)
       let { data: wallet } = await supabaseAdmin
         .from("wallets")
         .select("*")
@@ -177,7 +178,7 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
         wallet = newWallet
       }
 
-      // Update wallet balance
+      // Update legacy wallet balance
       const newBalance = (wallet?.balance_cents ?? 0) + amountCentsNum
       await supabaseAdmin
         .from("wallets")
@@ -187,7 +188,7 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
         })
         .eq("user_id", user_id)
 
-      // Record transaction with full Stripe tracking
+      // Record in legacy financial_transactions table
       await supabaseAdmin
         .from("financial_transactions")
         .insert({
@@ -198,8 +199,25 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
           description: "Stripe wallet deposit",
           stripe_session_id: session.id,
           stripe_payment_intent: session.payment_intent as string,
-          stripe_event_id: event.id, // For reconciliation
         })
+
+      // ── NEW: Record in double-entry ledger ──
+      if (tenantId) {
+        const idempotencyKey = `stripe_deposit_${session.id}`
+        const { data: ledgerResult, error: ledgerError } = await supabaseAdmin.rpc("ledger_deposit", {
+          p_tenant_id: tenantId,
+          p_user_id: user_id,
+          p_amount_cents: amountCentsNum,
+          p_stripe_session_id: session.id,
+          p_idempotency_key: idempotencyKey,
+        })
+
+        if (ledgerError) {
+          console.error("[Stripe Webhook] Ledger deposit error:", ledgerError)
+        } else {
+          console.log("[Stripe Webhook] Ledger deposit recorded:", ledgerResult)
+        }
+      }
 
       console.log("[Stripe Webhook] Wallet deposit processed:", { user_id, amountCentsNum, newBalance })
       return
