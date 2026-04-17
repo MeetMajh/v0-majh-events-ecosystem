@@ -73,12 +73,38 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Owner access required for system controls" }, { status: 403 })
     }
 
-    const { controlType, enabled, reason } = await req.json()
+    const { controlType, enabled, reason, thresholdValue } = await req.json()
 
     if (!controlType) {
       return NextResponse.json({ error: "Control type is required" }, { status: 400 })
     }
 
+    // Handle threshold update
+    if (thresholdValue !== undefined) {
+      const { data, error: updateError } = await supabase
+        .from("system_controls")
+        .update({ 
+          threshold_value: thresholdValue,
+          updated_at: new Date().toISOString(),
+          updated_by: user.id
+        })
+        .eq("control_type", controlType)
+        .select()
+        .single()
+
+      if (updateError) {
+        console.error("Threshold update error:", updateError)
+        return NextResponse.json({ error: updateError.message }, { status: 500 })
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: `Threshold ${controlType} updated to ${thresholdValue}`,
+        control: data
+      })
+    }
+
+    // Handle toggle
     if (typeof enabled !== "boolean") {
       return NextResponse.json({ error: "Enabled must be a boolean" }, { status: 400 })
     }

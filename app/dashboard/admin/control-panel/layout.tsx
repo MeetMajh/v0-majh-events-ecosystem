@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { MissionControlStatus } from "@/components/control-panel/mission-control-status"
+import { signOut } from "@/lib/actions"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,6 +31,8 @@ import {
   ChevronDown,
   Bell,
   Rocket,
+  ArrowLeft,
+  LogOut,
 } from "lucide-react"
 
 const sidebarNav = [
@@ -116,6 +119,17 @@ export default function ControlPanelLayout({
             <p className="font-semibold text-zinc-100">Financial Control</p>
             <p className="text-xs text-zinc-500">MAJH Events</p>
           </div>
+        </div>
+
+        {/* Back to Dashboard */}
+        <div className="px-3 py-2 border-b border-zinc-800">
+          <Link
+            href="/dashboard"
+            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200 transition-all"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Dashboard
+          </Link>
         </div>
 
         {/* Environment Badge */}
@@ -229,15 +243,26 @@ export default function ControlPanelLayout({
               <DropdownMenuContent align="end" className="w-56 bg-zinc-900 border-zinc-800">
                 <DropdownMenuLabel className="text-zinc-400">My Account</DropdownMenuLabel>
                 <DropdownMenuSeparator className="bg-zinc-800" />
-                <DropdownMenuItem className="text-zinc-200 focus:bg-zinc-800 focus:text-zinc-100">
-                  Profile
+                <DropdownMenuItem asChild className="text-zinc-200 focus:bg-zinc-800 focus:text-zinc-100 cursor-pointer">
+                  <Link href="/dashboard/profile">
+                    <User className="h-4 w-4 mr-2" />
+                    Profile
+                  </Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem className="text-zinc-200 focus:bg-zinc-800 focus:text-zinc-100">
-                  Settings
+                <DropdownMenuItem asChild className="text-zinc-200 focus:bg-zinc-800 focus:text-zinc-100 cursor-pointer">
+                  <Link href="/dashboard/admin/control-panel/settings">
+                    <Settings className="h-4 w-4 mr-2" />
+                    Settings
+                  </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator className="bg-zinc-800" />
-                <DropdownMenuItem className="text-red-400 focus:bg-zinc-800 focus:text-red-300">
-                  Sign Out
+                <DropdownMenuItem asChild className="text-red-400 focus:bg-zinc-800 focus:text-red-300 cursor-pointer">
+                  <form action={signOut} className="w-full">
+                    <button type="submit" className="flex items-center w-full">
+                      <LogOut className="h-4 w-4 mr-2" />
+                      Sign Out
+                    </button>
+                  </form>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
