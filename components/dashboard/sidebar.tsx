@@ -96,8 +96,8 @@ const TOURNAMENT_ITEMS = [
 ]
 
 const FINANCIAL_ITEMS = [
-  { label: "Wallet & Earnings", href: "/dashboard/financials", icon: Wallet },
-  { label: "Withdraw", href: "/dashboard/financials/withdraw", icon: DollarSign },
+  { label: "Financial Dashboard", href: "/dashboard/financial", icon: Wallet },
+  { label: "Transactions", href: "/dashboard/financial/transactions", icon: DollarSign },
   { label: "Payout Methods", href: "/dashboard/financials/payout-methods", icon: CreditCard },
 ]
 

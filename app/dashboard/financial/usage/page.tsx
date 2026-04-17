@@ -31,8 +31,8 @@ export default async function UsagePage() {
       id,
       name,
       subscription_tier,
-      max_api_calls,
-      max_events,
+      max_api_calls_per_month,
+      max_events_per_month,
       max_users
     `)
     .eq("id", membership.tenant_id)
@@ -54,12 +54,13 @@ export default async function UsagePage() {
     .single()
 
   // Get current month usage
-  const currentMonth = new Date().toISOString().slice(0, 7) // YYYY-MM
+  const now = new Date()
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
   const { data: usage } = await supabase
     .from("usage_records")
     .select("*")
     .eq("tenant_id", membership.tenant_id)
-    .eq("period", currentMonth)
+    .gte("period_start", monthStart)
     .single()
 
   // Get recent invoices
@@ -70,22 +71,38 @@ export default async function UsagePage() {
     .order("created_at", { ascending: false })
     .limit(5)
 
-  // Get API request count from logs
+  // Get API request count from logs this month
   const { count: apiCallsThisMonth } = await supabase
     .from("api_request_log")
     .select("*", { count: "exact", head: true })
     .eq("tenant_id", membership.tenant_id)
-    .gte("created_at", `${currentMonth}-01`)
+    .gte("created_at", monthStart)
+
+  // Get team member count
+  const { count: teamMemberCount } = await supabase
+    .from("tenant_memberships")
+    .select("*", { count: "exact", head: true })
+    .eq("tenant_id", membership.tenant_id)
+
+  // Transform tenant data to match component props
+  const tenantForProps = tenant ? {
+    id: tenant.id,
+    name: tenant.name,
+    subscription_tier: tenant.subscription_tier,
+    max_api_calls: tenant.max_api_calls_per_month,
+    max_events: tenant.max_events_per_month,
+    max_users: tenant.max_users,
+  } : null
 
   return (
     <UsageBillingDashboard
-      tenant={tenant}
+      tenant={tenantForProps}
       subscription={subscription}
       plan={plan}
       usage={{
         api_calls: apiCallsThisMonth || 0,
-        events: usage?.events_count || 0,
-        users: usage?.users_count || 0,
+        events: usage?.events_created || 0,
+        users: teamMemberCount || 0,
         storage_bytes: usage?.storage_bytes || 0,
       }}
       invoices={invoices || []}
