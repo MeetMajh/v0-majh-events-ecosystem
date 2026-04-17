@@ -77,8 +77,8 @@ export default function SettingsPage() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        control_type: controlType,
-        is_enabled: newValue,
+        controlType: controlType,
+        enabled: newValue,
       }),
     })
 
@@ -103,8 +103,8 @@ export default function SettingsPage() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        control_type: controlType,
-        threshold_value: value,
+        controlType: controlType,
+        thresholdValue: value,
       }),
     })
 
