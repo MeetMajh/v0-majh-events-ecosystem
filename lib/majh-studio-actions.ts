@@ -268,7 +268,7 @@ export async function getMyStreamSession() {
     .from("stream_sessions")
     .select(`
       *,
-      game:games(id, name, logo_url)
+      game:games(id, name, icon_url)
     `)
     .eq("host_id", user.id)
     .is("ended_at", null)
@@ -294,8 +294,8 @@ export async function getStreamSession(sessionId: string) {
     .from("stream_sessions")
     .select(`
       *,
-      host:profiles(id, display_name, avatar_url),
-      game:games(id, name, logo_url)
+      host:profiles(id, first_name, last_name, avatar_url),
+      game:games(id, name, icon_url)
     `)
     .eq("id", sessionId)
     .single()
@@ -318,8 +318,8 @@ export async function getLiveStreamSessions(options?: { game_id?: string; limit?
     .from("stream_sessions")
     .select(`
       *,
-      host:profiles(id, display_name, avatar_url),
-      game:games(id, name, logo_url)
+      host:profiles(id, first_name, last_name, avatar_url),
+      game:games(id, name, icon_url)
     `)
     .eq("status", "live")
     .eq("visibility", "public")
@@ -469,7 +469,7 @@ export async function sendChatMessage(streamId: string, message: string) {
     })
     .select(`
       *,
-      user:profiles(id, display_name, avatar_url)
+      user:profiles(id, first_name, last_name, avatar_url)
     `)
     .single()
 
@@ -491,7 +491,7 @@ export async function getChatMessages(streamId: string, limit = 50) {
     .from("stream_chat_messages")
     .select(`
       *,
-      user:profiles(id, display_name, avatar_url)
+      user:profiles(id, first_name, last_name, avatar_url)
     `)
     .eq("stream_id", streamId)
     .eq("is_deleted", false)

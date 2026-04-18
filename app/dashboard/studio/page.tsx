@@ -694,12 +694,12 @@ function MajhStudioContent() {
                 </div>
                 <div className="space-y-2">
                   <Label>Game</Label>
-                  <Select value={gameId} onValueChange={setGameId} disabled={isLive}>
+                  <Select value={gameId || "none"} onValueChange={(val) => setGameId(val === "none" ? "" : val)} disabled={isLive}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select a game" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">No specific game</SelectItem>
+                      <SelectItem value="none">No specific game</SelectItem>
                       {games.map((game: any) => (
                         <SelectItem key={game.id} value={game.id}>
                           {game.name}

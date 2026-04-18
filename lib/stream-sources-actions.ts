@@ -276,7 +276,7 @@ export async function getStreamSources(options?: {
     .from("stream_sources")
     .select(`
       *,
-      game:games(id, name, logo_url)
+      game:games(id, name, icon_url)
     `)
     .order("priority", { ascending: false })
     .order("created_at", { ascending: false })
@@ -314,7 +314,7 @@ export async function getActiveStreams() {
     .from("stream_sources")
     .select(`
       *,
-      game:games(id, name, logo_url)
+      game:games(id, name, icon_url)
     `)
     .eq("is_active", true)
     .order("is_live", { ascending: false })

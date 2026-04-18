@@ -235,21 +235,29 @@ export default function MajhLivePage() {
         setLiveTournaments(formattedTournaments)
       }
 
-      // Fetch livestreams from both livestreams and live_events tables
+      // Fetch from all stream sources: livestreams, live_events, user_streams
       const { data: streamData } = await supabase
         .from("livestreams")
         .select("*")
         .order("is_live", { ascending: false })
         .order("scheduled_at", { ascending: true })
 
-      // Also fetch from live_events (our new streaming system)
+      // Fetch from live_events (broadcast system)
       const { data: liveEventsData } = await supabase
         .from("live_events")
         .select("*")
         .eq("status", "live")
         .order("viewer_count", { ascending: false })
 
-      // Combine streams from both sources
+      // Fetch from user_streams (Go Live feature)
+      const { data: userStreamsData } = await supabase
+        .from("user_streams")
+        .select("*, profiles(first_name, last_name, avatar_url)")
+        .eq("status", "live")
+        .eq("is_public", true)
+        .order("total_views", { ascending: false })
+
+      // Combine streams from all sources
       const combinedStreams: Stream[] = []
       
       if (streamData) {
@@ -268,6 +276,20 @@ export default function MajhLivePage() {
           scheduled_at: event.scheduled_at,
         }))
         combinedStreams.push(...convertedEvents)
+      }
+
+      // Convert user_streams to Stream format
+      if (userStreamsData) {
+        const convertedUserStreams = userStreamsData.map((stream: any) => ({
+          id: stream.id,
+          title: stream.title,
+          platform: 'majh',
+          embed_url: stream.playback_url || '',
+          channel_name: stream.profiles ? `${stream.profiles.first_name || ''} ${stream.profiles.last_name || ''}`.trim() : 'User Stream',
+          is_live: stream.status === 'live',
+          scheduled_at: stream.started_at,
+        }))
+        combinedStreams.push(...convertedUserStreams)
       }
 
       setStreams(combinedStreams)
@@ -521,14 +543,26 @@ export default function MajhLivePage() {
                 </div>
               ) : liveStreams.length > 0 ? (
                 <div className="overflow-hidden rounded-2xl border border-primary/30 bg-card">
-                  <div className="aspect-video">
-                    <iframe
-                      src={liveStreams[0].embed_url}
-                      title={liveStreams[0].title}
-                      className="h-full w-full"
-                      allowFullScreen
-                      allow="autoplay; encrypted-media"
-                    />
+                  <div className="aspect-video bg-black relative">
+                    {liveStreams[0].embed_url && (liveStreams[0].embed_url.includes('twitch.tv') || liveStreams[0].embed_url.includes('youtube.com') || liveStreams[0].embed_url.includes('kick.com')) ? (
+                      <iframe
+                        src={liveStreams[0].embed_url}
+                        title={liveStreams[0].title}
+                        className="h-full w-full"
+                        allowFullScreen
+                        allow="autoplay; encrypted-media"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground">
+                        <Radio className="h-16 w-16 mb-4 opacity-50 animate-pulse text-destructive" />
+                        <p className="text-lg font-semibold text-foreground">{liveStreams[0].title}</p>
+                        <p className="text-sm">Stream is live on {liveStreams[0].platform}</p>
+                        <Badge className="mt-3 bg-destructive/10 text-destructive border-destructive/30">
+                          <span className="mr-1.5 h-2 w-2 rounded-full bg-destructive animate-pulse" />
+                          LIVE NOW
+                        </Badge>
+                      </div>
+                    )}
                   </div>
                   <div className="border-t border-border p-4">
                     <div className="flex items-center justify-between">

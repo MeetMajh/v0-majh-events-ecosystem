@@ -179,7 +179,7 @@ export async function getMyStream() {
     .from("user_streams")
     .select(`
       *,
-      game:games(id, name, logo_url)
+      game:games(id, name, icon_url)
     `)
     .eq("user_id", user.id)
     .in("status", ["offline", "live"])
@@ -326,8 +326,8 @@ export async function getLiveStreams(options?: { game_id?: string; limit?: numbe
     .from("user_streams")
     .select(`
       *,
-      game:games(id, name, logo_url),
-      user:profiles(id, display_name, avatar_url)
+      game:games(id, name, icon_url),
+      user:profiles(id, first_name, last_name, avatar_url)
     `)
     .eq("status", "live")
     .eq("is_public", true)

@@ -6,7 +6,7 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from("games")
-    .select("id, name, logo_url, slug")
+    .select("id, name, slug, icon_url")
     .eq("is_active", true)
     .order("name")
 
@@ -16,5 +16,11 @@ export async function GET() {
     return NextResponse.json({ data: [] })
   }
 
-  return NextResponse.json({ data: data || [] })
+  // Map icon_url to logo_url for compatibility
+  const mappedData = (data || []).map(game => ({
+    ...game,
+    logo_url: game.icon_url
+  }))
+
+  return NextResponse.json({ data: mappedData })
 }
