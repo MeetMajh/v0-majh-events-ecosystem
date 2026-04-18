@@ -233,8 +233,8 @@ async function fetchClips(
       comment_count,
       trending_score,
       created_at,
-      profiles!player_media_player_id_fkey(id, first_name, last_name, avatar_url),
-      games(id, name, icon_url)
+      player:player_id(id, first_name, last_name, avatar_url),
+      game:game_id(id, name, icon_url)
     `)
     .in("media_type", ["highlight", "clip", "video", "image"])
     .eq("moderation_status", "approved")
@@ -346,8 +346,8 @@ async function fetchUserPreferences(supabase: any, userId: string) {
 
 function transformClip(clip: any): UnifiedFeedItem {
   // Handle profile name - use first_name + last_name or fallback
-  const creatorName = clip.profiles 
-    ? [clip.profiles.first_name, clip.profiles.last_name].filter(Boolean).join(" ") || "Anonymous"
+  const creatorName = clip.player 
+    ? [clip.player.first_name, clip.player.last_name].filter(Boolean).join(" ") || "Anonymous"
     : "Anonymous"
   
   return {
@@ -355,15 +355,15 @@ function transformClip(clip: any): UnifiedFeedItem {
     type: "clip",
     title: clip.title || "Untitled Clip",
     description: clip.description,
-    media_url: clip.video_url, // Use video_url instead of media_url
+    media_url: clip.video_url,
     thumbnail_url: clip.thumbnail_url,
     duration_seconds: clip.duration_seconds,
     creator_id: clip.player_id,
     creator_name: creatorName,
-    creator_avatar: clip.profiles?.avatar_url,
+    creator_avatar: clip.player?.avatar_url,
     game_id: clip.game_id,
-    game_name: clip.games?.name,
-    game_logo: clip.games?.icon_url,
+    game_name: clip.game?.name,
+    game_logo: clip.game?.icon_url,
     tournament_id: clip.tournament_id,
     view_count: clip.view_count || 0,
     like_count: clip.like_count || 0,
