@@ -70,7 +70,7 @@ export async function GET() {
       .limit(3)
 
     // Fetch user stream sessions (MAJH Studio streams)
-    const { data: userStreams } = await supabase
+    const { data: userStreams, error: userStreamsError } = await supabase
       .from("stream_sessions")
       .select(`
         id,
@@ -80,13 +80,16 @@ export async function GET() {
         viewer_count,
         started_at,
         user_id,
-        game_id,
-        profiles!stream_sessions_user_id_fkey(id, first_name, last_name, avatar_url),
-        games(id, name, icon_url)
+        game_id
       `)
       .eq("status", "live")
       .order("viewer_count", { ascending: false })
       .limit(5)
+    
+    if (userStreamsError) {
+      console.log("[v0] userStreams error:", userStreamsError)
+    }
+    console.log("[v0] userStreams found:", userStreams?.length || 0)
 
     // Fetch recent real activity (last hour)
     const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000)
@@ -138,21 +141,17 @@ export async function GET() {
 
     // Add user MAJH Studio streams to live events
     const userStreamEvents = (userStreams || []).map((stream: any) => {
-      const streamerName = stream.profiles 
-        ? [stream.profiles.first_name, stream.profiles.last_name].filter(Boolean).join(" ") || "MAJH Streamer"
-        : "MAJH Streamer"
       return {
         id: stream.id,
         type: "user_stream" as const,
-        title: stream.title || `${streamerName}'s Stream`,
-        game: stream.games?.name || "Gaming",
+        title: stream.title || "MAJH Studio Stream",
+        game: "Gaming",
         game_id: stream.game_id,
         viewers: stream.viewer_count || 0,
         isLive: true,
         stream_url: `/live?stream=${stream.id}`,
         streamer: {
-          name: streamerName,
-          avatar: stream.profiles?.avatar_url,
+          name: "MAJH Streamer",
         },
       }
     })

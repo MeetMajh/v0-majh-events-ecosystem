@@ -388,19 +388,45 @@ function MajhStudioContent() {
   }
 
   const goLive = async () => {
-    if (!session) {
-      await createSession()
-      return
+    let currentSession = session
+    
+    // Create session if needed
+    if (!currentSession) {
+      try {
+        const res = await fetch("/api/studio/session", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: streamSettings.title || "MAJH Studio Stream",
+            description: streamSettings.description,
+            visibility: streamSettings.visibility,
+            game_id: streamSettings.gameId,
+            allow_chat: streamSettings.allowChat,
+            allow_clips: streamSettings.allowClips,
+          }),
+        })
+        const result = await res.json()
+        if (result.error || !result.session) {
+          toast.error(result.error || "Failed to create session")
+          return
+        }
+        currentSession = result.session
+        mutateSession()
+      } catch (err) {
+        console.error("Error creating session:", err)
+        toast.error("Failed to create stream session")
+        return
+      }
     }
 
+    // Now start the stream
     try {
-      // Start the stream
       const res = await fetch("/api/studio/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "start",
-          sessionId: session.id,
+          sessionId: currentSession.id,
         }),
       })
 

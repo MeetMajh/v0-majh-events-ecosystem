@@ -235,61 +235,56 @@ export default function MajhLivePage() {
         setLiveTournaments(formattedTournaments)
       }
 
-      // Fetch from all stream sources: livestreams, live_events, user_streams
-      const { data: streamData } = await supabase
-        .from("livestreams")
-        .select("*")
+      // Fetch from stream_sources (admin-added external streams)
+      const { data: streamSourcesData } = await supabase
+        .from("stream_sources")
+        .select("*, games(name, slug)")
+        .eq("is_active", true)
         .order("is_live", { ascending: false })
-        .order("scheduled_at", { ascending: true })
+        .order("priority", { ascending: false })
 
-      // Fetch from live_events (broadcast system)
-      const { data: liveEventsData } = await supabase
-        .from("live_events")
-        .select("*")
+      // Fetch from stream_sessions (MAJH Studio user streams)
+      const { data: streamSessionsData } = await supabase
+        .from("stream_sessions")
+        .select("*, profiles!stream_sessions_user_id_fkey(first_name, last_name, avatar_url), games(name, slug)")
         .eq("status", "live")
+        .eq("visibility", "public")
         .order("viewer_count", { ascending: false })
-
-      // Fetch from user_streams (Go Live feature)
-      const { data: userStreamsData } = await supabase
-        .from("user_streams")
-        .select("*, profiles(first_name, last_name, avatar_url)")
-        .eq("status", "live")
-        .eq("is_public", true)
-        .order("total_views", { ascending: false })
 
       // Combine streams from all sources
       const combinedStreams: Stream[] = []
       
-      if (streamData) {
-        combinedStreams.push(...streamData)
-      }
-      
-      // Convert live_events to Stream format
-      if (liveEventsData) {
-        const convertedEvents = liveEventsData.map((event: any) => ({
-          id: event.id,
-          title: event.title,
-          platform: event.platform || 'majh',
-          embed_url: event.stream_url || event.embed_url || '',
-          channel_name: event.title,
-          is_live: event.status === 'live',
-          scheduled_at: event.scheduled_at,
+      // Convert stream_sources to Stream format
+      if (streamSourcesData) {
+        const convertedSources = streamSourcesData.map((source: any) => ({
+          id: source.id,
+          title: source.title,
+          platform: source.platform || 'custom',
+          embed_url: source.channel_url || '',
+          channel_name: source.title,
+          is_live: source.is_live,
+          scheduled_at: source.created_at,
         }))
-        combinedStreams.push(...convertedEvents)
+        combinedStreams.push(...convertedSources)
       }
 
-      // Convert user_streams to Stream format
-      if (userStreamsData) {
-        const convertedUserStreams = userStreamsData.map((stream: any) => ({
-          id: stream.id,
-          title: stream.title,
-          platform: 'majh',
-          embed_url: stream.playback_url || '',
-          channel_name: stream.profiles ? `${stream.profiles.first_name || ''} ${stream.profiles.last_name || ''}`.trim() : 'User Stream',
-          is_live: stream.status === 'live',
-          scheduled_at: stream.started_at,
-        }))
-        combinedStreams.push(...convertedUserStreams)
+      // Convert stream_sessions (MAJH Studio) to Stream format
+      if (streamSessionsData) {
+        const convertedSessions = streamSessionsData.map((session: any) => {
+          const streamerName = session.profiles 
+            ? `${session.profiles.first_name || ''} ${session.profiles.last_name || ''}`.trim() || 'MAJH Streamer'
+            : 'MAJH Streamer'
+          return {
+            id: session.id,
+            title: session.title || `${streamerName}'s Stream`,
+            platform: 'majh',
+            embed_url: `/live?stream=${session.id}`,
+            channel_name: streamerName,
+            is_live: session.status === 'live',
+            scheduled_at: session.started_at,
+          }
+        })
+        combinedStreams.push(...convertedSessions)
       }
 
       setStreams(combinedStreams)
