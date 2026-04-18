@@ -543,14 +543,26 @@ export default function MajhLivePage() {
                 </div>
               ) : liveStreams.length > 0 ? (
                 <div className="overflow-hidden rounded-2xl border border-primary/30 bg-card">
-                  <div className="aspect-video">
-                    <iframe
-                      src={liveStreams[0].embed_url}
-                      title={liveStreams[0].title}
-                      className="h-full w-full"
-                      allowFullScreen
-                      allow="autoplay; encrypted-media"
-                    />
+                  <div className="aspect-video bg-black relative">
+                    {liveStreams[0].embed_url && (liveStreams[0].embed_url.includes('twitch.tv') || liveStreams[0].embed_url.includes('youtube.com') || liveStreams[0].embed_url.includes('kick.com')) ? (
+                      <iframe
+                        src={liveStreams[0].embed_url}
+                        title={liveStreams[0].title}
+                        className="h-full w-full"
+                        allowFullScreen
+                        allow="autoplay; encrypted-media"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground">
+                        <Radio className="h-16 w-16 mb-4 opacity-50 animate-pulse text-destructive" />
+                        <p className="text-lg font-semibold text-foreground">{liveStreams[0].title}</p>
+                        <p className="text-sm">Stream is live on {liveStreams[0].platform}</p>
+                        <Badge className="mt-3 bg-destructive/10 text-destructive border-destructive/30">
+                          <span className="mr-1.5 h-2 w-2 rounded-full bg-destructive animate-pulse" />
+                          LIVE NOW
+                        </Badge>
+                      </div>
+                    )}
                   </div>
                   <div className="border-t border-border p-4">
                     <div className="flex items-center justify-between">
