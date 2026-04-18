@@ -186,8 +186,9 @@ export default function CreateClipPage() {
       setTimeout(() => {
         router.push(`/media/${createResult.media?.id}`)
       }, 500)
-    } catch {
-      setError("Upload failed. Please try again.")
+    } catch (err) {
+      console.error("[v0] Upload error:", err)
+      setError(err instanceof Error ? err.message : "Upload failed. Please try again.")
       setStep("details")
       setUploading(false)
     }
