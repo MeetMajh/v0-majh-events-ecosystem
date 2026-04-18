@@ -136,19 +136,13 @@ export default function MediaUploadPage() {
         is_featured: false,
       }
       
-      console.log("[v0] Inserting media:", insertData)
-      
-      const { data: insertedData, error: dbError } = await supabase
+      const { error: dbError } = await supabase
         .from("player_media")
         .insert(insertData)
         .select()
 
       if (dbError) {
-        console.error("[v0] Database error:", dbError)
         toast.error(`Database error: ${dbError.message}`)
-        // Don't throw - file was uploaded successfully
-      } else {
-        console.log("[v0] Media inserted successfully:", insertedData)
       }
 
       setFiles(prev => {
@@ -192,8 +186,9 @@ export default function MediaUploadPage() {
     setIsUploading(false)
   }
 
-  const completedCount = files.filter(f => f.status === "complete").length
-  const hasIdleFiles = files.some(f => f.status === "idle" || f.status === "error")
+  const pendingFiles = files.filter(f => f.status === "idle" || f.status === "error")
+  const pendingCount = pendingFiles.length
+  const hasIdleFiles = pendingCount > 0
 
   return (
     <div className="space-y-6">
@@ -384,7 +379,7 @@ export default function MediaUploadPage() {
             ) : (
               <>
                 <Upload className="h-4 w-4 mr-2" />
-                Upload {files.filter(f => f.status === "idle" || f.status === "error").length} File{files.length !== 1 ? "s" : ""}
+                Upload {pendingCount} File{pendingCount !== 1 ? "s" : ""}
               </>
             )}
           </Button>
