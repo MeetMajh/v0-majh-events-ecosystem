@@ -28,6 +28,8 @@ export async function GET(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
 
   try {
+    console.log("[v0] Unified feed API called with limit:", limit, "offset:", offset)
+    
     const result = await getUnifiedFeed({
       limit,
       offset,
@@ -41,9 +43,10 @@ export async function GET(request: NextRequest) {
       avoidGames,
     })
 
+    console.log("[v0] Unified feed returned:", result.items?.length, "items")
     return NextResponse.json(result)
   } catch (error) {
-    console.error("Unified feed API error:", error)
+    console.error("[v0] Unified feed API error:", error)
     return NextResponse.json(
       { error: "Failed to fetch feed" },
       { status: 500 }
