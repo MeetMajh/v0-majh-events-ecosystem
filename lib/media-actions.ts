@@ -173,20 +173,11 @@ export async function createMedia(data: {
     }
   }
   
-  // Require gaming context (at least one of game, tournament, or match)
-  if (!data.gameId && !data.tournamentId && !data.matchId) {
-    return { error: "Media must be linked to a game, tournament, or match" }
-  }
+  // Gaming context is optional - clips can be general gaming content
+  // No longer require game/tournament/match linkage
   
-  // Determine initial moderation status
-  // Auto-approve if user has high trust score, otherwise pending
-  const { data: trustData } = await supabase
-    .from("profiles")
-    .select("content_trust_score, approved_uploads")
-    .eq("id", user.id)
-    .single()
-  
-  const autoApprove = (trustData?.content_trust_score || 0) >= 80 && (trustData?.approved_uploads || 0) >= 5
+  // Auto-approve uploads for now (can add moderation later)
+  const autoApprove = true
   
   const { data: media, error } = await supabase
     .from("player_media")
