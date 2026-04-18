@@ -167,12 +167,14 @@ export async function createStreamSession(input: CreateSessionInput) {
     .single()
 
   if (error) {
-    console.error("Error creating stream session:", error)
+    console.error("[v0] Error creating stream session:", error)
     return { error: error.message }
   }
 
-  // Create default layout
-  await supabase.from("stream_layouts").insert({
+  console.log("[v0] Stream session created:", data?.id)
+
+  // Create default layout (ignore errors - table may not exist)
+  const { error: layoutError } = await supabase.from("stream_layouts").insert({
     stream_id: data.id,
     layout_type: "picture_in_picture",
     camera_enabled: true,
@@ -180,9 +182,13 @@ export async function createStreamSession(input: CreateSessionInput) {
     camera_size: "small",
     overlay_enabled: true,
   })
+  
+  if (layoutError) {
+    console.log("[v0] Layout insert failed (non-critical):", layoutError.message)
+  }
 
   revalidatePath("/dashboard/studio")
-  return { data: data as StreamSession }
+  return { session: data as StreamSession }
 }
 
 /**
