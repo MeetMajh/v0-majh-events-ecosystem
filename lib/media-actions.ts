@@ -392,13 +392,13 @@ export async function getTrendingMedia(
 ): Promise<PlayerMedia[]> {
   const supabase = await createClient()
   
-  // Use simpler query without complex joins that might fail
+  // Query with joins - use column name for foreign key relationship
   let query = supabase
     .from("player_media")
     .select(`
       *,
-      player:profiles(id, first_name, last_name, avatar_url),
-      game:games(id, name, slug)
+      player:player_id(id, first_name, last_name, avatar_url),
+      game:game_id(id, name, slug)
     `)
     .eq("visibility", "public")
     .eq("moderation_status", "approved")
@@ -421,7 +421,14 @@ export async function getTrendingMedia(
     query = query.gte("created_at", cutoff.toISOString())
   }
   
-  const { data } = await query
+  const { data, error } = await query
+  
+  if (error) {
+    console.error("[v0] getTrendingMedia error:", error)
+    return []
+  }
+  
+  console.log("[v0] getTrendingMedia found:", data?.length, "items")
   return (data || []) as PlayerMedia[]
 }
 
@@ -432,8 +439,8 @@ export async function getRecentMedia(limit: number = 20): Promise<PlayerMedia[]>
     .from("player_media")
     .select(`
       *,
-      player:profiles(id, first_name, last_name, avatar_url),
-      game:games(id, name, slug)
+      player:player_id(id, first_name, last_name, avatar_url),
+      game:game_id(id, name, slug)
     `)
     .eq("visibility", "public")
     .eq("moderation_status", "approved")
@@ -442,8 +449,10 @@ export async function getRecentMedia(limit: number = 20): Promise<PlayerMedia[]>
   
   if (error) {
     console.error("[v0] getRecentMedia error:", error)
+    return []
   }
   
+  console.log("[v0] getRecentMedia found:", data?.length, "items")
   return (data || []) as PlayerMedia[]
 }
 
@@ -454,8 +463,8 @@ export async function getFeaturedMedia(limit: number = 5): Promise<PlayerMedia[]
     .from("player_media")
     .select(`
       *,
-      player:profiles(id, first_name, last_name, avatar_url),
-      game:games(id, name, slug)
+      player:player_id(id, first_name, last_name, avatar_url),
+      game:game_id(id, name, slug)
     `)
     .eq("visibility", "public")
     .eq("moderation_status", "approved")
@@ -465,6 +474,7 @@ export async function getFeaturedMedia(limit: number = 5): Promise<PlayerMedia[]
   
   if (error) {
     console.error("[v0] getFeaturedMedia error:", error)
+    return []
   }
   
   return (data || []) as PlayerMedia[]
@@ -482,8 +492,8 @@ export async function getMediaFeed(
     .from("player_media")
     .select(`
       *,
-      player:profiles!player_media_player_id_fkey(id, first_name, last_name, avatar_url),
-      game:games(id, name, slug)
+      player:player_id(id, first_name, last_name, avatar_url),
+      game:game_id(id, name, slug)
     `)
     .eq("visibility", "public")
     .eq("moderation_status", "approved")
