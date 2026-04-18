@@ -11,10 +11,25 @@ export async function GET() {
   return NextResponse.json(result)
 }
 
+// PUT - Create a new stream session
+export async function PUT(request: NextRequest) {
+  try {
+    const body = await request.json()
+    console.log("[v0] Creating stream session:", body)
+    const result = await createStreamSession(body)
+    console.log("[v0] Create session result:", result)
+    return NextResponse.json(result)
+  } catch (error) {
+    console.error("[v0] PUT Session API error:", error)
+    return NextResponse.json({ error: "Failed to create session" }, { status: 500 })
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { action, sessionId, ...data } = body
+    console.log("[v0] POST /api/studio/session - action:", action, "sessionId:", sessionId)
 
     switch (action) {
       case "create":
@@ -25,7 +40,9 @@ export async function POST(request: NextRequest) {
         if (!sessionId) {
           return NextResponse.json({ error: "Session ID required" }, { status: 400 })
         }
+        console.log("[v0] Starting stream session:", sessionId)
         const startResult = await startStreamSession(sessionId)
+        console.log("[v0] Start result:", startResult)
         return NextResponse.json(startResult)
 
       case "end":

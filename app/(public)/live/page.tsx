@@ -236,20 +236,24 @@ export default function MajhLivePage() {
       }
 
       // Fetch from stream_sources (admin-added external streams)
-      const { data: streamSourcesData } = await supabase
+      const { data: streamSourcesData, error: sourcesError } = await supabase
         .from("stream_sources")
         .select("*, games(name, slug)")
         .eq("is_active", true)
         .order("is_live", { ascending: false })
         .order("priority", { ascending: false })
 
+      console.log("[v0] stream_sources:", streamSourcesData?.length, "error:", sourcesError)
+
       // Fetch from stream_sessions (MAJH Studio user streams)
-      const { data: streamSessionsData } = await supabase
+      const { data: streamSessionsData, error: sessionsError } = await supabase
         .from("stream_sessions")
-        .select("*, profiles!stream_sessions_user_id_fkey(first_name, last_name, avatar_url), games(name, slug)")
+        .select("*")
         .eq("status", "live")
         .eq("visibility", "public")
         .order("viewer_count", { ascending: false })
+
+      console.log("[v0] stream_sessions:", streamSessionsData?.length, "error:", sessionsError)
 
       // Combine streams from all sources
       const combinedStreams: Stream[] = []
