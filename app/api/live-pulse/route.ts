@@ -69,6 +69,25 @@ export async function GET() {
       .order("viewer_count", { ascending: false })
       .limit(3)
 
+    // Fetch user stream sessions (MAJH Studio streams)
+    const { data: userStreams } = await supabase
+      .from("stream_sessions")
+      .select(`
+        id,
+        title,
+        description,
+        status,
+        viewer_count,
+        started_at,
+        user_id,
+        game_id,
+        profiles!stream_sessions_user_id_fkey(id, first_name, last_name, avatar_url),
+        games(id, name, icon_url)
+      `)
+      .eq("status", "live")
+      .order("viewer_count", { ascending: false })
+      .limit(5)
+
     // Fetch recent real activity (last hour)
     const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000)
     
@@ -116,6 +135,27 @@ export async function GET() {
       stream_url: stream.channel_url,
       thumbnail: stream.thumbnail_url,
     }))
+
+    // Add user MAJH Studio streams to live events
+    const userStreamEvents = (userStreams || []).map((stream: any) => {
+      const streamerName = stream.profiles 
+        ? [stream.profiles.first_name, stream.profiles.last_name].filter(Boolean).join(" ") || "MAJH Streamer"
+        : "MAJH Streamer"
+      return {
+        id: stream.id,
+        type: "user_stream" as const,
+        title: stream.title || `${streamerName}'s Stream`,
+        game: stream.games?.name || "Gaming",
+        game_id: stream.game_id,
+        viewers: stream.viewer_count || 0,
+        isLive: true,
+        stream_url: `/live?stream=${stream.id}`,
+        streamer: {
+          name: streamerName,
+          avatar: stream.profiles?.avatar_url,
+        },
+      }
+    })
 
     // Transform upcoming tournaments
     const upcomingEvents = (upcomingTournaments || []).map((t: any) => {
@@ -177,7 +217,7 @@ export async function GET() {
     }).filter((a: any) => a.message) // Only include items with valid messages
 
     // Calculate totals from REAL data only
-    const allLiveEvents = [...liveEvents, ...externalLiveEvents]
+    const allLiveEvents = [...liveEvents, ...externalLiveEvents, ...userStreamEvents]
     const totalViewers = allLiveEvents.reduce((sum, e) => sum + (e.viewers || 0), 0)
     const liveCount = allLiveEvents.length
 

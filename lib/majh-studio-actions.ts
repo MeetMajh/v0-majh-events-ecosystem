@@ -11,7 +11,6 @@ import { nanoid } from "nanoid"
 
 export interface StreamSession {
   id: string
-  host_id: string
   user_id: string
   title: string
   description?: string
@@ -138,7 +137,7 @@ export async function createStreamSession(input: CreateSessionInput) {
   const { data: existing } = await supabase
     .from("stream_sessions")
     .select("id")
-    .eq("host_id", user.id)
+    .eq("user_id", user.id)
     .eq("status", "live")
     .single()
 
@@ -153,7 +152,6 @@ export async function createStreamSession(input: CreateSessionInput) {
   const { data, error } = await supabase
     .from("stream_sessions")
     .insert({
-      host_id: user.id,
       user_id: user.id,
       title: input.title,
       description: input.description,
@@ -206,7 +204,7 @@ export async function startStreamSession(sessionId: string) {
       updated_at: new Date().toISOString(),
     })
     .eq("id", sessionId)
-    .eq("host_id", user.id)
+    .eq("user_id", user.id)
     .select()
     .single()
 
@@ -239,7 +237,7 @@ export async function endStreamSession(sessionId: string) {
       updated_at: new Date().toISOString(),
     })
     .eq("id", sessionId)
-    .eq("host_id", user.id)
+    .eq("user_id", user.id)
     .select()
     .single()
 
@@ -270,7 +268,7 @@ export async function getMyStreamSession() {
       *,
       game:games(id, name, icon_url)
     `)
-    .eq("host_id", user.id)
+    .eq("user_id", user.id)
     .is("ended_at", null)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -294,7 +292,7 @@ export async function getStreamSession(sessionId: string) {
     .from("stream_sessions")
     .select(`
       *,
-      host:profiles(id, first_name, last_name, avatar_url),
+      host:profiles!stream_sessions_user_id_fkey(id, first_name, last_name, avatar_url),
       game:games(id, name, icon_url)
     `)
     .eq("id", sessionId)
@@ -318,7 +316,7 @@ export async function getLiveStreamSessions(options?: { game_id?: string; limit?
     .from("stream_sessions")
     .select(`
       *,
-      host:profiles(id, first_name, last_name, avatar_url),
+      host:profiles!stream_sessions_user_id_fkey(id, first_name, last_name, avatar_url),
       game:games(id, name, icon_url)
     `)
     .eq("status", "live")
@@ -408,11 +406,11 @@ export async function updateStreamLayout(streamId: string, updates: Partial<Stre
   // Verify ownership
   const { data: session } = await supabase
     .from("stream_sessions")
-    .select("host_id")
+    .select("user_id")
     .eq("id", streamId)
     .single()
 
-  if (session?.host_id !== user.id) {
+  if (session?.user_id !== user.id) {
     return { error: "Not your stream" }
   }
 

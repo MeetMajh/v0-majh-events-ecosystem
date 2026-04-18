@@ -143,8 +143,10 @@ export default function CreateClipPage() {
     setUploadProgress(10)
 
     try {
-      // Upload file
-      const uploadResult = await uploadMediaFile(file)
+      // Upload file - create FormData as expected by the server action
+      const formData = new FormData()
+      formData.append("file", file)
+      const uploadResult = await uploadMediaFile(formData)
       setUploadProgress(60)
 
       if (uploadResult.error) {
