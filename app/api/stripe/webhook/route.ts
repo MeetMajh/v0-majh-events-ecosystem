@@ -140,9 +140,9 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
     return
   }
 
-  const { type, booking_id, rental_id, invoice_id, tournament_id, registration_id, player_id, user_id, amount_cents } = metadata
+  const { type, booking_id, rental_id, invoice_id, tournament_id, registration_id, player_id, user_id, amount_cents, order_id, tenant_id, event_id } = metadata
 
-  console.log("[Stripe Webhook] Processing checkout complete:", { type, booking_id, rental_id, invoice_id, tournament_id, user_id })
+  console.log("[Stripe Webhook] Processing checkout complete:", { type, booking_id, rental_id, invoice_id, tournament_id, user_id, order_id })
 
   try {
     // ── Wallet Deposit ──
@@ -362,6 +362,83 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
     if (type === "subscription" && metadata.user_id && metadata.plan_id) {
       console.log("[Stripe Webhook] Subscription checkout completed:", metadata.plan_id)
       // Subscription is handled via customer.subscription.created event
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // TICKET PURCHASE COMPLETION
+    // ══════════════════════════════════════════════════════════════════════════════
+    if (type === "ticket_purchase" && order_id) {
+      const idempotencyKey = `ticket_order_${session.id}`
+      
+      // Check idempotency
+      const { data: existingOrder } = await supabaseAdmin
+        .from("ticket_orders")
+        .select("id, status")
+        .eq("stripe_session_id", session.id)
+        .single()
+
+      if (existingOrder && existingOrder.status === "completed") {
+        console.log("[Stripe Webhook] Duplicate ticket order prevented:", session.id)
+        return
+      }
+
+      // Use atomic RPC to complete the order
+      const { data: result, error: rpcError } = await supabaseAdmin.rpc("complete_ticket_order", {
+        p_order_id: order_id,
+        p_stripe_session_id: session.id,
+        p_stripe_payment_intent: session.payment_intent as string,
+        p_idempotency_key: idempotencyKey,
+      })
+
+      if (rpcError) {
+        console.error("[Stripe Webhook] Ticket order completion error:", rpcError)
+        return
+      }
+
+      if (!result?.success) {
+        console.error("[Stripe Webhook] Ticket order failed:", result?.error)
+        return
+      }
+
+      console.log("[Stripe Webhook] Ticket order completed:", {
+        order_id,
+        tickets_issued: result.tickets_issued,
+        total_cents: result.total_cents,
+      })
+
+      // Record in ledger if tenant_id is present
+      if (tenant_id && session.amount_total) {
+        const { data: ledgerResult, error: ledgerError } = await supabaseAdmin.rpc("ledger_ticket_sale", {
+          p_tenant_id: tenant_id,
+          p_order_id: order_id,
+          p_amount_cents: session.amount_total,
+          p_stripe_session_id: session.id,
+          p_idempotency_key: `ledger_ticket_${session.id}`,
+        })
+
+        if (ledgerError) {
+          console.error("[Stripe Webhook] Ledger ticket sale error:", ledgerError)
+        } else {
+          console.log("[Stripe Webhook] Ledger ticket sale recorded:", ledgerResult)
+        }
+      }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // TICKET REFUND
+    // ══════════════════════════════════════════════════════════════════════════════
+    if (type === "ticket_refund" && order_id) {
+      const { data: result, error: rpcError } = await supabaseAdmin.rpc("process_ticket_refund", {
+        p_order_id: order_id,
+        p_reason: metadata.refund_reason || "Customer requested refund",
+        p_refund_amount_cents: session.amount_total ? session.amount_total : null,
+      })
+
+      if (rpcError) {
+        console.error("[Stripe Webhook] Ticket refund error:", rpcError)
+      } else {
+        console.log("[Stripe Webhook] Ticket refund processed:", result)
+      }
     }
   } catch (err) {
     console.error("[Stripe Webhook] Error processing webhook:", err)

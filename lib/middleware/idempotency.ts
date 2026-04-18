@@ -81,6 +81,11 @@ export async function storeIdempotency(
 }
 
 /**
+ * Alias for storeIdempotency (for backwards compatibility)
+ */
+export const storeIdempotentResponse = storeIdempotency
+
+/**
  * Log an API request (without idempotency)
  */
 export async function logApiRequest(
