@@ -222,7 +222,7 @@ async function fetchClips(
       id,
       title,
       description,
-      media_url,
+      video_url,
       thumbnail_url,
       duration_seconds,
       player_id,
@@ -232,13 +232,12 @@ async function fetchClips(
       like_count,
       comment_count,
       trending_score,
-      momentum_score,
       created_at,
-      players!player_media_player_id_fkey(id, username, profile_image_url),
-      games!player_media_game_id_fkey(id, name, logo_url)
+      profiles!player_media_player_id_fkey(id, first_name, last_name, avatar_url),
+      games(id, name, icon_url)
     `)
-    .in("media_type", ["highlight", "clip", "video"])
-    .eq("status", "active")
+    .in("media_type", ["highlight", "clip", "video", "image"])
+    .eq("moderation_status", "approved")
     .eq("visibility", "public")
     .order("created_at", { ascending: false })
     .limit(options.limit)
@@ -346,20 +345,25 @@ async function fetchUserPreferences(supabase: any, userId: string) {
 // ══════════════════════════════════════════
 
 function transformClip(clip: any): UnifiedFeedItem {
+  // Handle profile name - use first_name + last_name or fallback
+  const creatorName = clip.profiles 
+    ? [clip.profiles.first_name, clip.profiles.last_name].filter(Boolean).join(" ") || "Anonymous"
+    : "Anonymous"
+  
   return {
     id: clip.id,
     type: "clip",
     title: clip.title || "Untitled Clip",
     description: clip.description,
-    media_url: clip.media_url,
+    media_url: clip.video_url, // Use video_url instead of media_url
     thumbnail_url: clip.thumbnail_url,
     duration_seconds: clip.duration_seconds,
     creator_id: clip.player_id,
-    creator_name: clip.players?.username,
-    creator_avatar: clip.players?.profile_image_url,
+    creator_name: creatorName,
+    creator_avatar: clip.profiles?.avatar_url,
     game_id: clip.game_id,
     game_name: clip.games?.name,
-    game_logo: clip.games?.logo_url,
+    game_logo: clip.games?.icon_url,
     tournament_id: clip.tournament_id,
     view_count: clip.view_count || 0,
     like_count: clip.like_count || 0,
@@ -530,7 +534,7 @@ function applyDistributionRules(
   return result
 }
 
-// ══════════════════════════════════════════
+// ════════════════════���═════════════════════
 // ADS INJECTION
 // ══════════════════════════════════════════
 

@@ -102,6 +102,11 @@ function MajhStudioContent() {
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null)
   const [combinedStream, setCombinedStream] = useState<MediaStream | null>(null)
   
+  // Recording state
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const recordedChunksRef = useRef<Blob[]>([])
+  const [isRecording, setIsRecording] = useState(false)
+  
   // UI state
   const [isSettingUp, setIsSettingUp] = useState(false)
   const [isLive, setIsLive] = useState(false)
@@ -144,6 +149,24 @@ function MajhStudioContent() {
       setIsLive(session.status === "live")
     }
   }, [session])
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Sync streams with video elements (critical for preview to work)
+  // ─────────────────────────────────────────────────────────────────────────────
+  
+  useEffect(() => {
+    if (screenStream && screenVideoRef.current) {
+      screenVideoRef.current.srcObject = screenStream
+      screenVideoRef.current.play().catch(console.error)
+    }
+  }, [screenStream])
+
+  useEffect(() => {
+    if (cameraStream && cameraVideoRef.current) {
+      cameraVideoRef.current.srcObject = cameraStream
+      cameraVideoRef.current.play().catch(console.error)
+    }
+  }, [cameraStream])
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Media Capture
@@ -239,6 +262,61 @@ function MajhStudioContent() {
         videoTrack.enabled = !videoTrack.enabled
         setIsCameraEnabled(videoTrack.enabled)
       }
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Recording
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  const startRecording = () => {
+    const streamToRecord = screenStream || cameraStream
+    if (!streamToRecord) {
+      toast.error("No video source to record")
+      return
+    }
+
+    try {
+      recordedChunksRef.current = []
+      const options = { mimeType: "video/webm;codecs=vp9,opus" }
+      const mediaRecorder = new MediaRecorder(streamToRecord, options)
+      
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          recordedChunksRef.current.push(event.data)
+        }
+      }
+      
+      mediaRecorder.onstop = async () => {
+        const blob = new Blob(recordedChunksRef.current, { type: "video/webm" })
+        const url = URL.createObjectURL(blob)
+        
+        // Create download link
+        const a = document.createElement("a")
+        a.href = url
+        a.download = `recording-${Date.now()}.webm`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+        
+        toast.success("Recording saved! Check your downloads.")
+      }
+      
+      mediaRecorderRef.current = mediaRecorder
+      mediaRecorder.start(1000) // Collect data every second
+      setIsRecording(true)
+      toast.success("Recording started")
+    } catch (err) {
+      console.error("Recording error:", err)
+      toast.error("Failed to start recording")
+    }
+  }
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop()
+      setIsRecording(false)
     }
   }
 
@@ -544,6 +622,29 @@ function MajhStudioContent() {
                   </div>
 
                   <div className="flex items-center gap-2">
+                    {/* Record Button */}
+                    {!isRecording ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={startRecording}
+                        disabled={!hasAnyStream}
+                      >
+                        <CircleDot className="h-4 w-4 mr-2 text-destructive" />
+                        Record
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={stopRecording}
+                        className="animate-pulse"
+                      >
+                        <StopCircle className="h-4 w-4 mr-2" />
+                        Stop Recording
+                      </Button>
+                    )}
+                    
                     <Button variant="outline" size="sm" asChild>
                       <Link href="/dashboard/studio/pro">
                         <Layers className="h-4 w-4 mr-2" />
