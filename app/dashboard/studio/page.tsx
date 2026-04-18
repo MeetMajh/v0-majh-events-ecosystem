@@ -399,8 +399,8 @@ function MajhStudioContent() {
           body: JSON.stringify({
             title: streamSettings.title || "MAJH Studio Stream",
             description: streamSettings.description,
-            visibility: streamSettings.visibility,
-            game_id: streamSettings.gameId,
+            is_public: streamSettings.visibility === "public",
+            game_id: streamSettings.gameId || null,
             allow_chat: streamSettings.allowChat,
             allow_clips: streamSettings.allowClips,
           }),
@@ -484,7 +484,7 @@ function MajhStudioContent() {
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Render
-  // ─────────────────────────────────────────────────────────────────────────────
+  // ───────────────────────��─────────────────────────────────────────────────────
 
   const hasAnyStream = screenStream || cameraStream
 
