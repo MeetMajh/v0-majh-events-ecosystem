@@ -250,7 +250,14 @@ async function fetchClips(
     query = query.not("game_id", "in", `(${options.avoidGames.join(",")})`)
   }
 
-  const { data } = await query
+  const { data, error } = await query
+  
+  if (error) {
+    console.log("[v0] fetchClips error:", error)
+    return []
+  }
+  
+  console.log("[v0] fetchClips returned:", data?.length, "items")
   return data || []
 }
 
