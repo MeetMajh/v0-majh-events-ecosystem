@@ -235,16 +235,42 @@ export default function MajhLivePage() {
         setLiveTournaments(formattedTournaments)
       }
 
-      // Fetch livestreams
+      // Fetch livestreams from both livestreams and live_events tables
       const { data: streamData } = await supabase
         .from("livestreams")
         .select("*")
         .order("is_live", { ascending: false })
         .order("scheduled_at", { ascending: true })
 
+      // Also fetch from live_events (our new streaming system)
+      const { data: liveEventsData } = await supabase
+        .from("live_events")
+        .select("*")
+        .eq("status", "live")
+        .order("viewer_count", { ascending: false })
+
+      // Combine streams from both sources
+      const combinedStreams: Stream[] = []
+      
       if (streamData) {
-        setStreams(streamData)
+        combinedStreams.push(...streamData)
       }
+      
+      // Convert live_events to Stream format
+      if (liveEventsData) {
+        const convertedEvents = liveEventsData.map((event: any) => ({
+          id: event.id,
+          title: event.title,
+          platform: event.platform || 'majh',
+          embed_url: event.stream_url || event.embed_url || '',
+          channel_name: event.title,
+          is_live: event.status === 'live',
+          scheduled_at: event.scheduled_at,
+        }))
+        combinedStreams.push(...convertedEvents)
+      }
+
+      setStreams(combinedStreams)
 
       // Fetch trending matches
       try {

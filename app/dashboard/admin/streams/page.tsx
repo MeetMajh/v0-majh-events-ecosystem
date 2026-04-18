@@ -120,20 +120,32 @@ export default function StreamSourcesAdminPage() {
     setEditingSource(null)
   }
 
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+
   const handleSubmit = async () => {
     setIsSubmitting(true)
+    setErrorMessage(null)
     
     try {
+      let result
       if (editingSource) {
-        await updateStreamSource(editingSource.id, formData)
+        result = await updateStreamSource(editingSource.id, formData)
       } else {
-        await createStreamSource(formData)
+        result = await createStreamSource(formData)
+      }
+      
+      if (result.error) {
+        setErrorMessage(result.error)
+        console.error("Error from server:", result.error)
+        return
       }
       
       mutate()
       setIsAddDialogOpen(false)
       resetForm()
     } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to save stream source"
+      setErrorMessage(message)
       console.error("Error saving stream source:", err)
     } finally {
       setIsSubmitting(false)
@@ -314,13 +326,20 @@ export default function StreamSourcesAdminPage() {
               </div>
             </div>
             
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleSubmit} disabled={isSubmitting || !formData.title || !formData.channel_url}>
-                {isSubmitting ? "Saving..." : editingSource ? "Save Changes" : "Add Source"}
-              </Button>
+            <DialogFooter className="flex-col gap-3 sm:flex-row">
+              {errorMessage && (
+                <div className="w-full p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-sm text-destructive">
+                  {errorMessage}
+                </div>
+              )}
+              <div className="flex gap-2 w-full sm:w-auto">
+                <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleSubmit} disabled={isSubmitting || !formData.title || !formData.channel_url}>
+                  {isSubmitting ? "Saving..." : editingSource ? "Save Changes" : "Add Source"}
+                </Button>
+              </div>
             </DialogFooter>
           </DialogContent>
         </Dialog>
