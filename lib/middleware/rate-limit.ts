@@ -18,7 +18,23 @@ export interface RateLimitResult {
   limit: number
   remaining: number
   resetAt: Date
+  reset?: number
   error?: string
+}
+
+/**
+ * Check rate limit by API key ID (wrapper for API routes)
+ * Returns result with reset timestamp as epoch seconds
+ */
+export async function checkRateLimit(
+  apiKeyId: string,
+  limit: number = 60
+): Promise<RateLimitResult & { reset: number }> {
+  const result = rateLimit(apiKeyId, limit)
+  return {
+    ...result,
+    reset: Math.floor(result.resetAt.getTime() / 1000),
+  }
 }
 
 /**
