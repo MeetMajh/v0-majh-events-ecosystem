@@ -118,29 +118,37 @@ export default function MediaUploadPage() {
       const mediaType = uploadFile.file.type.startsWith("video/") ? "clip" : "image"
 
       // Save to database with all required fields for media to show up
-      const { error: dbError } = await supabase
+      const insertData = {
+        player_id: user.id,
+        title: title || uploadFile.file.name,
+        description,
+        media_type: mediaType,
+        source_type: "upload",
+        video_url: urlData.publicUrl,
+        storage_path: filePath,
+        thumbnail_url: null,
+        visibility: visibility as "public" | "unlisted" | "private",
+        moderation_status: "approved",
+        view_count: 0,
+        like_count: 0,
+        comment_count: 0,
+        trending_score: 0,
+        is_featured: false,
+      }
+      
+      console.log("[v0] Inserting media:", insertData)
+      
+      const { data: insertedData, error: dbError } = await supabase
         .from("player_media")
-        .insert({
-          player_id: user.id,
-          title: title || uploadFile.file.name,
-          description,
-          media_type: mediaType,
-          source_type: "upload",
-          video_url: urlData.publicUrl,
-          storage_path: filePath,
-          thumbnail_url: null,
-          visibility: visibility as "public" | "unlisted" | "private",
-          moderation_status: "approved", // Auto-approve for now
-          view_count: 0,
-          like_count: 0,
-          comment_count: 0,
-          trending_score: 0,
-          is_featured: false,
-        })
+        .insert(insertData)
+        .select()
 
       if (dbError) {
-        console.error("Database error:", dbError)
+        console.error("[v0] Database error:", dbError)
+        toast.error(`Database error: ${dbError.message}`)
         // Don't throw - file was uploaded successfully
+      } else {
+        console.log("[v0] Media inserted successfully:", insertedData)
       }
 
       setFiles(prev => {

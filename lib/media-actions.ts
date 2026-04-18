@@ -392,11 +392,12 @@ export async function getTrendingMedia(
 ): Promise<PlayerMedia[]> {
   const supabase = await createClient()
   
+  // Use simpler query without complex joins that might fail
   let query = supabase
     .from("player_media")
     .select(`
       *,
-      player:profiles!player_media_player_id_fkey(id, first_name, last_name, avatar_url),
+      player:profiles(id, first_name, last_name, avatar_url),
       game:games(id, name, slug)
     `)
     .eq("visibility", "public")
@@ -427,11 +428,11 @@ export async function getTrendingMedia(
 export async function getRecentMedia(limit: number = 20): Promise<PlayerMedia[]> {
   const supabase = await createClient()
   
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("player_media")
     .select(`
       *,
-      player:profiles!player_media_player_id_fkey(id, first_name, last_name, avatar_url),
+      player:profiles(id, first_name, last_name, avatar_url),
       game:games(id, name, slug)
     `)
     .eq("visibility", "public")
@@ -439,24 +440,32 @@ export async function getRecentMedia(limit: number = 20): Promise<PlayerMedia[]>
     .order("created_at", { ascending: false })
     .limit(limit)
   
+  if (error) {
+    console.error("[v0] getRecentMedia error:", error)
+  }
+  
   return (data || []) as PlayerMedia[]
 }
 
 export async function getFeaturedMedia(limit: number = 5): Promise<PlayerMedia[]> {
   const supabase = await createClient()
   
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("player_media")
     .select(`
       *,
-      player:profiles!player_media_player_id_fkey(id, first_name, last_name, avatar_url),
+      player:profiles(id, first_name, last_name, avatar_url),
       game:games(id, name, slug)
     `)
     .eq("visibility", "public")
     .eq("moderation_status", "approved")
     .eq("is_featured", true)
-    .order("featured_at", { ascending: false })
+    .order("created_at", { ascending: false })
     .limit(limit)
+  
+  if (error) {
+    console.error("[v0] getFeaturedMedia error:", error)
+  }
   
   return (data || []) as PlayerMedia[]
 }
