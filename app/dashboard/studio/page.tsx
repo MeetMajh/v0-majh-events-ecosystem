@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useRef, useEffect, useCallback } from "react"
+import { useState, useRef, useEffect, useCallback, Suspense } from "react"
 import useSWR from "swr"
+import { ErrorBoundary } from "react-error-boundary"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -77,7 +78,19 @@ const fetcher = (url: string) => fetch(url).then(res => res.json())
 type StreamSource = "screen" | "camera" | "both"
 type LayoutType = "fullscreen" | "picture_in_picture" | "side_by_side"
 
-export default function MajhStudioPage() {
+function StudioErrorFallback({ error, resetErrorBoundary }: { error: Error; resetErrorBoundary: () => void }) {
+  return (
+    <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="text-center max-w-md mx-auto p-6">
+        <h2 className="text-2xl font-bold mb-4">Something went wrong</h2>
+        <p className="text-muted-foreground mb-4">{error.message || "An error occurred loading MAJH Studio"}</p>
+        <Button onClick={resetErrorBoundary}>Try Again</Button>
+      </div>
+    </div>
+  )
+}
+
+function MajhStudioContent() {
   // Refs
   const screenVideoRef = useRef<HTMLVideoElement>(null)
   const cameraVideoRef = useRef<HTMLVideoElement>(null)
@@ -472,7 +485,7 @@ export default function MajhStudioPage() {
                     </Badge>
                     <Badge variant="secondary">
                       <Users className="h-3 w-3 mr-1" />
-                      {session?.viewer_count || 0}
+                      {(session as any)?.viewer_count || session?.total_views || 0}
                     </Badge>
                   </div>
                 )}
@@ -800,5 +813,13 @@ export default function MajhStudioPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function MajhStudioPage() {
+  return (
+    <ErrorBoundary FallbackComponent={StudioErrorFallback}>
+      <MajhStudioContent />
+    </ErrorBoundary>
   )
 }

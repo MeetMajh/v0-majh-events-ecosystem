@@ -75,19 +75,26 @@ export async function createStream(input: CreateStreamInput) {
     return { error: "You must be logged in to stream" }
   }
 
-  // Check if user already has an active stream
+  // Check if user already has a LIVE stream (allow creating new if offline or ended)
   const { data: existing, error: existingError } = await supabase
     .from("user_streams")
-    .select("id")
+    .select("id, status")
     .eq("user_id", user.id)
-    .in("status", ["offline", "live"])
-    .single()
+    .eq("status", "live")
+    .maybeSingle()
 
-  console.log("[v0] existing stream check:", { existing, existingError })
+  console.log("[v0] existing live stream check:", { existing, existingError })
 
   if (existing) {
-    return { error: "You already have an active stream configuration. End your current stream first." }
+    return { error: "You already have a live stream. End your current stream first." }
   }
+  
+  // Delete any old ended/offline streams to start fresh
+  await supabase
+    .from("user_streams")
+    .delete()
+    .eq("user_id", user.id)
+    .neq("status", "live")
 
   const stream_key = generateStreamKey()
   const rtmp_url = getRtmpUrl()
@@ -178,11 +185,11 @@ export async function getMyStream() {
     .in("status", ["offline", "live"])
     .order("created_at", { ascending: false })
     .limit(1)
-    .single()
+    .maybeSingle()
 
   console.log("[v0] getMyStream result:", { data, error })
 
-  if (error && error.code !== "PGRST116") { // PGRST116 = no rows
+  if (error) {
     console.error("[v0] Error fetching stream:", error)
     return { error: error.message }
   }
