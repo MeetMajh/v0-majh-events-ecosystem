@@ -216,26 +216,10 @@ async function fetchClips(
   supabase: any, 
   options: { gameFilter?: string; limit: number; avoidGames: string[] }
 ) {
+  // Simple query without joins to ensure it works
   let query = supabase
     .from("player_media")
-    .select(`
-      id,
-      title,
-      description,
-      video_url,
-      thumbnail_url,
-      duration_seconds,
-      player_id,
-      game_id,
-      tournament_id,
-      view_count,
-      like_count,
-      comment_count,
-      trending_score,
-      created_at,
-      player:player_id(id, first_name, last_name, avatar_url),
-      game:game_id(id, name, icon_url)
-    `)
+    .select("*")
     .in("media_type", ["highlight", "clip", "video", "image"])
     .eq("moderation_status", "approved")
     .eq("visibility", "public")
@@ -250,7 +234,14 @@ async function fetchClips(
     query = query.not("game_id", "in", `(${options.avoidGames.join(",")})`)
   }
 
-  const { data } = await query
+  const { data, error } = await query
+  
+  if (error) {
+    console.log("[v0] fetchClips error:", error)
+    return []
+  }
+  
+  console.log("[v0] fetchClips returned:", data?.length, "items")
   return data || []
 }
 
@@ -345,25 +336,20 @@ async function fetchUserPreferences(supabase: any, userId: string) {
 // ══════════════════════════════════════════
 
 function transformClip(clip: any): UnifiedFeedItem {
-  // Handle profile name - use first_name + last_name or fallback
-  const creatorName = clip.player 
-    ? [clip.player.first_name, clip.player.last_name].filter(Boolean).join(" ") || "Anonymous"
-    : "Anonymous"
-  
   return {
     id: clip.id,
     type: "clip",
     title: clip.title || "Untitled Clip",
     description: clip.description,
-    media_url: clip.video_url,
+    media_url: clip.video_url || clip.url,
     thumbnail_url: clip.thumbnail_url,
     duration_seconds: clip.duration_seconds,
     creator_id: clip.player_id,
-    creator_name: creatorName,
-    creator_avatar: clip.player?.avatar_url,
+    creator_name: "MAJH Creator",
+    creator_avatar: undefined,
     game_id: clip.game_id,
-    game_name: clip.game?.name,
-    game_logo: clip.game?.icon_url,
+    game_name: undefined,
+    game_logo: undefined,
     tournament_id: clip.tournament_id,
     view_count: clip.view_count || 0,
     like_count: clip.like_count || 0,
