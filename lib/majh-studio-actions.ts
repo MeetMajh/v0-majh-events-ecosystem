@@ -126,10 +126,15 @@ export async function generateLiveKitToken(options: TokenOptions) {
  * Create a new stream session
  */
 export async function createStreamSession(input: CreateSessionInput) {
+  console.log("[v0] createStreamSession called with:", JSON.stringify(input))
+  
   const supabase = await createClient()
   
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+  console.log("[v0] Auth check - user:", user?.id, "error:", authError?.message)
+  
   if (!user) {
+    console.log("[v0] No user found - returning error")
     return { error: "You must be logged in to stream" }
   }
 
@@ -148,6 +153,8 @@ export async function createStreamSession(input: CreateSessionInput) {
   // Generate unique room name and stream key
   const livekit_room_name = `majh-${nanoid(12)}`
   const stream_key = `sk_${nanoid(24)}`
+  
+  console.log("[v0] Inserting stream session for user:", user.id)
 
   const { data, error } = await supabase
     .from("stream_sessions")
