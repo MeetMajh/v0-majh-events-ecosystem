@@ -75,7 +75,9 @@ export async function POST(request: NextRequest) {
       // Stream started broadcasting
       case "video.live_stream.active": {
         const muxStreamId = event.data.id
-        console.log("[v0] Stream active:", muxStreamId)
+        const playbackId = event.data.playback_ids?.[0]?.id
+        const playbackUrl = playbackId ? `https://stream.mux.com/${playbackId}.m3u8` : null
+        console.log("[v0] Stream active:", muxStreamId, "playback:", playbackId)
 
         // Update user_streams table
         const { error } = await supabase
@@ -84,6 +86,7 @@ export async function POST(request: NextRequest) {
             status: "live",
             started_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
+            ...(playbackUrl && { playback_url: playbackUrl }),
           })
           .eq("mux_stream_id", muxStreamId)
 
