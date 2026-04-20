@@ -108,6 +108,7 @@ export default function MajhLivePage() {
   const [featureMatches, setFeatureMatches] = useState<FeatureMatch[]>([])
   const [liveTournaments, setLiveTournaments] = useState<LiveTournament[]>([])
   const [streams, setStreams] = useState<Stream[]>([])
+  const [recentVods, setRecentVods] = useState<any[]>([])
   const [trendingMatches, setTrendingMatches] = useState<TrendingMatch[]>([])
   const [loading, setLoading] = useState(true)
   const [connected, setConnected] = useState(true)
@@ -255,6 +256,30 @@ export default function MajhLivePage() {
 
       console.log("[v0] stream_sessions:", streamSessionsData?.length, "error:", sessionsError)
 
+      // Fetch from user_streams (OBS/external software streams via Mux)
+      const { data: userStreamsData, error: userStreamsError } = await supabase
+        .from("user_streams")
+        .select("*, game:games(id, name, icon_url), user:profiles(id, first_name, last_name, avatar_url)")
+        .eq("status", "live")
+        .eq("is_public", true)
+        .order("total_views", { ascending: false })
+
+      console.log("[v0] user_streams:", userStreamsData?.length, "error:", userStreamsError)
+
+      // Fetch recent VODs (ended streams with playback_url)
+      const { data: vodsData } = await supabase
+        .from("user_streams")
+        .select("*, game:games(id, name, icon_url), user:profiles(id, first_name, last_name, avatar_url)")
+        .eq("status", "ended")
+        .eq("is_public", true)
+        .not("playback_url", "is", null)
+        .order("ended_at", { ascending: false })
+        .limit(12)
+
+      if (vodsData) {
+        setRecentVods(vodsData)
+      }
+
       // Combine streams from all sources
       const combinedStreams: Stream[] = []
       
@@ -289,6 +314,27 @@ export default function MajhLivePage() {
           }
         })
         combinedStreams.push(...convertedSessions)
+      }
+
+      // Convert user_streams (OBS/Mux streams) to Stream format
+      if (userStreamsData) {
+        const convertedUserStreams = userStreamsData.map((stream: any) => {
+          const streamerName = stream.user 
+            ? `${stream.user.first_name || ''} ${stream.user.last_name || ''}`.trim() || 'Streamer'
+            : 'Streamer'
+          return {
+            id: stream.id,
+            title: stream.title || `${streamerName}'s Stream`,
+            platform: 'mux',
+            embed_url: stream.playback_url || '',
+            channel_name: streamerName,
+            is_live: stream.status === 'live',
+            scheduled_at: stream.started_at,
+            mux_playback_id: stream.mux_playback_id,
+            game: stream.game,
+          }
+        })
+        combinedStreams.push(...convertedUserStreams)
       }
 
       setStreams(combinedStreams)
@@ -808,6 +854,71 @@ export default function MajhLivePage() {
               </Tabs>
               </div>
             </div>
+
+            {/* Recent VODs Section */}
+            {recentVods.length > 0 && (
+              <div className="mt-8">
+                <div className="mb-4 flex items-center gap-2">
+                  <Play className="h-5 w-5 text-primary" />
+                  <h2 className="esports-subheading text-muted-foreground">Recent Recordings</h2>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {recentVods.map((vod) => {
+                    const streamerName = vod.user 
+                      ? `${vod.user.first_name || ''} ${vod.user.last_name || ''}`.trim() || 'Streamer'
+                      : 'Streamer'
+                    const duration = vod.started_at && vod.ended_at
+                      ? Math.round((new Date(vod.ended_at).getTime() - new Date(vod.started_at).getTime()) / 60000)
+                      : null
+                    return (
+                      <a
+                        key={vod.id}
+                        href={vod.playback_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="group block rounded-xl border border-border bg-card overflow-hidden transition-all hover:border-primary/50 hover:shadow-lg"
+                      >
+                        {/* Thumbnail */}
+                        <div className="relative aspect-video bg-muted">
+                          {vod.mux_playback_id ? (
+                            <img 
+                              src={`https://image.mux.com/${vod.mux_playback_id}/thumbnail.jpg?time=10`}
+                              alt={vod.title}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="flex items-center justify-center h-full">
+                              <Play className="h-12 w-12 text-muted-foreground/30" />
+                            </div>
+                          )}
+                          {duration && (
+                            <div className="absolute bottom-2 right-2 bg-black/80 text-white text-xs px-2 py-0.5 rounded">
+                              {duration} min
+                            </div>
+                          )}
+                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                            <Play className="h-12 w-12 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </div>
+                        </div>
+                        {/* Info */}
+                        <div className="p-3">
+                          <h4 className="font-semibold text-foreground line-clamp-1">{vod.title}</h4>
+                          <p className="text-sm text-muted-foreground mt-1">{streamerName}</p>
+                          <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+                            {vod.game && (
+                              <Badge variant="outline" className="text-xs">{vod.game.name}</Badge>
+                            )}
+                            <span>
+                              {new Intl.DateTimeFormat("en-US", { dateStyle: "short" }).format(new Date(vod.ended_at || vod.created_at))}
+                            </span>
+                          </div>
+                        </div>
+                      </a>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
           </div>
           </div>
         )}
