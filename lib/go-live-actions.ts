@@ -183,10 +183,7 @@ export async function getMyStream() {
 
   const { data, error } = await supabase
     .from("user_streams")
-    .select(`
-      *,
-      game:games(id, name, icon_url)
-    `)
+    .select(`*, game:games(id, name, icon_url)`)
     .eq("user_id", user.id)
     .in("status", ["offline", "live"])
     .order("created_at", { ascending: false })
