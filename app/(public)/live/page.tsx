@@ -267,7 +267,7 @@ export default function MajhLivePage() {
       console.log("[v0] user_streams:", userStreamsData?.length, "error:", userStreamsError)
 
       // Fetch recent VODs (ended streams with playback_url)
-      const { data: vodsData } = await supabase
+      const { data: vodsData, error: vodsError } = await supabase
         .from("user_streams")
         .select("*, game:games(id, name, icon_url), user:profiles(id, first_name, last_name, avatar_url)")
         .eq("status", "ended")
@@ -275,6 +275,8 @@ export default function MajhLivePage() {
         .not("playback_url", "is", null)
         .order("ended_at", { ascending: false })
         .limit(12)
+
+      console.log("[v0] VODs found:", vodsData?.length, "error:", vodsError?.message)
 
       if (vodsData) {
         setRecentVods(vodsData)
