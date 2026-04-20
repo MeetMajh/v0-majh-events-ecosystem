@@ -181,12 +181,11 @@ export async function getMyStream() {
     return { error: "Unauthorized" }
   }
 
+  // Note: Removed game join temporarily while Supabase schema cache refreshes
+  // After cache refreshes (~60s), restore: .select(`*, game:games(id, name, icon_url)`)
   const { data, error } = await supabase
     .from("user_streams")
-    .select(`
-      *,
-      game:games(id, name, icon_url)
-    `)
+    .select("*")
     .eq("user_id", user.id)
     .in("status", ["offline", "live"])
     .order("created_at", { ascending: false })
@@ -328,13 +327,11 @@ export async function deleteStream(streamId: string) {
 export async function getLiveStreams(options?: { game_id?: string; limit?: number }) {
   const supabase = await createClient()
 
+  // Note: Removed game/user joins temporarily while Supabase schema cache refreshes
+  // After cache refreshes, restore the full select with joins
   let query = supabase
     .from("user_streams")
-    .select(`
-      *,
-      game:games(id, name, icon_url),
-      user:profiles(id, first_name, last_name, avatar_url)
-    `)
+    .select("*")
     .eq("status", "live")
     .eq("is_public", true)
     .order("total_views", { ascending: false })
