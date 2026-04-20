@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { ServiceWorkerRegistration } from '@/components/pwa/service-worker-registration'
+import { RealtimeProvider } from '@/components/providers/realtime-provider'
 import './globals.css'
 
 const _geist = Geist({ subsets: ["latin"] })
@@ -66,7 +67,9 @@ export default function RootLayout({
         />
       </head>
       <body className="font-sans antialiased">
-        {children}
+        <RealtimeProvider>
+          {children}
+        </RealtimeProvider>
         <ServiceWorkerRegistration />
         <Analytics />
       </body>

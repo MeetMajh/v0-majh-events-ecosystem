@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { Eye, Radio, Trophy, TrendingUp, Flame, Users } from "lucide-react"
 import { getLiveStats } from "@/lib/tournament-controller-actions"
+import { useLiveStreams, useLiveCount } from "@/lib/unified-realtime"
 
 interface LiveStats {
   activeViewers: number
@@ -23,6 +24,10 @@ export function LiveStatsBar({
   variant = "bar",
   refreshInterval = 30000 
 }: LiveStatsBarProps) {
+  // Use unified realtime state for live streams
+  const liveStreams = useLiveStreams()
+  const liveStreamCount = useLiveCount()
+  
   const [stats, setStats] = useState<LiveStats>({
     activeViewers: 0,
     liveMatches: 0,
@@ -34,9 +39,20 @@ export function LiveStatsBar({
     const fetchStats = async () => {
       try {
         const data = await getLiveStats()
-        setStats(data)
+        // Merge API stats with realtime stream data
+        setStats({
+          ...data,
+          liveMatches: Math.max(data.liveMatches, liveStreamCount),
+          activeViewers: data.activeViewers + liveStreams.reduce((sum, s) => sum + s.viewerCount, 0)
+        })
       } catch (error) {
         console.error("Failed to fetch live stats:", error)
+        // Fallback to realtime data only
+        setStats({
+          activeViewers: liveStreams.reduce((sum, s) => sum + s.viewerCount, 0),
+          liveMatches: liveStreamCount,
+          liveTournaments: 0,
+        })
       } finally {
         setIsLoading(false)
       }
@@ -45,7 +61,7 @@ export function LiveStatsBar({
     fetchStats()
     const interval = setInterval(fetchStats, refreshInterval)
     return () => clearInterval(interval)
-  }, [refreshInterval])
+  }, [refreshInterval, liveStreams, liveStreamCount])
 
   const hasActivity = stats.activeViewers > 0 || stats.liveMatches > 0 || stats.liveTournaments > 0
 
