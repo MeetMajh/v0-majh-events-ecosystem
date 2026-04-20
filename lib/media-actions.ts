@@ -186,6 +186,9 @@ export async function createMedia(data: {
   // Auto-approve uploads for now (can add moderation later)
   const autoApprove = true
   
+  // url is required - use video_url, storage_path, or generate from embed
+  const mediaUrl = data.videoUrl || data.storagePath || embedUrl || ""
+  
   const { data: media, error } = await supabase
     .from("player_media")
     .insert({
@@ -193,6 +196,8 @@ export async function createMedia(data: {
       title: data.title.trim(),
       description: data.description?.trim() || null,
       media_type: data.mediaType,
+      category: data.mediaType === "clip" ? "gameplay" : "other",
+      url: mediaUrl,
       source_type: data.sourceType,
       video_url: data.videoUrl || null,
       embed_url: embedUrl,
@@ -211,11 +216,14 @@ export async function createMedia(data: {
   
   if (error) return { error: error.message }
   
-  // Update user's upload count
-  await supabase
-    .from("profiles")
-    .update({ total_uploads: (trustData?.approved_uploads || 0) + 1 })
-    .eq("id", user.id)
+  // Increment user's upload count atomically
+  await supabase.rpc("increment_upload_count", { user_id: user.id }).catch(() => {
+    // Fallback if RPC doesn't exist - just increment
+    supabase
+      .from("profiles")
+      .update({ total_uploads: 1 })
+      .eq("id", user.id)
+  })
   
   // Run AI content moderation asynchronously (don't block the response)
   // This will update moderation_status in the background

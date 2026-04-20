@@ -180,18 +180,22 @@ export async function createStreamSession(input: CreateSessionInput) {
 
   console.log("[v0] Stream session created:", data?.id)
 
-  // Create default layout (ignore errors - table may not exist)
-  const { error: layoutError } = await supabase.from("stream_layouts").insert({
-    stream_id: data.id,
-    layout_type: "picture_in_picture",
-    camera_enabled: true,
-    camera_position: "bottom_right",
-    camera_size: "small",
-    overlay_enabled: true,
-  })
+  // Create default layout for user (matches actual schema: user_id, name, layout_data)
+  const { error: layoutError } = await supabase.from("stream_layouts").upsert({
+    user_id: user.id,
+    name: "Default Layout",
+    layout_data: {
+      layout_type: "picture_in_picture",
+      camera_enabled: true,
+      camera_position: "bottom_right",
+      camera_size: "small",
+      overlay_enabled: true,
+    },
+    is_default: true,
+  }, { onConflict: 'user_id,name' })
   
   if (layoutError) {
-    console.log("[v0] Layout insert failed (non-critical):", layoutError.message)
+    console.log("[v0] Layout upsert failed (non-critical):", layoutError.message)
   }
 
   revalidatePath("/dashboard/studio")
