@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import { nanoid } from "nanoid"
+import { createMuxLiveStream, deleteMuxLiveStream } from "@/lib/mux"
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // GO LIVE - Player Streaming Feature
@@ -18,6 +19,9 @@ export interface UserStream {
   stream_key: string
   rtmp_url: string
   playback_url?: string
+  mux_stream_id?: string
+  mux_playback_id?: string
+  mux_asset_id?: string
   status: "offline" | "live" | "ended"
   started_at?: string
   ended_at?: string
@@ -41,23 +45,10 @@ export interface CreateStreamInput {
 }
 
 /**
- * Generate a unique stream key
+ * Generate a unique stream key (fallback if Mux fails)
  */
 function generateStreamKey(): string {
   return `live_${nanoid(32)}`
-}
-
-/**
- * Get RTMP URL for streaming
- * In production, this would point to your streaming server (e.g., Mux, Cloudflare Stream)
- */
-function getRtmpUrl(): string {
-  // This is a placeholder - in production, integrate with:
-  // - Mux Live (recommended)
-  // - Cloudflare Stream
-  // - Amazon IVS
-  // - Custom RTMP server
-  return process.env.RTMP_SERVER_URL || "rtmp://live.majhevents.com/live"
 }
 
 /**
@@ -96,10 +87,23 @@ export async function createStream(input: CreateStreamInput) {
     .eq("user_id", user.id)
     .neq("status", "live")
 
-  const stream_key = generateStreamKey()
-  const rtmp_url = getRtmpUrl()
+  // Create Mux live stream
+  let muxData
+  try {
+    muxData = await createMuxLiveStream()
+    console.log("[v0] Mux stream created:", muxData.muxStreamId)
+  } catch (muxError) {
+    console.error("[v0] Mux error, using fallback:", muxError)
+    // Fallback to placeholder if Mux fails
+    muxData = {
+      streamKey: generateStreamKey(),
+      rtmpUrl: process.env.RTMP_SERVER_URL || "rtmp://live.majhevents.com/live",
+      playbackId: undefined,
+      muxStreamId: undefined,
+    }
+  }
 
-  console.log("[v0] inserting stream with key:", stream_key)
+  console.log("[v0] inserting stream with Mux key")
 
   const { data, error } = await supabase
     .from("user_streams")
@@ -108,8 +112,10 @@ export async function createStream(input: CreateStreamInput) {
       title: input.title,
       description: input.description,
       game_id: input.game_id,
-      stream_key,
-      rtmp_url,
+      stream_key: muxData.streamKey,
+      rtmp_url: muxData.rtmpUrl,
+      mux_stream_id: muxData.muxStreamId,
+      mux_playback_id: muxData.playbackId,
       status: "offline",
       is_public: input.is_public ?? true,
       allow_chat: input.allow_chat ?? true,
