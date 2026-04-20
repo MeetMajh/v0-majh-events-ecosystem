@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import crypto from "crypto"
 
 // Use service role for webhook (no user context)
 const supabase = createClient(
@@ -18,9 +19,54 @@ interface MuxWebhookEvent {
   }
 }
 
+// Verify Mux webhook signature
+function verifyMuxSignature(body: string, signature: string | null): boolean {
+  const secret = process.env.MUX_WEBHOOK_SECRET
+  if (!secret) {
+    console.log("[v0] No MUX_WEBHOOK_SECRET configured, skipping verification")
+    return true // Allow in development
+  }
+  if (!signature) {
+    console.log("[v0] No signature provided")
+    return false
+  }
+
+  // Mux signature format: t=timestamp,v1=signature
+  const parts = signature.split(",")
+  const timestampPart = parts.find(p => p.startsWith("t="))
+  const signaturePart = parts.find(p => p.startsWith("v1="))
+
+  if (!timestampPart || !signaturePart) {
+    return false
+  }
+
+  const timestamp = timestampPart.split("=")[1]
+  const expectedSig = signaturePart.split("=")[1]
+
+  // Create the signed payload
+  const signedPayload = `${timestamp}.${body}`
+  const computedSig = crypto
+    .createHmac("sha256", secret)
+    .update(signedPayload)
+    .digest("hex")
+
+  return crypto.timingSafeEqual(
+    Buffer.from(expectedSig),
+    Buffer.from(computedSig)
+  )
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.text()
+    const signature = request.headers.get("mux-signature")
+
+    // Verify webhook signature
+    if (!verifyMuxSignature(body, signature)) {
+      console.error("[v0] Invalid Mux webhook signature")
+      return NextResponse.json({ error: "Invalid signature" }, { status: 401 })
+    }
+
     const event: MuxWebhookEvent = JSON.parse(body)
 
     console.log("[v0] Mux webhook received:", event.type)
