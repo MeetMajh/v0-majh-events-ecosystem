@@ -266,17 +266,17 @@ export default function MajhLivePage() {
 
       console.log("[v0] user_streams:", userStreamsData?.length, "error:", userStreamsError)
 
-      // Fetch recent VODs (ended streams with playback_url)
+      // Fetch recent VODs (ended streams with playback_url OR mux_playback_id)
       const { data: vodsData, error: vodsError } = await supabase
         .from("user_streams")
         .select("*, game:games(id, name, icon_url), user:profiles(id, first_name, last_name, avatar_url)")
         .eq("status", "ended")
         .eq("is_public", true)
-        .not("playback_url", "is", null)
+        .or("playback_url.not.is.null,mux_playback_id.not.is.null")
         .order("ended_at", { ascending: false })
         .limit(12)
 
-      console.log("[v0] VODs found:", vodsData?.length, "error:", vodsError?.message)
+      console.log("[v0] VODs found:", vodsData?.length, "error:", vodsError?.message, "data:", vodsData)
 
       if (vodsData) {
         setRecentVods(vodsData)
