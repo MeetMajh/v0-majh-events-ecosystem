@@ -117,8 +117,10 @@ export default function MajhLivePage() {
 
   useEffect(() => {
     const supabase = createClient()
+    console.log("[v0] Live page fetchData starting...")
 
     async function fetchData() {
+      console.log("[v0] fetchData running")
       // Fetch feature matches
       const { data: matches } = await supabase
         .from("tournament_matches")
