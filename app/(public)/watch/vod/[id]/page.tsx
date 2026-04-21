@@ -46,22 +46,26 @@ export default function WatchVODPage() {
     async function fetchVOD() {
       const supabase = createClient()
       
+      // Simplified query without joins to avoid RLS/FK issues
       const { data, error } = await supabase
         .from("user_streams")
-        .select("*, game:games(id, name, icon_url), user:profiles(id, first_name, last_name, avatar_url)")
+        .select("*")
         .eq("id", vodId)
         .single()
 
-      if (error) {
+      console.log("[v0] VOD fetch result:", data, "error:", error?.message, "code:", error?.code)
+
+      if (error || !data) {
         console.error("[v0] Error fetching VOD:", error)
         setError("Recording not found")
       } else {
         setVod(data)
-        // Increment view count
-        await supabase
+        // Increment view count (don't await, fire and forget)
+        supabase
           .from("user_streams")
           .update({ total_views: (data.total_views || 0) + 1 })
           .eq("id", vodId)
+          .then(() => console.log("[v0] View count incremented"))
       }
       setLoading(false)
     }
