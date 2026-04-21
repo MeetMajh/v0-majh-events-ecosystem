@@ -73,9 +73,11 @@ interface Stream {
   title: string
   platform: string
   embed_url: string
+  channel_url?: string
   channel_name?: string
   is_live: boolean
   scheduled_at?: string
+  mux_playback_id?: string
 }
 
 function getPlayerName(player: any): string {
@@ -91,12 +93,20 @@ function getInitials(player: any): string {
 }
 
 function getEmbedUrl(url: string, platform: string): string {
+  const hostname = typeof window !== "undefined" ? window.location.hostname : "majhevents.com"
+  
   if (platform === "youtube") {
     const videoId = url.match(/(?:v=|\/)([\w-]{11})/)?.[1]
     if (videoId) return `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1`
   } else if (platform === "twitch") {
+    // Check if it's a VOD link (contains /video/ or video= parameter)
+    const videoMatch = url.match(/video[=/](\d+)/)
+    if (videoMatch) {
+      return `https://player.twitch.tv/?video=${videoMatch[1]}&parent=${hostname}&muted=true`
+    }
+    // Otherwise treat as live channel
     const channel = url.match(/twitch\.tv\/(\w+)/)?.[1]
-    if (channel) return `https://player.twitch.tv/?channel=${channel}&parent=${typeof window !== "undefined" ? window.location.hostname : "localhost"}&muted=true`
+    if (channel) return `https://player.twitch.tv/?channel=${channel}&parent=${hostname}&muted=true`
   } else if (platform === "kick") {
     const channel = url.match(/kick\.com\/(\w+)/)?.[1]
     if (channel) return `https://player.kick.com/${channel}`
@@ -113,6 +123,7 @@ export default function MajhLivePage() {
   const [loading, setLoading] = useState(true)
   const [connected, setConnected] = useState(true)
   const [selectedMatch, setSelectedMatch] = useState<FeatureMatch | null>(null)
+  const [selectedStream, setSelectedStream] = useState<Stream | null>(null)
   const [activeTab, setActiveTab] = useState("trending")
 
   useEffect(() => {
@@ -268,17 +279,17 @@ export default function MajhLivePage() {
 
       console.log("[v0] user_streams:", userStreamsData?.length, "error:", userStreamsError?.message)
 
-      // Fetch recent VODs (ended streams with playback_url OR mux_playback_id)
+      // Fetch recent VODs (ended streams) - simplified query without complex filters
       const { data: vodsData, error: vodsError } = await supabase
         .from("user_streams")
-        .select("*, game:games(id, name, icon_url), user:profiles(id, first_name, last_name, avatar_url)")
+        .select("*")
         .eq("status", "ended")
         .eq("is_public", true)
-        .or("playback_url.not.is.null,mux_playback_id.not.is.null")
+        .not("mux_playback_id", "is", null)
         .order("ended_at", { ascending: false })
         .limit(12)
 
-      console.log("[v0] VODs found:", vodsData?.length, "error:", vodsError?.message)
+      console.log("[v0] VODs found:", vodsData?.length, "error:", vodsError?.message, "code:", vodsError?.code, "data:", vodsData)
 
       if (vodsData) {
         setRecentVods(vodsData)
@@ -289,15 +300,21 @@ export default function MajhLivePage() {
       
       // Convert stream_sources to Stream format
       if (streamSourcesData) {
-        const convertedSources = streamSourcesData.map((source: any) => ({
-          id: source.id,
-          title: source.title,
-          platform: source.platform || 'custom',
-          embed_url: source.channel_url || '',
-          channel_name: source.title,
-          is_live: source.is_live,
-          scheduled_at: source.created_at,
-        }))
+        const convertedSources = streamSourcesData.map((source: any) => {
+          // Generate proper embed URL from channel_url
+          const embedUrl = source.embed_url || 
+            (source.channel_url ? getEmbedUrl(source.channel_url, source.platform || 'custom') : '')
+          return {
+            id: source.id,
+            title: source.title,
+            platform: source.platform || 'custom',
+            embed_url: embedUrl,
+            channel_url: source.channel_url, // Keep original URL for fallback
+            channel_name: source.title,
+            is_live: source.is_live,
+            scheduled_at: source.created_at,
+          }
+        })
         combinedStreams.push(...convertedSources)
       }
 
@@ -476,7 +493,67 @@ export default function MajhLivePage() {
             <div className="grid gap-8 lg:grid-cols-3">
             {/* Main Content - Feature Stream */}
             <div className="lg:col-span-2">
-              {selectedMatch ? (
+              {selectedStream ? (
+                <div className="esports-card glass-panel overflow-hidden rounded-xl border-0">
+                  {/* Stream Player for external/Mux streams */}
+                  <div className="video-container">
+                    {selectedStream.mux_playback_id ? (
+                      <iframe
+                        src={`https://stream.mux.com/${selectedStream.mux_playback_id}.m3u8`}
+                        title={selectedStream.title}
+                        className="h-full w-full"
+                        allowFullScreen
+                        allow="autoplay; encrypted-media; fullscreen"
+                      />
+                    ) : selectedStream.embed_url ? (
+                      <iframe
+                        src={selectedStream.embed_url}
+                        title={selectedStream.title}
+                        className="h-full w-full"
+                        allowFullScreen
+                        allow="autoplay; encrypted-media; fullscreen"
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center">
+                        <div className="text-center">
+                          <Play className="mx-auto mb-3 h-16 w-16 text-muted-foreground/30" />
+                          <p className="text-muted-foreground">No embed available</p>
+                          {selectedStream.channel_url && (
+                            <a 
+                              href={selectedStream.channel_url} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="mt-2 inline-flex items-center gap-1 text-primary hover:underline"
+                            >
+                              Watch on {selectedStream.platform}
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Live badge overlay */}
+                    <div className="absolute inset-x-0 top-0 flex items-center justify-between bg-gradient-to-b from-black/60 to-transparent p-4">
+                      <div className="flex items-center gap-2">
+                        <Badge className="bg-destructive text-destructive-foreground gap-1.5 px-3 py-1">
+                          <span className="h-2 w-2 rounded-full bg-white animate-pulse" />
+                          LIVE
+                        </Badge>
+                        <Badge variant="outline" className="text-xs capitalize bg-black/30">{selectedStream.platform}</Badge>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Stream Info Bar */}
+                  <div className="border-t border-border bg-card p-4">
+                    <h3 className="font-bold text-lg text-foreground">{selectedStream.title}</h3>
+                    {selectedStream.channel_name && (
+                      <p className="text-sm text-muted-foreground mt-1">{selectedStream.channel_name}</p>
+                    )}
+                  </div>
+                </div>
+              ) : selectedMatch ? (
                 <div className="esports-card glass-panel overflow-hidden rounded-xl border-0">
                   {/* Stream Player */}
                   <div className="video-container">
@@ -803,12 +880,16 @@ export default function MajhLivePage() {
                 <TabsContent value="streams" className="mt-4 space-y-2">
                   {liveStreams.length > 0 ? (
                     liveStreams.map((stream) => (
-                      <a
+                      <button
                         key={stream.id}
-                        href={stream.embed_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block rounded-xl border border-border bg-card p-3 transition-all hover:border-primary/50"
+                        onClick={() => {
+                          setSelectedStream(stream)
+                          setSelectedMatch(null) // Clear match selection when selecting a stream
+                        }}
+                        className={cn(
+                          "block w-full text-left rounded-xl border bg-card p-3 transition-all hover:border-primary/50",
+                          selectedStream?.id === stream.id ? "border-primary ring-1 ring-primary" : "border-border"
+                        )}
                       >
                         <div className="flex items-center justify-between mb-2">
                           <Badge className="bg-destructive/10 text-destructive border-destructive/30 text-xs">
@@ -821,7 +902,7 @@ export default function MajhLivePage() {
                         {stream.channel_name && (
                           <p className="mt-1 text-xs text-muted-foreground">{stream.channel_name}</p>
                         )}
-                      </a>
+                      </button>
                     ))
                   ) : (
                     <div className="rounded-xl border border-dashed border-border p-6 text-center">
