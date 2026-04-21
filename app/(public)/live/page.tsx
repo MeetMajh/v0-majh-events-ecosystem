@@ -117,8 +117,10 @@ export default function MajhLivePage() {
 
   useEffect(() => {
     const supabase = createClient()
+    console.log("[v0] Live page fetchData starting...")
 
     async function fetchData() {
+      console.log("[v0] fetchData running")
       // Fetch feature matches
       const { data: matches } = await supabase
         .from("tournament_matches")
@@ -239,22 +241,22 @@ export default function MajhLivePage() {
       // Fetch from stream_sources (admin-added external streams)
       const { data: streamSourcesData, error: sourcesError } = await supabase
         .from("stream_sources")
-        .select("*, games(name, slug)")
+        .select("*, game:games(id, name, icon_url)")
         .eq("is_active", true)
         .order("is_live", { ascending: false })
         .order("priority", { ascending: false })
 
-      console.log("[v0] stream_sources:", streamSourcesData?.length, "error:", sourcesError)
+      console.log("[v0] stream_sources:", streamSourcesData?.length, "error:", sourcesError?.message)
 
       // Fetch from stream_sessions (MAJH Studio user streams)
       const { data: streamSessionsData, error: sessionsError } = await supabase
         .from("stream_sessions")
-        .select("*")
+        .select("*, user:profiles(id, first_name, last_name, avatar_url)")
         .eq("status", "live")
         .eq("visibility", "public")
         .order("viewer_count", { ascending: false })
 
-      console.log("[v0] stream_sessions:", streamSessionsData?.length, "error:", sessionsError)
+      console.log("[v0] stream_sessions:", streamSessionsData?.length, "error:", sessionsError?.message)
 
       // Fetch from user_streams (OBS/external software streams via Mux)
       const { data: userStreamsData, error: userStreamsError } = await supabase
@@ -264,7 +266,7 @@ export default function MajhLivePage() {
         .eq("is_public", true)
         .order("total_views", { ascending: false })
 
-      console.log("[v0] user_streams:", userStreamsData?.length, "error:", userStreamsError)
+      console.log("[v0] user_streams:", userStreamsData?.length, "error:", userStreamsError?.message)
 
       // Fetch recent VODs (ended streams with playback_url OR mux_playback_id)
       const { data: vodsData, error: vodsError } = await supabase
@@ -276,7 +278,7 @@ export default function MajhLivePage() {
         .order("ended_at", { ascending: false })
         .limit(12)
 
-      console.log("[v0] VODs found:", vodsData?.length, "error:", vodsError?.message, "data:", vodsData)
+      console.log("[v0] VODs found:", vodsData?.length, "error:", vodsError?.message)
 
       if (vodsData) {
         setRecentVods(vodsData)
@@ -322,8 +324,8 @@ export default function MajhLivePage() {
       if (userStreamsData) {
         const convertedUserStreams = userStreamsData.map((stream: any) => {
           const streamerName = stream.user 
-            ? `${stream.user.first_name || ''} ${stream.user.last_name || ''}`.trim() || 'Streamer'
-            : 'Streamer'
+            ? `${stream.user.first_name || ''} ${stream.user.last_name || ''}`.trim() || 'MAJH Creator'
+            : 'MAJH Creator'
           return {
             id: stream.id,
             title: stream.title || `${streamerName}'s Stream`,
@@ -858,7 +860,8 @@ export default function MajhLivePage() {
             </div>
 
             {/* Recent VODs Section */}
-            {recentVods.length > 0 && (
+            {/* Debug: VODs count = {recentVods.length} */}
+            {recentVods.length > 0 ? (
               <div className="mt-8">
                 <div className="mb-4 flex items-center gap-2">
                   <Play className="h-5 w-5 text-primary" />
@@ -867,17 +870,15 @@ export default function MajhLivePage() {
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                   {recentVods.map((vod) => {
                     const streamerName = vod.user 
-                      ? `${vod.user.first_name || ''} ${vod.user.last_name || ''}`.trim() || 'Streamer'
-                      : 'Streamer'
+                      ? `${vod.user.first_name || ''} ${vod.user.last_name || ''}`.trim() || 'MAJH Creator'
+                      : 'MAJH Creator'
                     const duration = vod.started_at && vod.ended_at
                       ? Math.round((new Date(vod.ended_at).getTime() - new Date(vod.started_at).getTime()) / 60000)
                       : null
                     return (
-                      <a
+                      <Link
                         key={vod.id}
-                        href={vod.playback_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                        href={`/watch/vod/${vod.id}`}
                         className="group block rounded-xl border border-border bg-card overflow-hidden transition-all hover:border-primary/50 hover:shadow-lg"
                       >
                         {/* Thumbnail */}
@@ -904,7 +905,7 @@ export default function MajhLivePage() {
                         </div>
                         {/* Info */}
                         <div className="p-3">
-                          <h4 className="font-semibold text-foreground line-clamp-1">{vod.title}</h4>
+                          <h4 className="font-semibold text-foreground line-clamp-1">{vod.title || 'Stream Recording'}</h4>
                           <p className="text-sm text-muted-foreground mt-1">{streamerName}</p>
                           <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
                             {vod.game && (
@@ -915,10 +916,15 @@ export default function MajhLivePage() {
                             </span>
                           </div>
                         </div>
-                      </a>
+                      </Link>
                     )
                   })}
                 </div>
+              </div>
+            ) : (
+              <div className="mt-8 p-4 border border-dashed border-border rounded-lg text-center text-muted-foreground">
+                <Play className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <p>No recordings yet. Start streaming to create your first VOD!</p>
               </div>
             )}
           </div>
