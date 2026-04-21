@@ -93,12 +93,20 @@ function getInitials(player: any): string {
 }
 
 function getEmbedUrl(url: string, platform: string): string {
+  const hostname = typeof window !== "undefined" ? window.location.hostname : "majhevents.com"
+  
   if (platform === "youtube") {
     const videoId = url.match(/(?:v=|\/)([\w-]{11})/)?.[1]
     if (videoId) return `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1`
   } else if (platform === "twitch") {
+    // Check if it's a VOD link (contains /video/ or video= parameter)
+    const videoMatch = url.match(/video[=/](\d+)/)
+    if (videoMatch) {
+      return `https://player.twitch.tv/?video=${videoMatch[1]}&parent=${hostname}&muted=true`
+    }
+    // Otherwise treat as live channel
     const channel = url.match(/twitch\.tv\/(\w+)/)?.[1]
-    if (channel) return `https://player.twitch.tv/?channel=${channel}&parent=${typeof window !== "undefined" ? window.location.hostname : "localhost"}&muted=true`
+    if (channel) return `https://player.twitch.tv/?channel=${channel}&parent=${hostname}&muted=true`
   } else if (platform === "kick") {
     const channel = url.match(/kick\.com\/(\w+)/)?.[1]
     if (channel) return `https://player.kick.com/${channel}`
