@@ -279,20 +279,17 @@ export default function MajhLivePage() {
 
       console.log("[v0] user_streams:", userStreamsData?.length, "error:", userStreamsError?.message)
 
-      // Fetch recent VODs (ended streams with playback_url OR mux_playback_id)
+      // Fetch recent VODs (ended streams) - simplified query without complex filters
       const { data: vodsData, error: vodsError } = await supabase
         .from("user_streams")
-        .select("*, game:games(id, name, icon_url), user:profiles(id, first_name, last_name, avatar_url)")
+        .select("*")
         .eq("status", "ended")
         .eq("is_public", true)
-        .or("playback_url.not.is.null,mux_playback_id.not.is.null")
+        .not("mux_playback_id", "is", null)
         .order("ended_at", { ascending: false })
         .limit(12)
 
-      console.log("[v0] VODs found:", vodsData?.length, "error:", vodsError?.message, "code:", vodsError?.code)
-      if (vodsData && vodsData.length > 0) {
-        console.log("[v0] First VOD:", vodsData[0])
-      }
+      console.log("[v0] VODs found:", vodsData?.length, "error:", vodsError?.message, "code:", vodsError?.code, "data:", vodsData)
 
       if (vodsData) {
         setRecentVods(vodsData)
