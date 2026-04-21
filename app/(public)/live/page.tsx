@@ -239,9 +239,10 @@ export default function MajhLivePage() {
       }
 
       // Fetch from stream_sources (admin-added external streams)
+      // Note: Removed games join - foreign key not configured
       const { data: streamSourcesData, error: sourcesError } = await supabase
         .from("stream_sources")
-        .select("*, games(name, slug)")
+        .select("*")
         .eq("is_active", true)
         .order("is_live", { ascending: false })
         .order("priority", { ascending: false })
@@ -259,9 +260,10 @@ export default function MajhLivePage() {
       console.log("[v0] stream_sessions:", streamSessionsData?.length, "error:", sessionsError)
 
       // Fetch from user_streams (OBS/external software streams via Mux)
+      // Note: Removed game/user joins - foreign keys not configured
       const { data: userStreamsData, error: userStreamsError } = await supabase
         .from("user_streams")
-        .select("*, game:games(id, name, icon_url), user:profiles(id, first_name, last_name, avatar_url)")
+        .select("*")
         .eq("status", "live")
         .eq("is_public", true)
         .order("total_views", { ascending: false })
@@ -269,9 +271,10 @@ export default function MajhLivePage() {
       console.log("[v0] user_streams:", userStreamsData?.length, "error:", userStreamsError)
 
       // Fetch recent VODs (ended streams with playback_url OR mux_playback_id)
+      // Note: Removed game/user joins - foreign keys not configured
       const { data: vodsData, error: vodsError } = await supabase
         .from("user_streams")
-        .select("*, game:games(id, name, icon_url), user:profiles(id, first_name, last_name, avatar_url)")
+        .select("*")
         .eq("status", "ended")
         .eq("is_public", true)
         .or("playback_url.not.is.null,mux_playback_id.not.is.null")
@@ -323,19 +326,15 @@ export default function MajhLivePage() {
       // Convert user_streams (OBS/Mux streams) to Stream format
       if (userStreamsData) {
         const convertedUserStreams = userStreamsData.map((stream: any) => {
-          const streamerName = stream.user 
-            ? `${stream.user.first_name || ''} ${stream.user.last_name || ''}`.trim() || 'Streamer'
-            : 'Streamer'
           return {
             id: stream.id,
-            title: stream.title || `${streamerName}'s Stream`,
+            title: stream.title || 'MAJH Stream',
             platform: 'mux',
             embed_url: stream.playback_url || '',
-            channel_name: streamerName,
+            channel_name: 'MAJH Creator',
             is_live: stream.status === 'live',
             scheduled_at: stream.started_at,
             mux_playback_id: stream.mux_playback_id,
-            game: stream.game,
           }
         })
         combinedStreams.push(...convertedUserStreams)
@@ -869,9 +868,6 @@ export default function MajhLivePage() {
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                   {recentVods.map((vod) => {
-                    const streamerName = vod.user 
-                      ? `${vod.user.first_name || ''} ${vod.user.last_name || ''}`.trim() || 'Streamer'
-                      : 'Streamer'
                     const duration = vod.started_at && vod.ended_at
                       ? Math.round((new Date(vod.ended_at).getTime() - new Date(vod.started_at).getTime()) / 60000)
                       : null
@@ -905,12 +901,9 @@ export default function MajhLivePage() {
                         </div>
                         {/* Info */}
                         <div className="p-3">
-                          <h4 className="font-semibold text-foreground line-clamp-1">{vod.title}</h4>
-                          <p className="text-sm text-muted-foreground mt-1">{streamerName}</p>
+                          <h4 className="font-semibold text-foreground line-clamp-1">{vod.title || 'Stream Recording'}</h4>
+                          <p className="text-sm text-muted-foreground mt-1">MAJH Creator</p>
                           <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
-                            {vod.game && (
-                              <Badge variant="outline" className="text-xs">{vod.game.name}</Badge>
-                            )}
                             <span>
                               {new Intl.DateTimeFormat("en-US", { dateStyle: "short" }).format(new Date(vod.ended_at || vod.created_at))}
                             </span>
