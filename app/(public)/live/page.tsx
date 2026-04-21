@@ -873,11 +873,9 @@ export default function MajhLivePage() {
                       ? Math.round((new Date(vod.ended_at).getTime() - new Date(vod.started_at).getTime()) / 60000)
                       : null
                     return (
-                      <a
+                      <Link
                         key={vod.id}
-                        href={vod.playback_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                        href={`/watch/vod/${vod.id}`}
                         className="group block rounded-xl border border-border bg-card overflow-hidden transition-all hover:border-primary/50 hover:shadow-lg"
                       >
                         {/* Thumbnail */}
@@ -915,7 +913,7 @@ export default function MajhLivePage() {
                             </span>
                           </div>
                         </div>
-                      </a>
+                      </Link>
                     )
                   })}
                 </div>
