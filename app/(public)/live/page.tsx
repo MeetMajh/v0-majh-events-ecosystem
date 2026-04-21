@@ -858,7 +858,8 @@ export default function MajhLivePage() {
             </div>
 
             {/* Recent VODs Section */}
-            {recentVods.length > 0 && (
+            {/* Debug: VODs count = {recentVods.length} */}
+            {recentVods.length > 0 ? (
               <div className="mt-8">
                 <div className="mb-4 flex items-center gap-2">
                   <Play className="h-5 w-5 text-primary" />
@@ -917,6 +918,11 @@ export default function MajhLivePage() {
                     )
                   })}
                 </div>
+              </div>
+            ) : (
+              <div className="mt-8 p-4 border border-dashed border-border rounded-lg text-center text-muted-foreground">
+                <Play className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <p>No recordings yet. Start streaming to create your first VOD!</p>
               </div>
             )}
           </div>
