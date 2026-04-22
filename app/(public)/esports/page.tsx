@@ -41,7 +41,7 @@ export default async function EsportsPage() {
       {/* Hero */}
       <div className="relative mb-12 overflow-hidden rounded-2xl border border-border">
         <div className="relative aspect-[21/9]">
-          <Image src={IMAGES.events.outdoor} alt="MAJH EVENTS esports tournament" fill className="object-cover" priority />
+          <Image src="/images/esports-arena-2.jpeg" alt="MAJH EVENTS esports arena with gaming peripherals, cocktails, and competitive gaming setup" fill className="object-cover" priority />
           <div className="absolute inset-0 bg-gradient-to-r from-background/95 via-background/70 to-transparent" />
         </div>
         <div className="absolute inset-0 flex flex-col justify-center p-8 md:p-12">

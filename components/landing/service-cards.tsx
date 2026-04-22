@@ -16,7 +16,7 @@ const SERVICES = [
     description: "Craft cocktails, food, and drinks while you game. Order online, earn loyalty points on every purchase.",
     icon: UtensilsCrossed,
     href: "/bar-cafe",
-    image: IMAGES.events.barGaming,
+    image: "/images/bar-cafe-banner.jpeg",
   },
   {
     title: "CARBARDMV Events",
