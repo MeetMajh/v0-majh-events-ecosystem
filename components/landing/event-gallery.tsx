@@ -13,8 +13,8 @@ const GALLERY_ITEMS = [
     label: "Tournament Night",
   },
   {
-    src: IMAGES.events.barGaming,
-    alt: "Gaming and cocktails at the MAJH EVENTS bar with FIFA on screen",
+    src: "/images/esports-arena.jpeg",
+    alt: "Esports arena with gaming peripherals, MAJH cocktail, and competitive gaming setup",
     label: "Bar & Gaming",
   },
   {
