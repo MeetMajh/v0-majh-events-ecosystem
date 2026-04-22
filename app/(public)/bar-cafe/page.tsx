@@ -34,22 +34,17 @@ export default async function BarCafePage() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-12">
-      {/* Hero */}
-      <div className="relative mb-10 overflow-hidden rounded-2xl border border-border">
-        <div className="relative aspect-[21/8]">
-          <Image src={IMAGES.events.barGaming} alt="MAJH EVENTS bar and cafe" fill className="object-cover" priority />
-          <div className="absolute inset-0 bg-gradient-to-r from-background/95 via-background/70 to-transparent" />
-        </div>
-        <div className="absolute inset-0 flex flex-col justify-center p-8 md:p-12">
-          <div className="mb-3 inline-flex w-fit items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-            <UtensilsCrossed className="h-3 w-3" />
-            Order Online
-          </div>
-          <h1 className="text-balance text-3xl font-bold tracking-tight text-foreground md:text-5xl">Bar & Cafe</h1>
-          <p className="mt-3 max-w-lg text-muted-foreground">
-            Browse our full menu and order online for pickup. Every purchase earns loyalty points.
-          </p>
+    <div className="mx-auto max-w-7xl px-4 py-8">
+      {/* Featured Hero Banner */}
+      <div className="relative mb-10 overflow-hidden rounded-2xl border border-border shadow-2xl">
+        <div className="relative aspect-[21/9] md:aspect-[21/8]">
+          <Image 
+            src="/images/bar-cafe-banner.jpeg" 
+            alt="Bar & Cafe - Good Drinks, Great Times. Order online for pickup and enjoy your favorites at your convenience." 
+            fill 
+            className="object-cover" 
+            priority 
+          />
         </div>
       </div>
 
