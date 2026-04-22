@@ -24,7 +24,7 @@ export async function getStreamDestinations() {
   }
 
   const { data, error } = await supabase
-    .from("stream_destinations")
+    .from("multistream_destinations")
     .select("*")
     .eq("user_id", user.id)
     .order("created_at")
@@ -51,7 +51,7 @@ export async function addStreamDestination(platform: string, streamKey: string) 
 
   // Check for duplicate platform
   const { data: existing } = await supabase
-    .from("stream_destinations")
+    .from("multistream_destinations")
     .select("id")
     .eq("user_id", user.id)
     .eq("platform", platform)
@@ -62,7 +62,7 @@ export async function addStreamDestination(platform: string, streamKey: string) 
   }
 
   const { data, error } = await supabase
-    .from("stream_destinations")
+    .from("multistream_destinations")
     .insert({
       user_id: user.id,
       platform,
@@ -96,7 +96,7 @@ export async function updateStreamDestination(
   }
 
   const { data, error } = await supabase
-    .from("stream_destinations")
+    .from("multistream_destinations")
     .update(updates)
     .eq("id", destId)
     .eq("user_id", user.id)
@@ -124,7 +124,7 @@ export async function deleteStreamDestination(destId: string) {
   }
 
   const { error } = await supabase
-    .from("stream_destinations")
+    .from("multistream_destinations")
     .delete()
     .eq("id", destId)
     .eq("user_id", user.id)

@@ -411,13 +411,16 @@ export async function getClipAnalytics(clipId: string): Promise<ClipAnalytics | 
 export async function getCreatorOverview(creatorId: string): Promise<CreatorOverview | null> {
   const supabase = await createClient()
   
-  // Get all clips
-  const { data: clips } = await supabase
+  // Get all clips - using visibility as the main filter (moderation_status may not exist on all records)
+  const { data: clips, error: clipsError } = await supabase
     .from("player_media")
-    .select("id, title, thumbnail_url, view_count, like_count, comment_count, share_count, created_at")
+    .select("id, title, thumbnail_url, video_url, url, view_count, like_count, comment_count, share_count, created_at, visibility, media_type")
     .eq("player_id", creatorId)
-    .eq("status", "approved")
-    .order("view_count", { ascending: false })
+    .order("created_at", { ascending: false })
+  
+  if (clipsError) {
+    console.log("[v0] getCreatorOverview clipsError:", clipsError)
+  }
   
   if (!clips) return null
   
@@ -447,11 +450,12 @@ export async function getCreatorOverview(creatorId: string): Promise<CreatorOver
   // Estimate earnings (simplified: $2 per 1000 views)
   const estimatedEarnings = (totalViews / 1000) * 2
   
-  // Top performing clips
-  const topPerformingClips = clips.slice(0, 5).map(c => ({
+  // Top performing clips (sort by views)
+  const sortedByViews = [...clips].sort((a, b) => (b.view_count || 0) - (a.view_count || 0))
+  const topPerformingClips = sortedByViews.slice(0, 5).map(c => ({
     id: c.id,
     title: c.title || "Untitled",
-    thumbnail_url: c.thumbnail_url,
+    thumbnail_url: c.thumbnail_url || c.video_url || c.url,
     views: c.view_count || 0,
     engagementRate: (c.view_count || 0) > 0 
       ? (((c.like_count || 0) + (c.comment_count || 0) + (c.share_count || 0)) / (c.view_count || 1)) * 100
