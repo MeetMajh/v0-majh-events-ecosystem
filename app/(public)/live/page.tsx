@@ -300,10 +300,17 @@ export default function MajhLivePage() {
       
       // Convert stream_sources to Stream format
       if (streamSourcesData) {
+        const hostname = typeof window !== "undefined" ? window.location.hostname : "majhevents.com"
         const convertedSources = streamSourcesData.map((source: any) => {
-          // Generate proper embed URL from channel_url
-          const embedUrl = source.embed_url || 
+          // Generate proper embed URL from channel_url, fixing parent domain for Twitch
+          let embedUrl = source.embed_url || 
             (source.channel_url ? getEmbedUrl(source.channel_url, source.platform || 'custom') : '')
+          
+          // Fix Twitch parent domain for current hostname
+          if (source.platform === 'twitch' && embedUrl.includes('player.twitch.tv')) {
+            embedUrl = embedUrl.replace(/parent=[^&]+/, `parent=${hostname}`)
+          }
+          
           return {
             id: source.id,
             title: source.title,
@@ -967,14 +974,18 @@ export default function MajhLivePage() {
                           {vod.mux_playback_id ? (
                             <img 
                               src={`https://image.mux.com/${vod.mux_playback_id}/thumbnail.jpg?time=10`}
-                              alt={vod.title}
+                              alt={vod.title || 'Recording'}
                               className="w-full h-full object-cover"
+                              onError={(e) => {
+                                // Fallback to placeholder on error
+                                e.currentTarget.style.display = 'none'
+                                e.currentTarget.nextElementSibling?.classList.remove('hidden')
+                              }}
                             />
-                          ) : (
-                            <div className="flex items-center justify-center h-full">
-                              <Play className="h-12 w-12 text-muted-foreground/30" />
-                            </div>
-                          )}
+                          ) : null}
+                          <div className={`flex items-center justify-center h-full ${vod.mux_playback_id ? 'hidden' : ''}`}>
+                            <Play className="h-12 w-12 text-muted-foreground/30" />
+                          </div>
                           {duration && (
                             <div className="absolute bottom-2 right-2 bg-black/80 text-white text-xs px-2 py-0.5 rounded">
                               {duration} min
