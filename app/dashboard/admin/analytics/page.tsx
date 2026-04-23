@@ -51,12 +51,12 @@ async function getAnalyticsData(period: "today" | "7d" | "30d") {
   ] = await Promise.all([
     supabase.from("profiles").select("*", { count: "exact", head: true }),
     supabase.from("profiles").select("*", { count: "exact", head: true }).gte("created_at", startDate.toISOString()),
-    supabase.from("profiles").select("*", { count: "exact", head: true }).eq("is_creator", true),
+    supabase.from("player_media").select("player_id", { count: "exact", head: true }).eq("visibility", "public"),
     supabase.from("events").select("*", { count: "exact", head: true }),
     supabase.from("tournaments").select("*", { count: "exact", head: true }),
     supabase.from("profiles").select("id, created_at").gte("created_at", startDate.toISOString()).order("created_at", { ascending: true }),
     supabase.from("events").select("id, title, view_count").order("view_count", { ascending: false }).limit(10),
-    supabase.from("clips").select("id, title, view_count, like_count").order("view_count", { ascending: false }).limit(10),
+    supabase.from("player_media").select("id, title, view_count, like_count").eq("visibility", "public").order("view_count", { ascending: false }).limit(10),
   ])
 
   // Get revenue data

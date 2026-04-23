@@ -192,10 +192,10 @@ class AnalyticsTracker {
     this.queue = []
     
     try {
-      await fetch("/api/analytics/ingest", {
+      await fetch("/api/analytics/track", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ events }),
+        body: JSON.stringify(events),
       })
     } catch (error) {
       // Re-add events to queue on failure
