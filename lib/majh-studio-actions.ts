@@ -88,9 +88,13 @@ export async function generateLiveKitToken(options: TokenOptions) {
   const apiSecret = process.env.LIVEKIT_API_SECRET
   
   if (!apiKey || !apiSecret) {
-    // Fallback for development - return a mock token
-    // In production, this would error
-    console.warn("LiveKit credentials not configured - using development mode")
+    // In production, fail properly - don't return mock tokens
+    const isProduction = process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production"
+    if (isProduction) {
+      throw new Error("LiveKit credentials not configured. Please set LIVEKIT_API_KEY and LIVEKIT_API_SECRET environment variables.")
+    }
+    // Development fallback only
+    console.warn("[DEV] LiveKit credentials not configured - streaming features limited")
     return {
       token: `dev_token_${options.roomName}_${options.participantIdentity}`,
       wsUrl: process.env.NEXT_PUBLIC_LIVEKIT_URL || "wss://livekit.majhevents.com",

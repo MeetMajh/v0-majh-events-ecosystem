@@ -93,9 +93,9 @@ export function PlatformRevenue() {
     )
   }
 
-  const revenueGrowth = data.growth?.revenue ?? 12.5
-  const feesGrowth = data.growth?.fees ?? 8.3
-  const usersGrowth = data.growth?.users ?? 15.2
+  const revenueGrowth = data.growth?.revenue ?? 0
+  const feesGrowth = data.growth?.fees ?? 0
+  const usersGrowth = data.growth?.users ?? 0
 
   // Generate sample daily data if not provided
   const dailyData = data.dailyData || data.monthlyData.map((m, i) => ({
