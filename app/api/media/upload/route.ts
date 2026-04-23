@@ -59,71 +59,41 @@ export async function POST(request: Request) {
     const isScheduled = scheduledLiveAt && new Date(scheduledLiveAt) > new Date()
     const isLive = !isScheduled && visibility === "public"
     
-    // Build insert data - start with required core fields
-    const insertData: Record<string, unknown> = {
-      player_id: user.id,
-      title,
-      description,
-      media_type: mediaType,
-      category,
-      url: blob.url,
-      visibility,
-      view_count: 0,
-      like_count: 0,
-    }
-
-    // Add optional fields that may exist in the schema
-    // These will be ignored if columns don't exist
-    const optionalFields: Record<string, unknown> = {
-      source_type: "upload",
-      video_url: blob.url,
-      storage_path: filePath,
-      file_size: file.size,
-      mime_type: file.type,
-      moderation_status: "approved",
-      is_live: isLive,
-      went_live_at: isLive ? new Date().toISOString() : null,
-      scheduled_live_at: scheduledLiveAt || null,
-      comment_count: 0,
-      share_count: 0,
-      trending_score: 0,
-    }
-
-    // Try with all fields first
-    let mediaRecord = null
-    let dbError = null
-
-    const { data: fullData, error: fullError } = await supabase
+    // Insert media record with all fields
+    const { data: mediaRecord, error: dbError } = await supabase
       .from("player_media")
-      .insert({ ...insertData, ...optionalFields })
+      .insert({
+        player_id: user.id,
+        title,
+        description,
+        media_type: mediaType,
+        category,
+        url: blob.url,
+        video_url: blob.url,
+        storage_path: filePath,
+        file_size: file.size,
+        mime_type: file.type,
+        visibility,
+        source_type: "upload",
+        moderation_status: "approved",
+        is_live: isLive,
+        went_live_at: isLive ? new Date().toISOString() : null,
+        scheduled_live_at: scheduledLiveAt || null,
+        view_count: 0,
+        like_count: 0,
+        comment_count: 0,
+        share_count: 0,
+        trending_score: 0,
+      })
       .select()
       .single()
-
-    if (fullError) {
-      // If error mentions a column, try with just core fields
-      console.log("[v0] Full insert failed, trying core fields only:", fullError.message)
-      
-      const { data: coreData, error: coreError } = await supabase
-        .from("player_media")
-        .insert(insertData)
-        .select()
-        .single()
-      
-      mediaRecord = coreData
-      dbError = coreError
-    } else {
-      mediaRecord = fullData
-    }
     
     if (dbError) {
       console.error("[v0] Database error:", dbError)
-      // Return success with URL even if DB fails - file is uploaded
       return NextResponse.json({ 
-        success: true,
-        warning: `Uploaded but database save failed: ${dbError.message}`,
-        url: blob.url,
-        storagePath: filePath,
-      })
+        error: `Database error: ${dbError.message}`,
+        url: blob.url 
+      }, { status: 500 })
     }
     
     return NextResponse.json({ 
