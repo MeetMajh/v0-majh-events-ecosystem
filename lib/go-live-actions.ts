@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import { nanoid } from "nanoid"
 import { createMuxLiveStream, deleteMuxLiveStream } from "@/lib/mux"
+import { getActiveStreamingProvider, getPlaybackUrl } from "@/lib/streaming-config"
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // GO LIVE - Player Streaming Feature
@@ -55,26 +56,20 @@ function generateStreamKey(): string {
  * Create a new stream configuration for a user
  */
 export async function createStream(input: CreateStreamInput) {
-  console.log("[v0] createStream called with:", input)
-  
   const supabase = await createClient()
   
   const { data: { user } } = await supabase.auth.getUser()
-  console.log("[v0] user:", user?.id)
-  
   if (!user) {
     return { error: "You must be logged in to stream" }
   }
 
   // Check if user already has a LIVE stream (allow creating new if offline or ended)
-  const { data: existing, error: existingError } = await supabase
+  const { data: existing } = await supabase
     .from("user_streams")
     .select("id, status")
     .eq("user_id", user.id)
     .eq("status", "live")
     .maybeSingle()
-
-  console.log("[v0] existing live stream check:", { existing, existingError })
 
   if (existing) {
     return { error: "You already have a live stream. End your current stream first." }
@@ -87,23 +82,43 @@ export async function createStream(input: CreateStreamInput) {
     .eq("user_id", user.id)
     .neq("status", "live")
 
-  // Create Mux live stream
-  let muxData
-  try {
-    muxData = await createMuxLiveStream()
-    console.log("[v0] Mux stream created:", muxData.muxStreamId)
-  } catch (muxError) {
-    console.error("[v0] Mux error, using fallback:", muxError)
-    // Fallback to placeholder if Mux fails
-    muxData = {
-      streamKey: generateStreamKey(),
-      rtmpUrl: process.env.RTMP_SERVER_URL || "rtmp://live.majhevents.com/live",
-      playbackId: undefined,
-      muxStreamId: undefined,
-    }
+  // Get active streaming provider
+  const streamingProvider = await getActiveStreamingProvider()
+  
+  // Create stream based on provider
+  let streamData: {
+    streamKey: string
+    rtmpUrl: string
+    playbackId?: string
+    muxStreamId?: string
+    provider: "mux" | "rtmp"
   }
 
-  console.log("[v0] inserting stream with Mux key")
+  if (streamingProvider.provider === "mux") {
+    // Use Mux (default)
+    try {
+      const muxStream = await createMuxLiveStream()
+      streamData = {
+        streamKey: muxStream.streamKey,
+        rtmpUrl: muxStream.rtmpUrl,
+        playbackId: muxStream.playbackId,
+        muxStreamId: muxStream.muxStreamId,
+        provider: "mux",
+      }
+    } catch (muxError) {
+      console.error("Mux stream creation failed:", muxError)
+      return { error: "Failed to create stream. Please try again or contact support." }
+    }
+  } else {
+    // Use self-hosted RTMP
+    streamData = {
+      streamKey: generateStreamKey(),
+      rtmpUrl: streamingProvider.rtmpUrl,
+      playbackId: undefined,
+      muxStreamId: undefined,
+      provider: "rtmp",
+    }
+  }
 
   const { data, error } = await supabase
     .from("user_streams")
@@ -112,10 +127,10 @@ export async function createStream(input: CreateStreamInput) {
       title: input.title,
       description: input.description,
       game_id: input.game_id,
-      stream_key: muxData.streamKey,
-      rtmp_url: muxData.rtmpUrl,
-      mux_stream_id: muxData.muxStreamId,
-      mux_playback_id: muxData.playbackId,
+      stream_key: streamData.streamKey,
+      rtmp_url: streamData.rtmpUrl,
+      mux_stream_id: streamData.muxStreamId,
+      mux_playback_id: streamData.playbackId,
       status: "offline",
       is_public: input.is_public ?? true,
       allow_chat: input.allow_chat ?? true,
@@ -124,10 +139,8 @@ export async function createStream(input: CreateStreamInput) {
     .select()
     .single()
 
-  console.log("[v0] insert result:", { data, error })
-
   if (error) {
-    console.error("[v0] Error creating stream:", error)
+    console.error("Error creating stream:", error)
     return { error: error.message }
   }
 
@@ -170,13 +183,9 @@ export async function updateStream(streamId: string, updates: Partial<CreateStre
  * Get user's stream configuration
  */
 export async function getMyStream() {
-  console.log("[v0] getMyStream called")
-  
   const supabase = await createClient()
   
   const { data: { user } } = await supabase.auth.getUser()
-  console.log("[v0] getMyStream user:", user?.id)
-  
   if (!user) {
     return { error: "Unauthorized" }
   }
@@ -190,10 +199,8 @@ export async function getMyStream() {
     .limit(1)
     .maybeSingle()
 
-  console.log("[v0] getMyStream result:", { data, error })
-
   if (error) {
-    console.error("[v0] Error fetching stream:", error)
+    console.error("Error fetching stream:", error)
     return { error: error.message }
   }
 
