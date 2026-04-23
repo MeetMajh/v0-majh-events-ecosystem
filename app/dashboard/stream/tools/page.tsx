@@ -37,7 +37,11 @@ import {
   Tv,
   Radio,
   ArrowLeft,
+  Upload,
+  Trash2,
+  Plus,
 } from "lucide-react"
+import { toast } from "sonner"
 
 const fetcher = (url: string) => fetch(url).then(res => res.json())
 
@@ -102,12 +106,64 @@ export default function StreamerToolsPage() {
   const [selectedTheme, setSelectedTheme] = useState("default")
   const [customPrimary, setCustomPrimary] = useState("#D4AF37")
   const [customAccent, setCustomAccent] = useState("#1a1a2e")
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadType, setUploadType] = useState<string>("overlay")
 
   const { data: tournamentsData } = useSWR<{ data: any[] }>("/api/tournaments?status=in_progress", fetcher)
   const { data: matchesData } = useSWR<{ data: any[] }>("/api/matches?feature=true", fetcher)
+  const { data: assetsData, mutate: mutateAssets } = useSWR<{ data: any[] }>("/api/stream/assets?presets=true", fetcher)
 
   const liveTournaments = tournamentsData?.data || []
   const featureMatches = matchesData?.data || []
+  const userAssets = assetsData?.data || []
+
+  const handleAssetUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setIsUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+      formData.append("asset_type", uploadType)
+      formData.append("name", file.name.replace(/\.[^/.]+$/, ""))
+
+      const response = await fetch("/api/stream/assets", {
+        method: "POST",
+        body: formData,
+      })
+
+      const result = await response.json()
+      if (!response.ok) {
+        throw new Error(result.error || "Upload failed")
+      }
+
+      toast.success("Asset uploaded successfully!")
+      mutateAssets()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Upload failed")
+    } finally {
+      setIsUploading(false)
+      e.target.value = ""
+    }
+  }
+
+  const handleDeleteAsset = async (assetId: string) => {
+    try {
+      const response = await fetch(`/api/stream/assets?id=${assetId}`, {
+        method: "DELETE",
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to delete")
+      }
+
+      toast.success("Asset deleted")
+      mutateAssets()
+    } catch (error) {
+      toast.error("Failed to delete asset")
+    }
+  }
 
   const theme = OVERLAY_THEMES.find(t => t.id === selectedTheme) || OVERLAY_THEMES[0]
   const primaryColor = selectedTheme === "custom" ? customPrimary : theme.primary
@@ -449,11 +505,138 @@ export default function StreamerToolsPage() {
 
         {/* Stream Assets Tab */}
         <TabsContent value="assets" className="space-y-6">
+          {/* Upload New Asset */}
           <Card>
             <CardHeader>
-              <CardTitle>Downloadable Assets</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Upload className="h-5 w-5" />
+                Upload Your Assets
+              </CardTitle>
               <CardDescription>
-                Graphics and images for your stream
+                Upload custom overlays, logos, and graphics for your stream
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-4">
+                <div className="flex-1 min-w-[200px] space-y-2">
+                  <Label>Asset Type</Label>
+                  <Select value={uploadType} onValueChange={setUploadType}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="overlay">Overlay</SelectItem>
+                      <SelectItem value="logo">Logo</SelectItem>
+                      <SelectItem value="banner">Banner</SelectItem>
+                      <SelectItem value="scene_background">Scene Background</SelectItem>
+                      <SelectItem value="alert">Alert Animation</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-end">
+                  <div>
+                    <input
+                      type="file"
+                      id="asset-upload"
+                      className="hidden"
+                      accept="image/*,video/webm,video/mp4"
+                      onChange={handleAssetUpload}
+                      disabled={isUploading}
+                    />
+                    <Button asChild disabled={isUploading}>
+                      <label htmlFor="asset-upload" className="cursor-pointer">
+                        {isUploading ? (
+                          <>
+                            <div className="h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
+                            Uploading...
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="h-4 w-4 mr-2" />
+                            Upload Asset
+                          </>
+                        )}
+                      </label>
+                    </Button>
+                  </div>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Supports PNG, JPG, GIF, WebP, WebM, MP4 (max 20MB)
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Your Assets */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Your Assets</CardTitle>
+              <CardDescription>
+                Manage your uploaded stream graphics
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {userAssets.filter((a: any) => !a.is_preset).length > 0 ? (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {userAssets.filter((a: any) => !a.is_preset).map((asset: any) => (
+                    <div key={asset.id} className="relative group p-4 border rounded-lg space-y-3">
+                      <div className="aspect-video bg-muted rounded overflow-hidden flex items-center justify-center">
+                        {asset.file_url ? (
+                          <img 
+                            src={asset.file_url} 
+                            alt={asset.name}
+                            className="w-full h-full object-contain"
+                          />
+                        ) : (
+                          <ImageIcon className="h-8 w-8 text-muted-foreground" />
+                        )}
+                      </div>
+                      <div>
+                        <h3 className="font-medium truncate">{asset.name}</h3>
+                        <p className="text-xs text-muted-foreground capitalize">{asset.asset_type}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1"
+                          onClick={() => copyToClipboard(asset.file_url)}
+                        >
+                          {copiedUrl === asset.file_url ? (
+                            <CheckCircle className="h-3 w-3" />
+                          ) : (
+                            <Copy className="h-3 w-3" />
+                          )}
+                          <span className="ml-1">Copy URL</span>
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => handleDeleteAsset(asset.id)}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12 text-muted-foreground">
+                  <ImageIcon className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p className="text-sm">No assets uploaded yet</p>
+                  <p className="text-xs">Upload overlays, logos, and graphics above</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Preset Assets */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Preset Assets</CardTitle>
+              <CardDescription>
+                Ready-to-use graphics provided by MAJH
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -477,12 +660,6 @@ export default function StreamerToolsPage() {
                     </div>
                   </div>
                 ))}
-              </div>
-
-              <div className="mt-6 p-4 bg-muted/50 rounded-lg text-center">
-                <p className="text-sm text-muted-foreground">
-                  More assets coming soon! Request specific assets in our Discord.
-                </p>
               </div>
             </CardContent>
           </Card>

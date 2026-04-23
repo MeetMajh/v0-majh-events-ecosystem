@@ -88,9 +88,13 @@ export async function generateLiveKitToken(options: TokenOptions) {
   const apiSecret = process.env.LIVEKIT_API_SECRET
   
   if (!apiKey || !apiSecret) {
-    // Fallback for development - return a mock token
-    // In production, this would error
-    console.warn("LiveKit credentials not configured - using development mode")
+    // In production, fail properly - don't return mock tokens
+    const isProduction = process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production"
+    if (isProduction) {
+      throw new Error("LiveKit credentials not configured. Please set LIVEKIT_API_KEY and LIVEKIT_API_SECRET environment variables.")
+    }
+    // Development fallback only
+    console.warn("[DEV] LiveKit credentials not configured - streaming features limited")
     return {
       token: `dev_token_${options.roomName}_${options.participantIdentity}`,
       wsUrl: process.env.NEXT_PUBLIC_LIVEKIT_URL || "wss://livekit.majhevents.com",
@@ -236,9 +240,9 @@ export async function startStreamSession(sessionId: string) {
 }
 
 /**
- * End a stream
+ * End a stream and optionally save as VOD
  */
-export async function endStreamSession(sessionId: string) {
+export async function endStreamSession(sessionId: string, vodUrl?: string) {
   const supabase = await createClient()
   
   const { data: { user } } = await supabase.auth.getUser()
@@ -246,12 +250,31 @@ export async function endStreamSession(sessionId: string) {
     return { error: "Unauthorized" }
   }
 
+  // Get session details before ending
+  const { data: session } = await supabase
+    .from("stream_sessions")
+    .select("*")
+    .eq("id", sessionId)
+    .single()
+
+  if (!session) {
+    return { error: "Session not found" }
+  }
+
+  const endedAt = new Date().toISOString()
+  
+  // Calculate stream duration
+  const startedAt = session.started_at ? new Date(session.started_at) : new Date()
+  const durationSeconds = Math.floor((new Date(endedAt).getTime() - startedAt.getTime()) / 1000)
+
+  // Update session as ended
   const { data, error } = await supabase
     .from("stream_sessions")
     .update({
       status: "ended",
-      ended_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      ended_at: endedAt,
+      updated_at: endedAt,
+      vod_url: vodUrl || null,
     })
     .eq("id", sessionId)
     .eq("user_id", user.id)
@@ -263,8 +286,43 @@ export async function endStreamSession(sessionId: string) {
     return { error: error.message }
   }
 
+  // If we have a VOD URL, save it to player_media for the feed
+  if (vodUrl || session.vod_url) {
+    const { data: vodRecord, error: vodError } = await supabase
+      .from("player_media")
+      .insert({
+        player_id: user.id,
+        title: session.title || "Stream Recording",
+        description: session.description || `Stream recording from ${new Date(startedAt).toLocaleDateString()}`,
+        media_type: "vod",
+        source_type: "stream",
+        video_url: vodUrl || session.vod_url,
+        url: vodUrl || session.vod_url,
+        stream_id: sessionId,
+        duration_seconds: durationSeconds,
+        visibility: session.visibility,
+        moderation_status: "approved",
+        is_live: false,
+        game_id: session.game_id,
+        view_count: session.total_views || 0,
+      })
+      .select()
+      .single()
+
+    if (vodError) {
+      console.log("[v0] VOD save error (non-critical):", vodError.message)
+    } else {
+      // Update session with VOD media ID
+      await supabase
+        .from("stream_sessions")
+        .update({ vod_media_id: vodRecord?.id })
+        .eq("id", sessionId)
+    }
+  }
+
   revalidatePath("/dashboard/studio")
   revalidatePath("/live")
+  revalidatePath("/clips")
   return { data: data as StreamSession }
 }
 

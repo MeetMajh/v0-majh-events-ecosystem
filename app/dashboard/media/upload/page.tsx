@@ -32,6 +32,8 @@ export default function MediaUploadPage() {
   const [category, setCategory] = useState("highlight")
   const [visibility, setVisibility] = useState("public")
   const [isUploading, setIsUploading] = useState(false)
+  const [scheduledDate, setScheduledDate] = useState("")
+  const [scheduledTime, setScheduledTime] = useState("")
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const newFiles = acceptedFiles.map(file => ({
@@ -73,17 +75,19 @@ export default function MediaUploadPage() {
     })
 
     try {
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
+      // Build form data for API
+      const formData = new FormData()
+      formData.append("file", uploadFile.file)
+      formData.append("title", title || uploadFile.file.name)
+      formData.append("description", description)
+      formData.append("category", category)
+      formData.append("visibility", visibility)
       
-      if (!user) {
-        throw new Error("You must be logged in to upload")
+      // Add scheduled date if set
+      if (scheduledDate && scheduledTime) {
+        const scheduledAt = new Date(`${scheduledDate}T${scheduledTime}`)
+        formData.append("scheduled_live_at", scheduledAt.toISOString())
       }
-
-      // Generate unique filename
-      const fileExt = uploadFile.file.name.split(".").pop()?.toLowerCase() || "mp4"
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${fileExt}`
-      const filePath = `${user.id}/${fileName}`
 
       setFiles(prev => {
         const newFiles = [...prev]
@@ -91,17 +95,11 @@ export default function MediaUploadPage() {
         return newFiles
       })
 
-      // Upload directly to Supabase Storage
-      const { error: uploadError } = await supabase.storage
-        .from("player-media")
-        .upload(filePath, uploadFile.file, {
-          cacheControl: "3600",
-          upsert: false,
-        })
-
-      if (uploadError) {
-        throw new Error(uploadError.message)
-      }
+      // Upload via API (uses Vercel Blob)
+      const response = await fetch("/api/media/upload", {
+        method: "POST",
+        body: formData,
+      })
 
       setFiles(prev => {
         const newFiles = [...prev]
@@ -109,40 +107,10 @@ export default function MediaUploadPage() {
         return newFiles
       })
 
-      // Get public URL
-      const { data: urlData } = supabase.storage
-        .from("player-media")
-        .getPublicUrl(filePath)
+      const result = await response.json()
 
-      // Determine media type
-      const mediaType = uploadFile.file.type.startsWith("video/") ? "clip" : "image"
-
-      // Save to database with all required fields for media to show up
-      const insertData = {
-        player_id: user.id,
-        title: title || uploadFile.file.name,
-        description,
-        media_type: mediaType,
-        source_type: "upload",
-        video_url: urlData.publicUrl,
-        storage_path: filePath,
-        thumbnail_url: null,
-        visibility: visibility as "public" | "unlisted" | "private",
-        moderation_status: "approved",
-        view_count: 0,
-        like_count: 0,
-        comment_count: 0,
-        trending_score: 0,
-        is_featured: false,
-      }
-      
-      const { error: dbError } = await supabase
-        .from("player_media")
-        .insert(insertData)
-        .select()
-
-      if (dbError) {
-        toast.error(`Database error: ${dbError.message}`)
+      if (!response.ok) {
+        throw new Error(result.error || "Upload failed")
       }
 
       setFiles(prev => {
@@ -151,12 +119,18 @@ export default function MediaUploadPage() {
           ...newFiles[index], 
           status: "complete", 
           progress: 100,
-          url: urlData.publicUrl 
+          url: result.url 
         }
         return newFiles
       })
 
-      toast.success(`Uploaded ${uploadFile.file.name}`)
+      if (result.scheduledLiveAt) {
+        toast.success(`Scheduled ${uploadFile.file.name} to go live at ${new Date(result.scheduledLiveAt).toLocaleString()}`)
+      } else if (result.isLive) {
+        toast.success(`${uploadFile.file.name} is now live!`)
+      } else {
+        toast.success(`Uploaded ${uploadFile.file.name}`)
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Upload failed"
       setFiles(prev => {
@@ -356,11 +330,37 @@ export default function MediaUploadPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="public">Public</SelectItem>
+                    <SelectItem value="public">Public (Go Live Immediately)</SelectItem>
                     <SelectItem value="unlisted">Unlisted</SelectItem>
                     <SelectItem value="private">Private</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              {/* Schedule for later */}
+              <div className="space-y-2 pt-4 border-t border-border">
+                <Label className="text-sm font-medium">Schedule for Later (Optional)</Label>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Set a date and time for your content to go live
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <Input
+                    type="date"
+                    value={scheduledDate}
+                    onChange={(e) => setScheduledDate(e.target.value)}
+                    min={new Date().toISOString().split("T")[0]}
+                  />
+                  <Input
+                    type="time"
+                    value={scheduledTime}
+                    onChange={(e) => setScheduledTime(e.target.value)}
+                  />
+                </div>
+                {scheduledDate && scheduledTime && (
+                  <p className="text-xs text-primary">
+                    Will go live: {new Date(`${scheduledDate}T${scheduledTime}`).toLocaleString()}
+                  </p>
+                )}
               </div>
             </CardContent>
           </Card>

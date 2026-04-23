@@ -1,0 +1,1 @@
+ALTER TABLE player_media ADD COLUMN IF NOT EXISTS scheduled_live_at TIMESTAMPTZ;

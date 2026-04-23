@@ -32,6 +32,7 @@ import { ViewerCount } from "@/components/esports/viewer-presence"
 import { TrendingMatchCard, TrendingList } from "@/components/esports/trending-match-card"
 import { LiveStatsBar } from "@/components/esports/live-stats-bar"
 import { getTrendingMatchesWithMetrics, type TrendingMatch } from "@/lib/tournament-controller-actions"
+import { CountdownTimer, ScheduledStreamCard } from "@/components/streaming/countdown-timer"
 
 interface FeatureMatch {
   id: string
@@ -119,6 +120,7 @@ export default function MajhLivePage() {
   const [liveTournaments, setLiveTournaments] = useState<LiveTournament[]>([])
   const [streams, setStreams] = useState<Stream[]>([])
   const [recentVods, setRecentVods] = useState<any[]>([])
+  const [scheduledContent, setScheduledContent] = useState<any[]>([])
   const [trendingMatches, setTrendingMatches] = useState<TrendingMatch[]>([])
   const [loading, setLoading] = useState(true)
   const [connected, setConnected] = useState(true)
@@ -293,6 +295,22 @@ export default function MajhLivePage() {
 
       if (vodsData) {
         setRecentVods(vodsData)
+      }
+
+      // Fetch scheduled/coming soon content from player_media
+      const { data: scheduledMedia, error: schedError } = await supabase
+        .from("player_media")
+        .select("*, player:profiles(id, first_name, last_name, avatar_url)")
+        .not("scheduled_live_at", "is", null)
+        .gt("scheduled_live_at", new Date().toISOString())
+        .eq("visibility", "public")
+        .order("scheduled_live_at", { ascending: true })
+        .limit(10)
+
+      console.log("[v0] Scheduled content:", scheduledMedia?.length, "error:", schedError?.message)
+
+      if (scheduledMedia) {
+        setScheduledContent(scheduledMedia)
       }
 
       // Combine streams from all sources
@@ -947,8 +965,84 @@ export default function MajhLivePage() {
               </div>
             </div>
 
+            {/* Coming Soon Section */}
+            {scheduledContent.length > 0 && (
+              <div className="mt-8">
+                <div className="mb-4 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-5 w-5 text-amber-500" />
+                    <h2 className="esports-subheading text-muted-foreground">Coming Soon</h2>
+                  </div>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {scheduledContent.slice(0, 4).map((item) => {
+                    const creatorName = item.player 
+                      ? `${item.player.first_name || ''} ${item.player.last_name || ''}`.trim() || 'MAJH Creator'
+                      : 'MAJH Creator'
+                    const scheduledDate = new Date(item.scheduled_live_at)
+                    const isWithin24Hours = scheduledDate.getTime() - Date.now() < 24 * 60 * 60 * 1000
+                    
+                    return (
+                      <div
+                        key={item.id}
+                        className="group relative rounded-xl border border-border bg-card overflow-hidden transition-all hover:border-amber-500/50"
+                      >
+                        {/* Thumbnail */}
+                        <div className="relative aspect-video bg-gradient-to-br from-amber-500/10 to-amber-500/5">
+                          {item.thumbnail_url || item.video_url ? (
+                            <img 
+                              src={item.thumbnail_url || item.video_url}
+                              alt={item.title || 'Scheduled content'}
+                              className="w-full h-full object-cover opacity-80"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <Clock className="h-12 w-12 text-muted-foreground/30" />
+                            </div>
+                          )}
+                          
+                          {/* Badges */}
+                          <div className="absolute top-2 left-2 flex items-center gap-2">
+                            <Badge className={cn(
+                              "text-xs",
+                              isWithin24Hours 
+                                ? "bg-amber-500/90 text-black" 
+                                : "bg-card/90 text-foreground"
+                            )}>
+                              {isWithin24Hours ? "Coming Soon" : "Scheduled"}
+                            </Badge>
+                          </div>
+                          
+                          {/* Countdown Overlay */}
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <CountdownTimer targetDate={item.scheduled_live_at} size="sm" />
+                          </div>
+                        </div>
+                        
+                        {/* Info */}
+                        <div className="p-3">
+                          <h4 className="font-semibold text-foreground line-clamp-1">{item.title || 'Upcoming Stream'}</h4>
+                          <p className="text-sm text-muted-foreground mt-1">{creatorName}</p>
+                          <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+                            <Clock className="h-3 w-3" />
+                            <span>
+                              {scheduledDate.toLocaleDateString(undefined, { 
+                                month: "short", 
+                                day: "numeric",
+                                hour: "numeric",
+                                minute: "2-digit"
+                              })}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Recent VODs Section */}
-            {/* Debug: VODs count = {recentVods.length} */}
             {recentVods.length > 0 ? (
               <div className="mt-8">
                 <div className="mb-4 flex items-center gap-2">
