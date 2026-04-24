@@ -39,14 +39,17 @@ export async function POST(req: Request) {
   switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object as Stripe.Checkout.Session
+      // Reconcile financial intent first (if exists)
+      await reconcileFinancialIntent(session, "succeeded")
+      // Then handle specific checkout types
       await handleCheckoutComplete(session)
       break
     }
 
     case "checkout.session.expired": {
       const session = event.data.object as Stripe.Checkout.Session
-      console.log("[Stripe Webhook] Checkout expired:", session.id)
-      // Optionally mark booking as expired
+      // Reconcile as expired/canceled
+      await reconcileFinancialIntent(session, "expired")
       break
     }
 
@@ -827,5 +830,43 @@ async function handleTransferFailed(transfer: Stripe.Transfer) {
       .eq("id", metadata.payout_id)
 
     console.log("[Stripe Webhook] Organizer payout failed:", metadata.payout_id)
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Financial Intent Reconciliation
+// ══════════════════════════════════════════════════════════════════════════════
+
+async function reconcileFinancialIntent(
+  session: Stripe.Checkout.Session,
+  status: "succeeded" | "failed" | "expired" | "canceled"
+) {
+  const metadata = session.metadata
+  
+  // Only reconcile if this was created via financial_intents system
+  if (!metadata?.intent_id) {
+    return
+  }
+
+  const statusMap: Record<string, string> = {
+    succeeded: "succeeded",
+    failed: "failed",
+    expired: "expired",
+    canceled: "canceled",
+  }
+
+  const { data, error } = await supabaseAdmin.rpc("reconcile_financial_intent", {
+    p_stripe_session_id: session.id,
+    p_stripe_payment_intent_id: session.payment_intent as string || null,
+    p_status: statusMap[status],
+    p_stripe_charge_id: null,
+    p_error_code: null,
+    p_error_message: null,
+  })
+
+  if (error) {
+    console.error("[Stripe Webhook] Intent reconciliation error:", error)
+  } else if (data?.success) {
+    console.log("[Stripe Webhook] Intent reconciled:", data.intent_id, status)
   }
 }
