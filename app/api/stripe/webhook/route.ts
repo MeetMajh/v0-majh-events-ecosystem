@@ -135,6 +135,32 @@ export async function POST(req: Request) {
       break
     }
 
+    // ── Refund Events ──
+    case "charge.refunded": {
+      const charge = event.data.object as Stripe.Charge
+      await handleChargeRefunded(charge)
+      break
+    }
+
+    // ── Dispute Events ──
+    case "charge.dispute.created": {
+      const dispute = event.data.object as Stripe.Dispute
+      await handleDisputeCreated(dispute)
+      break
+    }
+
+    case "charge.dispute.updated": {
+      const dispute = event.data.object as Stripe.Dispute
+      await handleDisputeUpdated(dispute)
+      break
+    }
+
+    case "charge.dispute.closed": {
+      const dispute = event.data.object as Stripe.Dispute
+      await handleDisputeClosed(dispute)
+      break
+    }
+
     default:
       console.log(`[Stripe Webhook] Unhandled event type: ${event.type}`)
   }
@@ -910,5 +936,81 @@ async function handleTransferReversed(transfer: Stripe.Transfer) {
       p_failure_message: "Transfer was reversed",
     })
     console.log("[Stripe Webhook] Payout request reversed:", metadata.payout_id)
+  }
+}
+
+// ── Refund Handlers ──
+async function handleChargeRefunded(charge: Stripe.Charge) {
+  // If we have a refund intent linked, process it
+  const refunds = charge.refunds?.data || []
+  
+  for (const refund of refunds) {
+    // Check if this refund was initiated by us (has metadata)
+    if (refund.metadata?.refund_intent_id) {
+      const { data, error } = await supabaseAdmin.rpc("process_refund_intent", {
+        p_refund_intent_id: refund.metadata.refund_intent_id,
+        p_stripe_refund_id: refund.id,
+      })
+
+      if (error) {
+        console.error("[Stripe Webhook] Refund processing error:", error)
+      } else if (data?.success) {
+        console.log("[Stripe Webhook] Refund processed:", refund.id, data.refund_intent_id)
+      }
+    }
+  }
+  
+  console.log("[Stripe Webhook] Charge refunded:", charge.id, "Amount refunded:", charge.amount_refunded)
+}
+
+// ── Dispute Handlers ──
+async function handleDisputeCreated(dispute: Stripe.Dispute) {
+  const { data, error } = await supabaseAdmin.rpc("handle_stripe_dispute", {
+    p_stripe_dispute_id: dispute.id,
+    p_stripe_charge_id: typeof dispute.charge === "string" ? dispute.charge : dispute.charge?.id,
+    p_event_type: "charge.dispute.created",
+    p_amount_cents: dispute.amount,
+    p_reason: dispute.reason,
+  })
+
+  if (error) {
+    console.error("[Stripe Webhook] Dispute creation error:", error)
+  } else if (data?.success) {
+    console.log("[Stripe Webhook] Dispute created:", dispute.id, data.dispute_id)
+  }
+}
+
+async function handleDisputeUpdated(dispute: Stripe.Dispute) {
+  const { data, error } = await supabaseAdmin.rpc("handle_stripe_dispute", {
+    p_stripe_dispute_id: dispute.id,
+    p_stripe_charge_id: typeof dispute.charge === "string" ? dispute.charge : dispute.charge?.id,
+    p_event_type: "charge.dispute.updated",
+    p_amount_cents: dispute.amount,
+    p_reason: dispute.status,
+  })
+
+  if (error) {
+    console.error("[Stripe Webhook] Dispute update error:", error)
+  } else {
+    console.log("[Stripe Webhook] Dispute updated:", dispute.id)
+  }
+}
+
+async function handleDisputeClosed(dispute: Stripe.Dispute) {
+  // Map Stripe dispute status to our resolution
+  const resolution = dispute.status === "won" ? "won" : dispute.status === "lost" ? "lost" : "resolved"
+  
+  const { data, error } = await supabaseAdmin.rpc("handle_stripe_dispute", {
+    p_stripe_dispute_id: dispute.id,
+    p_stripe_charge_id: typeof dispute.charge === "string" ? dispute.charge : dispute.charge?.id,
+    p_event_type: "charge.dispute.closed",
+    p_amount_cents: dispute.amount,
+    p_reason: resolution,
+  })
+
+  if (error) {
+    console.error("[Stripe Webhook] Dispute close error:", error)
+  } else if (data?.success) {
+    console.log("[Stripe Webhook] Dispute closed:", dispute.id, "Result:", resolution)
   }
 }
