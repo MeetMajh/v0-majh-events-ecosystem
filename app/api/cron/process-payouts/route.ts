@@ -72,7 +72,23 @@ export async function GET(req: NextRequest) {
       processed++
 
       try {
-        // 2. Mark as processing (atomic lock)
+        // 2. Pre-flight eligibility check (disputes, holds, etc.)
+        const { data: eligibility, error: eligibilityError } = await supabase.rpc(
+          "check_payout_eligibility",
+          { p_payout_id: payout.id }
+        )
+
+        if (eligibilityError || !eligibility?.eligible) {
+          // Skip if not eligible (dispute, hold, etc.)
+          results.push({ 
+            id: payout.id, 
+            status: "ineligible", 
+            error: eligibility?.reason || eligibilityError?.message 
+          })
+          continue
+        }
+
+        // 3. Mark as processing (atomic lock)
         const { data: lockResult, error: lockError } = await supabase.rpc(
           "mark_payout_processing",
           { p_payout_id: payout.id }
