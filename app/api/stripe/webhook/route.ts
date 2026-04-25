@@ -129,6 +129,12 @@ export async function POST(req: Request) {
       break
     }
 
+    case "transfer.reversed": {
+      const transfer = event.data.object as Stripe.Transfer
+      await handleTransferReversed(transfer)
+      break
+    }
+
     default:
       console.log(`[Stripe Webhook] Unhandled event type: ${event.type}`)
   }
@@ -734,6 +740,16 @@ async function handleTransferCompleted(transfer: Stripe.Transfer) {
   const metadata = transfer.metadata
   if (!metadata) return
 
+  // Handle payout_requests table (new system)
+  if (metadata.payout_id && !metadata.type) {
+    await supabaseAdmin.rpc("handle_stripe_transfer_event", {
+      p_transfer_id: transfer.id,
+      p_event_type: "transfer.paid",
+    })
+    console.log("[Stripe Webhook] Payout request completed via RPC:", metadata.payout_id)
+    return
+  }
+
   if (metadata.type === "player_prize" && metadata.payout_id) {
     await supabaseAdmin
       .from("player_payouts")
@@ -784,6 +800,17 @@ async function handleTransferCompleted(transfer: Stripe.Transfer) {
 async function handleTransferFailed(transfer: Stripe.Transfer) {
   const metadata = transfer.metadata
   if (!metadata) return
+
+  // Handle payout_requests table (new system)
+  if (metadata.payout_id && !metadata.type) {
+    await supabaseAdmin.rpc("handle_stripe_transfer_event", {
+      p_transfer_id: transfer.id,
+      p_event_type: "transfer.failed",
+      p_failure_message: "Transfer failed - please update payment details",
+    })
+    console.log("[Stripe Webhook] Payout request failed via RPC:", metadata.payout_id)
+    return
+  }
 
   const failureReason = "Transfer failed - please update payment details"
 
@@ -868,5 +895,20 @@ async function reconcileFinancialIntent(
     console.error("[Stripe Webhook] Intent reconciliation error:", error)
   } else if (data?.success) {
     console.log("[Stripe Webhook] Intent reconciled:", data.intent_id, status)
+  }
+}
+
+async function handleTransferReversed(transfer: Stripe.Transfer) {
+  const metadata = transfer.metadata
+  if (!metadata) return
+
+  // Handle payout_requests table (new system)
+  if (metadata.payout_id) {
+    await supabaseAdmin.rpc("handle_stripe_transfer_event", {
+      p_transfer_id: transfer.id,
+      p_event_type: "transfer.reversed",
+      p_failure_message: "Transfer was reversed",
+    })
+    console.log("[Stripe Webhook] Payout request reversed:", metadata.payout_id)
   }
 }
