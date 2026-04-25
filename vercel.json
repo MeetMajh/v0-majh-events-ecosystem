@@ -3,6 +3,14 @@
     {
       "path": "/api/moderation/process",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/reconcile-intents",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/cleanup-stale-intents",
+      "schedule": "0 */6 * * *"
     }
   ]
 }
