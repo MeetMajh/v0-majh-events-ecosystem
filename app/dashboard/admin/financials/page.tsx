@@ -19,6 +19,9 @@ import { EscrowOverview } from "@/components/financials/escrow-overview"
 import { PlatformRevenue } from "@/components/financials/platform-revenue"
 import { AdminWalletCredit } from "@/components/financials/admin-wallet-credit"
 import { WalletReconciliation } from "@/components/financials/wallet-reconciliation"
+import { AdminFinancialKpis } from "@/components/financials/admin-financial-kpis"
+import { AdminDisputesPanel } from "@/components/financials/admin-disputes-panel"
+import { AdminRefundsPanel } from "@/components/financials/admin-refunds-panel"
 
 export default async function AdminFinancialsPage() {
   const supabase = await createClient()
@@ -226,6 +229,14 @@ export default async function AdminFinancialsPage() {
             <ShieldCheck className="h-4 w-4" />
             Reconciliation
           </TabsTrigger>
+          <TabsTrigger value="disputes" className="flex items-center gap-2">
+            <Shield className="h-4 w-4" />
+            Disputes
+          </TabsTrigger>
+          <TabsTrigger value="refunds" className="flex items-center gap-2">
+            <ArrowDownRight className="h-4 w-4" />
+            Refunds
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="payouts" className="space-y-4">
@@ -246,6 +257,14 @@ export default async function AdminFinancialsPage() {
 
         <TabsContent value="reconciliation" className="space-y-4">
           <WalletReconciliation />
+        </TabsContent>
+
+        <TabsContent value="disputes" className="space-y-4">
+          <AdminDisputesPanel />
+        </TabsContent>
+
+        <TabsContent value="refunds" className="space-y-4">
+          <AdminRefundsPanel />
         </TabsContent>
       </Tabs>
 
