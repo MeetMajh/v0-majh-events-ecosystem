@@ -26,7 +26,8 @@ import { AdminAuditLog } from "@/components/financials/admin-audit-log"
 import { AdminPayoutManager } from "@/components/financials/admin-payout-manager"
 import { RealtimeAlertsPanel } from "@/components/financials/realtime-alerts-panel"
 import { AlertConfiguration } from "@/components/financials/alert-configuration"
-import { FileText, Settings, Bell } from "lucide-react"
+import { OrganizerHealthScores } from "@/components/financials/organizer-health-scores"
+import { FileText, Settings, Bell, Activity } from "lucide-react"
 
 export default async function AdminFinancialsPage() {
   const supabase = await createClient()
@@ -261,6 +262,10 @@ export default async function AdminFinancialsPage() {
             <Bell className="h-4 w-4" />
             Alerts
           </TabsTrigger>
+          <TabsTrigger value="health-scores" className="flex items-center gap-2">
+            <Activity className="h-4 w-4" />
+            Health Scores
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="payouts" className="space-y-4">
@@ -302,6 +307,10 @@ export default async function AdminFinancialsPage() {
         <TabsContent value="alerts" className="space-y-6">
           <RealtimeAlertsPanel tenantId={profile?.tenant_id || ""} />
           <AlertConfiguration tenantId={profile?.tenant_id || ""} />
+        </TabsContent>
+
+        <TabsContent value="health-scores" className="space-y-4">
+          <OrganizerHealthScores tenantId={profile?.tenant_id || ""} />
         </TabsContent>
       </Tabs>
 
