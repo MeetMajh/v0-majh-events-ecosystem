@@ -15,6 +15,14 @@
     {
       "path": "/api/cron/process-payouts",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/deliver-alerts",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/auto-payouts",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

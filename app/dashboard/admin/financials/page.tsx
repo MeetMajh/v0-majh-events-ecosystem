@@ -24,7 +24,13 @@ import { AdminDisputesPanel } from "@/components/financials/admin-disputes-panel
 import { AdminRefundsPanel } from "@/components/financials/admin-refunds-panel"
 import { AdminAuditLog } from "@/components/financials/admin-audit-log"
 import { AdminPayoutManager } from "@/components/financials/admin-payout-manager"
-import { FileText, Settings } from "lucide-react"
+import { RealtimeAlertsPanel } from "@/components/financials/realtime-alerts-panel"
+import { AlertConfiguration } from "@/components/financials/alert-configuration"
+import { OrganizerHealthScores } from "@/components/financials/organizer-health-scores"
+import { RiskSignalsPanel } from "@/components/financials/risk-signals-panel"
+import { CapitalAdvancesPanel } from "@/components/financials/capital-advances-panel"
+import { DynamicFeesPanel } from "@/components/financials/dynamic-fees-panel"
+import { FileText, Settings, Bell, Activity, AlertTriangle, Banknote, Percent } from "lucide-react"
 
 export default async function AdminFinancialsPage() {
   const supabase = await createClient()
@@ -255,6 +261,26 @@ export default async function AdminFinancialsPage() {
             <FileText className="h-4 w-4" />
             Audit Log
           </TabsTrigger>
+          <TabsTrigger value="alerts" className="flex items-center gap-2">
+            <Bell className="h-4 w-4" />
+            Alerts
+          </TabsTrigger>
+          <TabsTrigger value="health-scores" className="flex items-center gap-2">
+            <Activity className="h-4 w-4" />
+            Health Scores
+          </TabsTrigger>
+          <TabsTrigger value="risk-signals" className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4" />
+            Risk Signals
+          </TabsTrigger>
+          <TabsTrigger value="fees" className="flex items-center gap-2">
+            <Percent className="h-4 w-4" />
+            Fees
+          </TabsTrigger>
+          <TabsTrigger value="capital" className="flex items-center gap-2">
+            <Banknote className="h-4 w-4" />
+            Capital
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="payouts" className="space-y-4">
@@ -291,6 +317,27 @@ export default async function AdminFinancialsPage() {
 
         <TabsContent value="audit-log" className="space-y-4">
           <AdminAuditLog tenantId={profile?.tenant_id || ""} />
+        </TabsContent>
+
+        <TabsContent value="alerts" className="space-y-6">
+          <RealtimeAlertsPanel tenantId={profile?.tenant_id || ""} />
+          <AlertConfiguration tenantId={profile?.tenant_id || ""} />
+        </TabsContent>
+
+        <TabsContent value="health-scores" className="space-y-4">
+          <OrganizerHealthScores tenantId={profile?.tenant_id || ""} />
+        </TabsContent>
+
+        <TabsContent value="risk-signals" className="space-y-4">
+          <RiskSignalsPanel tenantId={profile?.tenant_id || ""} />
+        </TabsContent>
+
+        <TabsContent value="fees" className="space-y-4">
+          <DynamicFeesPanel tenantId={profile?.tenant_id || ""} />
+        </TabsContent>
+
+        <TabsContent value="capital" className="space-y-4">
+          <CapitalAdvancesPanel tenantId={profile?.tenant_id || ""} />
         </TabsContent>
       </Tabs>
 
