@@ -140,28 +140,25 @@ export async function GET(req: NextRequest) {
           },
         })
 
-        // 5. Mark as completed
-        const { error: completeError } = await supabase.rpc("complete_payout", {
-          p_payout_id: payout.id,
-          p_stripe_transfer_id: transfer.id,
-          p_ledger_tx_id: ledgerTxId,
-        })
+        // 5. Execute payout request (single source of truth for ledger + completion)
+        const { data: execResult, error: execError } = await supabase.rpc(
+          "execute_payout_request",
+          {
+            p_payout_request_id: payout.id,
+            p_stripe_transfer_id: transfer.id,
+          }
+        )
 
-        if (completeError) {
-          console.error("Failed to mark payout complete:", completeError)
-          // Transfer succeeded but DB update failed - will be reconciled
-        }
+        if (execError || !execResult?.success) {
+          // Fallback to legacy complete_payout if execute_payout_request not available
+          const { error: completeError } = await supabase.rpc("complete_payout", {
+            p_payout_id: payout.id,
+            p_stripe_transfer_id: transfer.id,
+            p_ledger_tx_id: ledgerTxId,
+          })
 
-        // 6. Complete ledger (payout clearing → bank)
-        if (ledgerTxId) {
-          try {
-            await supabase.rpc("ledger_payout_completed", {
-              p_tenant_id: null,
-              p_payout_request_id: payout.id,
-              p_stripe_transfer_id: transfer.id,
-            })
-          } catch (ledgerErr) {
-            console.error("Ledger completion error:", ledgerErr)
+          if (completeError) {
+            console.error("Failed to mark payout complete:", completeError)
           }
         }
 
