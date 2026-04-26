@@ -30,7 +30,9 @@ import { OrganizerHealthScores } from "@/components/financials/organizer-health-
 import { RiskSignalsPanel } from "@/components/financials/risk-signals-panel"
 import { CapitalAdvancesPanel } from "@/components/financials/capital-advances-panel"
 import { DynamicFeesPanel } from "@/components/financials/dynamic-fees-panel"
-import { FileText, Settings, Bell, Activity, AlertTriangle, Banknote, Percent } from "lucide-react"
+import { TreasuryDashboard } from "@/components/financials/treasury-dashboard"
+import { InvestorReports } from "@/components/financials/investor-reports"
+import { FileText, Settings, Bell, Activity, AlertTriangle, Banknote, Percent, Building2, BarChart3 } from "lucide-react"
 
 export default async function AdminFinancialsPage() {
   const supabase = await createClient()
@@ -281,6 +283,14 @@ export default async function AdminFinancialsPage() {
             <Banknote className="h-4 w-4" />
             Capital
           </TabsTrigger>
+          <TabsTrigger value="treasury" className="flex items-center gap-2">
+            <Building2 className="h-4 w-4" />
+            Treasury
+          </TabsTrigger>
+          <TabsTrigger value="reports" className="flex items-center gap-2">
+            <BarChart3 className="h-4 w-4" />
+            Reports
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="payouts" className="space-y-4">
@@ -338,6 +348,14 @@ export default async function AdminFinancialsPage() {
 
         <TabsContent value="capital" className="space-y-4">
           <CapitalAdvancesPanel tenantId={profile?.tenant_id || ""} />
+        </TabsContent>
+
+        <TabsContent value="treasury" className="space-y-4">
+          <TreasuryDashboard tenantId={profile?.tenant_id || ""} />
+        </TabsContent>
+
+        <TabsContent value="reports" className="space-y-4">
+          <InvestorReports tenantId={profile?.tenant_id || ""} />
         </TabsContent>
       </Tabs>
 
