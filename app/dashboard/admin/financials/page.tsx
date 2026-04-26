@@ -24,7 +24,9 @@ import { AdminDisputesPanel } from "@/components/financials/admin-disputes-panel
 import { AdminRefundsPanel } from "@/components/financials/admin-refunds-panel"
 import { AdminAuditLog } from "@/components/financials/admin-audit-log"
 import { AdminPayoutManager } from "@/components/financials/admin-payout-manager"
-import { FileText, Settings } from "lucide-react"
+import { RealtimeAlertsPanel } from "@/components/financials/realtime-alerts-panel"
+import { AlertConfiguration } from "@/components/financials/alert-configuration"
+import { FileText, Settings, Bell } from "lucide-react"
 
 export default async function AdminFinancialsPage() {
   const supabase = await createClient()
@@ -255,6 +257,10 @@ export default async function AdminFinancialsPage() {
             <FileText className="h-4 w-4" />
             Audit Log
           </TabsTrigger>
+          <TabsTrigger value="alerts" className="flex items-center gap-2">
+            <Bell className="h-4 w-4" />
+            Alerts
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="payouts" className="space-y-4">
@@ -291,6 +297,11 @@ export default async function AdminFinancialsPage() {
 
         <TabsContent value="audit-log" className="space-y-4">
           <AdminAuditLog tenantId={profile?.tenant_id || ""} />
+        </TabsContent>
+
+        <TabsContent value="alerts" className="space-y-6">
+          <RealtimeAlertsPanel tenantId={profile?.tenant_id || ""} />
+          <AlertConfiguration tenantId={profile?.tenant_id || ""} />
         </TabsContent>
       </Tabs>
 
