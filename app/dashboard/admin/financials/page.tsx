@@ -22,6 +22,9 @@ import { WalletReconciliation } from "@/components/financials/wallet-reconciliat
 import { AdminFinancialKpis } from "@/components/financials/admin-financial-kpis"
 import { AdminDisputesPanel } from "@/components/financials/admin-disputes-panel"
 import { AdminRefundsPanel } from "@/components/financials/admin-refunds-panel"
+import { AdminAuditLog } from "@/components/financials/admin-audit-log"
+import { AdminPayoutManager } from "@/components/financials/admin-payout-manager"
+import { FileText, Settings } from "lucide-react"
 
 export default async function AdminFinancialsPage() {
   const supabase = await createClient()
@@ -38,6 +41,13 @@ export default async function AdminFinancialsPage() {
     .single()
 
   if (!staffRole) redirect("/dashboard")
+
+  // Get user's profile for tenant_id
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("tenant_id")
+    .eq("id", user.id)
+    .single()
 
   // Get first day of current month
   const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
@@ -237,6 +247,14 @@ export default async function AdminFinancialsPage() {
             <ArrowDownRight className="h-4 w-4" />
             Refunds
           </TabsTrigger>
+          <TabsTrigger value="payout-manager" className="flex items-center gap-2">
+            <Settings className="h-4 w-4" />
+            Payout Manager
+          </TabsTrigger>
+          <TabsTrigger value="audit-log" className="flex items-center gap-2">
+            <FileText className="h-4 w-4" />
+            Audit Log
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="payouts" className="space-y-4">
@@ -265,6 +283,14 @@ export default async function AdminFinancialsPage() {
 
         <TabsContent value="refunds" className="space-y-4">
           <AdminRefundsPanel />
+        </TabsContent>
+
+        <TabsContent value="payout-manager" className="space-y-4">
+          <AdminPayoutManager tenantId={profile?.tenant_id || ""} />
+        </TabsContent>
+
+        <TabsContent value="audit-log" className="space-y-4">
+          <AdminAuditLog tenantId={profile?.tenant_id || ""} />
         </TabsContent>
       </Tabs>
 
