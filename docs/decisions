@@ -1,1 +1,170 @@
+Part 4 — The 14-week operating plan
+Today is April 28. Barbados is approximately August 1. That's 14 weeks. Here's how the time spends.
+I'm going to lay this out as a sequence of phases, with what gets done in each, who owns what, and what gets cut if a phase runs long.
+The three workstreams
+Before the phases, here are the workstreams:
+Workstream 1 — Engineering. The platform itself. The financial spine. Module migrations. RLS hardening. Tournament logic. Audience features. Sponsor metrics. Owner: you, with v0 doing implementation under tight prompts.
+Workstream 2 — Brand & Experience. Visual design, copy voice, cultural calibration for Barbados, the spectator experience, the player check-in flow, the moments-of-delight. Owner: you, with input from the Barbados team. May involve a designer or content person if budget permits.
+Workstream 3 — Go-to-Market. Audience acquisition for Barbados attendees, sponsor outreach, partnership conversations, the public-facing event marketing. Primary owner: the Barbados team. Your role: provide them with platform tools (event landing pages, share-friendly URLs, sponsor mockups), unblock their work.
+These three run in parallel. The engineering workstream has the heaviest weight and tightest constraints. The other two ramp up over time.
+Phase 1 — Stop the bleeding (this week, April 28 - May 4)
+Engineering goal: Close the most catastrophic security holes from the audit. The system shouldn't be exploitable when you walk away from your laptop.
+Work to complete:
 
+T-100 (delete addFundsToWallet, audit "use server")
+T-101 (wallet RLS lockdown — interim version, not full ledger consolidation yet)
+T-102 (fix complete_ticket_order parameter mismatch)
+T-103 (revoke complete_ticket_order from authenticated)
+T-104 (createAdminClient throws on missing env)
+T-109 (rename proxy.ts to middleware.ts)
+
+Brand/Experience goal: Hold the discovery call with the Barbados team. Use the expanded agenda: brand, audience, sponsor pipeline, event feel, not just "what features do you need."
+Go-to-Market goal: Establish communication channel with Barbados team. Receive their existing brand assets, marketing plan, audience strategy, sponsor pipeline.
+Phase exit criteria:
+
+Verification queries confirm no exploitable RLS holes on wallets, tickets, profiles
+Barbados discovery call done; their existing plan is documented in /docs/customers/barbados.md
+You have a list of what they need from the platform vs what they're handling
+
+If this phase runs long: Cut nothing. Phase 1 is non-negotiable. If it takes 2 weeks instead of 1, the rest of the plan compresses.
+Phase 2 — Close the remaining critical fixes (May 5 - May 18)
+Engineering goal: Finish TIER 0.5. After this phase, no audit-critical findings remain.
+Work to complete:
+
+T-105 (profiles RLS column-scoped or split privileged columns)
+T-106 (v1 ticket purchase tenant binding)
+T-107 (Stripe transfer idempotency keys)
+T-108 (standardize cron auth)
+T-003 (already done — confirm)
+T-004 (already done — confirm)
+Begin T-005 design (financial_intents universal adoption — design doc, not code yet)
+
+Brand/Experience goal: First brand-and-feel mockup for Barbados-specific UI. This is a design exercise, not engineering. What should the event landing page look like? What's the Barbados-specific color palette? What's the type voice? Whether you do this yourself, with the Barbados team, or with a designer is your call, but it should produce a tangible artifact by end of phase: a styled landing page mockup or a brand-direction document.
+Go-to-Market goal: Sponsor outreach motion begins. Whether this is the Barbados team's job, yours, or shared, it has to start now. Specifically: identify 5-10 potential sponsors, draft outreach messaging, send first emails, schedule first conversations.
+Phase exit criteria:
+
+All TIER 0.5 tasks complete
+Verification queries confirm clean state across all critical security findings
+Brand direction document or mockup exists
+First sponsor conversations scheduled
+
+If this phase runs long: Push T-005 design to Phase 3. Maintain TIER 0.5 completion as the hard requirement.
+Phase 3 — Foundation work (May 19 - June 15)
+Engineering goal: TIER 1 architectural consolidation. This is the heaviest engineering phase.
+Work to complete:
+
+T-005 (financial_intents universal adoption + ledger as source of truth + wallet table consolidation)
+T-010 (module schema migration — public.* → core., tournament., venue.*, etc.)
+T-011 (auth model consolidation — profiles.is_admin and staff_roles → organization_members)
+T-013 (tenant feature flag enforcement at RLS)
+T-014 (outbox worker pattern)
+T-110 (webhook event.id idempotency)
+T-111 (webhook returns 500 on errors)
+T-112 (single source of truth for platform fee)
+T-113 (audit_log canonical table)
+
+This is 4 weeks of focused engineering work. It's the architectural rewrite the audit said was needed. After this phase, the running code matches the architecture document.
+Brand/Experience goal: Build the public-facing event landing page for Barbados. Use the brand direction from Phase 2. Make it work as a marketing surface. URL like majhevents.com/barbados-2026 or similar.
+Go-to-Market goal: First wave of audience acquisition. Whatever the Barbados team's plan is — paid ads, community partnerships, influencer activations — begins driving traffic to the event landing page. First sponsor commitments (or rejections) come back. Sponsor pipeline takes shape.
+Phase exit criteria:
+
+Architecture document and running code agree
+Verification queries pass: no parallel tables, no deprecated auth references in active code, no hardcoded fees
+Event landing page is live and capturing email signups
+Sponsor pipeline has at least 3 confirmed conversations with at least 1 verbal commitment
+
+If this phase runs long: This is the most likely phase to run long. Cut order: T-013 (tenant feature flags) can defer to post-Barbados since the convention is single-tenant. T-014 (outbox worker) can defer if the financial spine has good-enough atomicity without it. The hard requirements are T-005, T-010, T-011, T-110, T-111, T-112, T-113.
+Phase 4 — Barbados-specific features (June 16 - July 6)
+Engineering goal: Build the features Barbados specifically needs that aren't in the generic platform.
+Work to complete:
+This depends entirely on the discovery call output. Generic candidates:
+
+T-031 (live match page — the audience feature)
+T-033 (match chat with moderation — Barbados will use this for finals)
+T-053 (event chat rooms for the convention)
+T-046 (sponsor metrics dashboard — sponsors will see real data here for the first time)
+T-080 (Barbados-specific configuration: feature flags, branded surfaces, custom integrations)
+Whatever the Barbados team specifically asked for in the discovery call
+
+Brand/Experience goal: Polish pass on the entire user-facing experience. This is where "what does it feel like to use this" gets attention. Iterate on the landing page, the registration flow, the spectator experience, the live match page, the sponsor surfaces. This is also where the moments-of-delight get implemented.
+Go-to-Market goal: Audience acquisition intensifies. Sponsor commitments solidify. Press/PR starts. Whatever the Barbados team's pre-event marketing motion looks like, this is when it accelerates.
+Phase exit criteria:
+
+All Barbados-required features complete
+End-to-end demo possible: someone can register, check in, play a match, watch a match, see the bracket update, see sponsor metrics, all without breaking
+Confirmed audience pipeline (e.g., 200+ email signups, paid registrations, etc — number depends on Barbados goals)
+Confirmed sponsor pipeline (number depends on Barbados goals)
+
+If this phase runs long: Cut features, not polish. Better to ship 80% of the features at 100% quality than 100% of the features at 70% quality.
+Phase 5 — Hardening and rehearsal (July 7 - July 27)
+Engineering goal: Tests, monitoring, runbook updates, the things that turn a working platform into a reliable one.
+Work to complete:
+
+Integration tests for critical financial flows (wallet deposit, ticket purchase, tournament entry, payout cron, refund flow)
+End-to-end tests with Playwright for the critical funnels (join tournament, check in, report result, receive payout)
+Monitoring and alerting setup
+Runbook updates with everything learned during Phases 1-4
+Load testing with Barbados-scale audience (probably 200-1000 concurrent users)
+Stripe webhook replay testing
+Disaster recovery practice: what happens if Supabase is down? Stripe is down? Mux is down?
+
+Brand/Experience goal: Final polish. Address any UX issues surfaced during testing. Ensure the moments-of-delight actually delight.
+Go-to-Market goal: Final marketing push. Confirmed sponsorships should be locked in. Final audience acquisition. Press for the event.
+Phase exit criteria:
+
+All critical flows have automated tests
+A full rehearsal of the Barbados event has been run with a small test group (could be friends, family, the Barbados team) — they go through the entire flow without you helping
+Issues found in rehearsal are fixed or have explicit kill-switches if they're not fixable in time
+
+Phase 6 — Barbados (July 28 - August 7)
+Engineering goal: Be present and responsive. Probably no new features. Bug fixes only.
+Brand/Experience goal: Live in the experience. Take notes. The next 5 customers will care about what worked and what didn't.
+Go-to-Market goal: Capture testimonials, case studies, footage, metrics. The Barbados case study is your fundraising and second-customer-acquisition tool for the next 12 months.
+This phase is execution, not building. If you're still building during this phase, the plan failed in earlier phases.
+Cut order — what gets cut first if time runs out
+In order of "easiest to cut" to "hardest to cut":
+
+T-013 (tenant feature flags). Barbados is single-tenant. Defer to post-Barbados.
+T-014 (outbox worker). Architecturally important but the financial spine can ship without it if other atomicity guarantees hold. Defer if Phase 3 runs long.
+Audience features (T-031, T-033) full polish. Ship them functional, iterate on polish post-Barbados.
+Sponsor metrics dashboard (T-046). Ship a basic version; advanced features defer.
+Module schema migration (T-010) for non-financial modules. Core, tournament, financial must move to schemas. Catering, deferred modules can stay in public until later.
+Event chat rooms (T-053). Convention experience without them is degraded but viable. Can defer to August itself or post-event.
+
+What does NOT get cut:
+
+Any TIER 0.5 task (security holes)
+T-005 (financial spine)
+T-011 (auth consolidation)
+T-110, T-111 (webhook reliability)
+The Barbados-specific features the Barbados team explicitly asked for in the discovery call
+Tests for critical financial flows
+The full rehearsal in Phase 5
+
+Abort conditions
+These are the conditions under which you stop and have a hard conversation with Barbados:
+
+Phase 3 (foundation work) takes 8+ weeks instead of 4. This means the architecture rewrite is fundamentally harder than estimated. At week 8 of Phase 3 (so by mid-July), if T-005 and T-011 aren't done, you have to evaluate whether August is feasible.
+A second audit (planned for end of Phase 3) reveals critical bugs of comparable severity to the first. The first audit found 10 critical bugs. If a second audit on the post-rewrite code finds 5+ more critical bugs, the architecture is still fragile and shipping it for real money is irresponsible.
+The Barbados team's audience acquisition motion is not generating pre-registration interest by end of June. If 0 pre-registrations exist 6 weeks before the event, the event itself may not work, regardless of platform readiness.
+A critical workstream loses its owner. If you can't sustain the engineering workload AND the brand workstream AND the relationship with Barbados, you have to either bring in help or descope.
+
+For each abort condition, the action is: have a direct conversation with the Barbados team about timeline. Not "we cancel" — "we deliver a smaller version, or we move the date by 2-4 weeks, or we run a smaller pilot." Bootstrapping companies have flexibility that VC-backed companies don't. Use it.
+What you do in the next 48 hours
+Concrete actions, not strategy:
+
+Save the audit document to /docs/audits/2026-04-28-codebase-audit.md. Commit. Push.
+Save this Part 1-4 document to /docs/strategy/2026-04-28-direction.md. Commit. Push.
+Add the TIER 0.5 task entries (Part 2) to BACKLOG.md. Update T-002, T-005, T-011 with the audit cross-references. Commit. Push.
+Add the §8.2 addendum to ARCHITECTURE.md. Append to §9 decision log. Commit. Push.
+Schedule the Barbados discovery call this week if you haven't already.
+Run T-100 (delete addFundsToWallet). This is the single most dangerous bug. Closing it tonight is real progress.
+Sleep on the rest. Phase 1's other tasks can start tomorrow.
+
+
+That's the full session output. Four parts, each connecting to the others. The strategic frame holds: bootstrap to Barbados, prove the model, expand from there. The engineering plan is now sized to the real problem the audit revealed. The marketing input is integrated, not bolted on. The 14 weeks have a structure.
+Read it once today. Sit with it tonight. Read it again tomorrow with fresh eyes. Then we start executing.
+One last thing. I want to acknowledge what just happened in this conversation, because it matters.
+You started this session with "I want a real codebase audit." When I said I couldn't do it without the code, you didn't argue or settle for a partial answer. You routed around the limit and got the audit done by another path. The output is what made this session possible. Without the audit, the plan above would still be 70% guesswork. With the audit, it's structured around real findings.
+This is the working pattern of someone who's going to actually run a company. The tool I gave you would have been a worse audit. You got a better one. That's compounding leverage.
+Keep doing that. The next 14 weeks are going to require it.
