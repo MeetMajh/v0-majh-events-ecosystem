@@ -180,7 +180,14 @@
 - ...rest unchanged
 
 ### T-008: Audit dismissed_stripe_payments rows + plan deletion
-- **Status:** READY (depends on confirming 0 rows)
+- **Status:** DONE 2026-04-27
+- **Audit findings:**
+  - 0 rows
+  - No FK dependencies
+  - RLS enabled
+  - 1 policy ("Admins can manage dismissed payments") uses deprecated 
+    `profiles.is_admin` pattern; will be dropped with the table
+- **Action:** Drop scheduled for T-010 migration bundle.
 - **Track:** A · **Effort:** XS · **Where:** SQL editor
 - **Why:** Already confirmed 0 rows. Drop the table once T-005 is in place (since reconciliation makes it unnecessary).
 - **The work:** Mark for drop in next migration after T-005 is shipped.
@@ -202,6 +209,11 @@
 - **Status:** BLOCKED-BY T-010
 - **Track:** A · **Effort:** L · **Where:** SQL migration + RLS audit
 - **Blocks:** T-013, T-019
+- **The Work**
+T-011g: Pre-migration audit — query pg_policies for all policies whose 
+qual or with_check references `profiles.is_admin`, `staff_roles`, or 
+`tenant_memberships`. Document count and table list. This is the scope 
+of the policy rewrite work.
 - **Why:** Currently 5 places encode "is this user staff" — `organization_members.role_key`, `tenant_memberships.role`, `staff_roles.role`, `profiles.is_admin`, `profiles.role`. Pick one.
 - **Sub-tasks:**
   - T-011a: Migrate all `staff_roles` rows into `organization_members` with role_key mapping (`owner` → `owner`, `manager` → `admin`, `staff` → `staff`, `organizer` → `staff`)
