@@ -140,7 +140,7 @@
 - **Acceptance:** Test charge succeeds end-to-end via the new pattern. Test webhook delivery failure is recovered by reconciler within 1 hour.
 
 ### T-006: Tighten `escrow_accounts` "Public can view funded escrow" policy
-- **Status:** READY
+- **Status:** DONE 2026-04-27
 - **Track:** A · **Effort:** XS · **Where:** SQL editor
 - **Why:** Current policy exposes amount_cents, funded_by, stripe_payment_intent_id, proof_of_funds_url to any authenticated user.
 - **The work:**
