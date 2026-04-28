@@ -52,8 +52,15 @@
 ```
 - **Acceptance:** `\dt ml_*` and `\dt treasury_*` return nothing.
 
+### T-002: Wallet RLS lockdown (SUPERSEDED by T-101)
+- **Status:** SUPERSEDED-BY T-101 (TIER 0.5)
+- **Notes:** This task was originally scoped before we understood the dual-wallet 
+  situation. The audit (2026-04-28) confirmed that `wallets` has no RLS configuration 
+  in any migration and is used by the Stripe webhook for actual money flow IN, while 
+  `user_wallets` is parallel and used for money OUT. The proper consolidation work is 
+  in T-101. The original T-002 should not be executed standalone.
 ### T-002: Enable RLS on `wallets` (or drop it)
-- **Status:** READY
+- **Status:** READY (refer to T-002: Wallet RLS lockdown (SUPERSEDED by T-101)
 - **Track:** A · **Effort:** XS · **Where:** SQL editor
 - **Blocks:** T-018
 - **Why:** Currently world-readable. Wallet balances exposed to any authenticated user.
@@ -168,6 +175,23 @@
   - T-005e: Reconciler at `app/api/cron/reconcile-stripe-intents/route.ts` that sweeps `submitted` intents older than 1 hour, queries Stripe, updates state
   - T-005f: Add cron schedule to `vercel.json`
 - **Acceptance:** Test charge succeeds end-to-end via the new pattern. Test webhook delivery failure is recovered by reconciler within 1 hour.
+- **Audit cross-references (2026-04-28):**
+  - C2 (wallets RLS): T-005 is the long-term fix for the dual-wallet problem. The ledger 
+    becomes source of truth; wallet tables become derived views. T-101 is the interim 
+    emergency fix.
+  - H1 (tournament entry bypasses financial_intents): T-005 must include migrating 
+    tournament-payment-actions.ts to use createTrackedCheckoutSession.
+  - H3 (Date.now() in idempotency keys): T-005 must use deterministic idempotency 
+    keys (e.g., `tournament_entry_${tournamentId}_${userId}`).
+  - H7 (no event.id idempotency on webhook): T-005 should add 
+    webhook_events_processed table keyed by event.id.
+  - H9 (platform fee disagreement): T-005 must establish a single 
+    calculate_platform_fee RPC called from every reconciliation path.
+  - H14 (audit_log table not created): T-005 must create the canonical audit_log table.
+  - M10 (no Stripe amount verification on reconcile): T-005's reconcile path should 
+    verify Stripe amount matches the intent's stored amount.
+- **Revised effort:** L → XL (originally 1 dedicated session; now 2-3 weeks of focused 
+  work given the audit's expansion of scope)
 
 ### T-006: Tighten `escrow_accounts` "Public can view funded escrow" policy
 - **Status:** DONE 2026-04-27
@@ -223,7 +247,284 @@
 - **The work:** Mark for drop in next migration after T-005 is shipped.
 
 ---
+## TIER 0.5 — Emergency Fixes (Audit-Driven)
 
+These tasks come from the 2026-04-28 codebase audit (see /docs/audits/2026-04-28-codebase-audit.md).
+Each one is a critical-severity finding (C1-C10) that creates a money-loss or 
+catastrophic-failure risk if the system runs with real users. They jump in line ahead of 
+TIER 1 architectural work because the architectural work cannot ship safely on top of 
+these bugs.
+
+Execution order: T-100 → T-101 → T-102 → T-103 → T-104 → T-109 → T-105 → 
+T-106 → T-107 → T-108. Reasoning: T-100, T-101, T-104, T-109 are the highest 
+severity (free money mint, world-readable wallets, silent admin-degradation, broken 
+crons). T-102, T-103 fix the ticket-purchase pipeline. T-105-T-108 close exposure 
+vectors but are less immediately exploitable.
+
+---
+
+### T-100: Delete addFundsToWallet and audit all "use server" exports
+- **Status:** READY (TIER 0.5 — emergency)
+- **Severity:** Critical (audit C1)
+- **Track:** A · **Effort:** S · **Where:** lib/wallet-actions.ts:302-365 + repo-wide grep
+- **Why:** The `addFundsToWallet` server action has no admin check and is callable by 
+  any authenticated user. They can mint up to $500 per call into their own wallet, then 
+  withdraw via Stripe Connect. This is unauthenticated free money minting in 
+  production. Same pattern likely exists in `syncWalletBalance` and 
+  `recalculateAllWallets`.
+- **The work:**
+  1. Delete `addFundsToWallet` from lib/wallet-actions.ts entirely
+  2. Audit `syncWalletBalance` — if not used, delete; if used, gate behind verified
+     admin check via core.organization_members
+  3. Audit `recalculateAllWallets` — same pattern
+  4. Run a repo-wide grep for `"use server"` and review each exported function:
+     - Is it gated by an auth check?
+     - Is the auth check on the deprecated `profiles.is_admin` (in which case the 
+       check is broken — see T-104)?
+     - Is the function safe to be reachable by any authenticated user?
+  5. Document each "use server" export and its access boundary in a new file 
+     /docs/security/server-actions.md
+- **Acceptance:** 
+  - `addFundsToWallet` does not exist in the codebase
+  - All remaining "use server" exports are documented with their auth requirement
+  - No "use server" function permits unauthenticated balance modification
+
+---
+
+### T-101: Wallet table consolidation and RLS lockdown (revised T-002)
+- **Status:** READY (TIER 0.5 — emergency)
+- **Severity:** Critical (audit C2)
+- **Track:** A · **Effort:** L · **Where:** wallets, user_wallets, lib/wallet-actions.ts, 
+  lib/player-payout-actions.ts, app/api/wallet/withdraw, app/api/stripe/webhook
+- **Why:** The `wallets` table has no RLS configuration in any migration file 
+  (audit confirmed). It's used by 65 references in 20 files for actual money flow IN. 
+  The `user_wallets` table is RLS-enabled and used by 10 references in 4 files for 
+  payouts (money OUT). Two parallel "truth" tables with disagreeing balances. 
+  The wallet RLS hole means any authenticated user can directly modify their own 
+  balance via the Supabase JS client.
+- **This task SUPERSEDES the original T-002.** The original was scoped before we 
+  understood the dual-wallet situation. This is the real work.
+- **The work:**
+  1. Decide canonical: investigate which wallet table should be source of truth. 
+     Per architecture, neither should be — the ledger should be. But for the immediate 
+     fix, we need ONE wallet table working correctly.
+  2. **Strategic option A (recommended):** Make the ledger the source of truth (T-005),
+     and have the wallet tables become derived views. This is the architecturally correct 
+     answer, and it dovetails with T-005 work. But it's a 2-3 week effort.
+  3. **Strategic option B (interim):** Pick `wallets` as canonical (since it has 65 refs 
+     including the Stripe webhook), enable RLS on it, migrate the 10 `user_wallets` 
+     references to use `wallets` instead, drop `user_wallets`. This is faster but creates 
+     work that gets undone in T-005.
+  4. **Recommendation:** Do option B as an emergency fix (this task), because we 
+     need RLS on `wallets` IMMEDIATELY. Then T-005 properly consolidates to the 
+     ledger.
+  5. SQL: `ALTER TABLE wallets ENABLE ROW LEVEL SECURITY` if not already on.
+  6. SQL: Add policies — users SELECT own wallet, no INSERT/UPDATE/DELETE 
+     for any role except service_role.
+  7. Code: Migrate the 4 user_wallets-using files to wallets. Remove `user_wallets` 
+     table.
+  8. Verify: pg_policies query confirms wallets has only service-role write access.
+- **Acceptance:** 
+  - `wallets` has RLS enabled with service-role-only writes
+  - Direct SELECT from authenticated user only returns their own row
+  - All 75 code references point to one table
+  - Verification query: any attempt by an authenticated user to UPDATE wallets is denied
+
+---
+
+### T-102: Fix complete_ticket_order parameter mismatch
+- **Status:** READY (TIER 0.5 — emergency)
+- **Severity:** Critical (audit C4)
+- **Track:** A · **Effort:** S · **Where:** app/api/stripe/webhook/route.ts:421, 
+  scripts/ticketing-rpc-functions.sql:277-281, app/api/v1/tickets/purchase/route.ts:105
+- **Why:** Webhook calls `complete_ticket_order` with parameter names 
+  `p_stripe_session_id`, `p_stripe_payment_intent`, `p_idempotency_key`. The SQL 
+  function signature uses `p_order_id`, `p_stripe_payment_intent_id`, 
+  `p_stripe_checkout_session_id`. Postgres errors at runtime on every call. 
+  Combined with audit finding H8 (webhook returns 200 on errors), Stripe never retries. 
+  Net: every ticket order paid via this path fails to complete; user is charged but no 
+  ticket is issued.
+- **The work:**
+  1. Choose canonical signature. Recommended: align the function signature to what 
+     the webhook is sending, since the webhook side is correct conceptually 
+     (session_id and payment_intent_id are the right Stripe identifiers).
+  2. Update SQL function to use parameter names: `p_order_id`, 
+     `p_stripe_session_id`, `p_stripe_payment_intent_id`, `p_idempotency_key`.
+  3. Update v1 ticket purchase call site to match.
+  4. Update webhook call to match.
+  5. Add a regression test (manual or scripted): create test order, simulate webhook, 
+     verify order status transitions to completed and tickets are created.
+- **Acceptance:** 
+  - Function signature matches all three call sites
+  - End-to-end test: paid ticket order results in completed order + tickets in DB
+  - No "function does not exist" errors in webhook logs
+
+---
+
+### T-103: Revoke complete_ticket_order from authenticated role
+- **Status:** READY (TIER 0.5 — emergency)
+- **Severity:** Critical (audit C5)
+- **Track:** A · **Effort:** XS · **Where:** scripts/ticketing-rpc-functions.sql:669
+- **Why:** `complete_ticket_order` is granted EXECUTE to `authenticated`. Any 
+  authenticated user can call it directly with any order UUID and a fake payment intent 
+  ID, marking unpaid orders as paid. Combined with C8 (free ticket bypass), this is a 
+  ticket-fraud vector.
+- **The work:**
+  1. SQL: `REVOKE EXECUTE ON FUNCTION complete_ticket_order FROM authenticated;`
+  2. SQL: `GRANT EXECUTE ON FUNCTION complete_ticket_order TO service_role;` 
+     (verify service role has it)
+  3. Verify webhook still works (service role still has access)
+  4. Audit OTHER ticketing functions for the same issue: `create_ticket_order`, 
+     `process_ticket_refund`, etc. Apply same pattern.
+- **Acceptance:** 
+  - `pg_proc` query for ticketing functions shows EXECUTE granted only to 
+    service_role
+  - Webhook still completes orders correctly post-fix
+
+---
+
+### T-104: createAdminClient throws on missing service-role key
+- **Status:** READY (TIER 0.5 — emergency)
+- **Severity:** Critical (audit C9)
+- **Track:** A · **Effort:** XS · **Where:** lib/supabase/server.ts:43-71
+- **Why:** When `SUPABASE_SERVICE_ROLE_KEY` is unset, `createAdminClient()` 
+  silently returns an anon client with a warning logged. Code that thinks it's bypassing 
+  RLS will silently behave as a logged-out user. This is far worse than a loud failure: 
+  admin operations return "no rows" or "permission denied" with no clear cause.
+- **The work:**
+  1. Modify `createAdminClient()` to throw a hard error if 
+     `SUPABASE_SERVICE_ROLE_KEY` is missing
+  2. Add an explicit env-var check at app startup that fails the build if any required 
+     server-side env var is missing
+  3. Document required env vars in /docs/RUNBOOK.md and add a `.env.example` 
+     to the repo
+- **Acceptance:** 
+  - Calling `createAdminClient()` without the env var throws immediately
+  - App startup fails loudly if any required env var is missing
+  - `.env.example` exists at repo root
+
+---
+
+### T-105: Profiles RLS column-scoped or split privileged columns
+- **Status:** READY (TIER 0.5 — emergency)
+- **Severity:** Critical (audit C6)
+- **Track:** A · **Effort:** M · **Where:** scripts/001_create_profiles.sql:34-35
+- **Why:** The `profiles_update_own` policy allows users to UPDATE any column 
+  on their own profile row. There's no `WITH CHECK` clause restricting which columns. 
+  If `is_admin` exists as a column (audit could not confirm without DB access), users 
+  can self-promote via `update({ is_admin: true })`. Even without `is_admin`, columns 
+  like `kyc_verified`, `stripe_connect_payouts_enabled`, `role` are user-modifiable.
+- **The work:**
+  1. Verify whether `profiles.is_admin` column exists (run query against Supabase)
+  2. If exists: drop it (per architecture, replace with org-members check)
+  3. Identify all privileged columns on profiles: `kyc_verified`, `stripe_connect_*`, 
+     `role` (if it exists), `is_verified`, etc.
+  4. Move privileged columns to a separate `core.user_security` (or similar) table 
+     that is service-role-only writeable
+  5. Update the 50 code references to read from the new location
+  6. OR (simpler interim): Replace `profiles_update_own` with a column-restricted 
+     policy that names the safe columns (display_name, avatar_url, bio, etc.) 
+     explicitly
+- **Acceptance:** 
+  - User cannot UPDATE privileged columns on profiles via direct Supabase JS
+  - Test: signed-in user attempts `update({ is_admin: true })` → denied
+  - All admin-checking code uses non-self-modifiable source of truth
+- **Notes:** This task overlaps with T-011 (auth model consolidation). When T-011 
+  runs, both should be coordinated. But T-105 is the immediate emergency fix; 
+  T-011 is the long-term migration to organization_members.
+
+---
+
+### T-106: Bind v1 ticket purchase to API key tenant
+- **Status:** READY (TIER 0.5 — emergency)
+- **Severity:** Critical (audit C7, C8)
+- **Track:** A · **Effort:** M · **Where:** app/api/v1/tickets/purchase/route.ts:43-50, 
+  102-122
+- **Why:** The v1 ticket purchase endpoint accepts `email`, `first_name`, `last_name`, 
+  `user_id` directly from the caller. An API key holder can issue tickets to any identity, 
+  including paid orders. Combined with the free-ticket bypass at line 102-122, an 
+  attacker can mint unlimited "free" tickets via API.
+- **The work:**
+  1. Validate that the `user_id` (if provided) belongs to the API key's tenant
+  2. If `email` is provided without `user_id`, validate that the email isn't being used to 
+     impersonate an existing user in another tenant
+  3. For the free-ticket path: require an explicit `comp_ticket_authorized: true` 
+     flag in the request, gated by an organizer-side configuration
+  4. Add rate limiting on free orders: max N free tickets per minute per API key
+  5. Add audit logging: every API ticket order is logged with the API key, requested 
+     identity, actual identity used
+- **Acceptance:** 
+  - API key for tenant A cannot issue tickets to user in tenant B
+  - Free tickets require explicit organizer authorization
+  - All API ticket orders are logged with caller identity
+  - Audit log can answer "who issued this ticket via API"
+
+---
+
+### T-107: Stripe transfer idempotency keys
+- **Status:** READY (TIER 0.5 — emergency)
+- **Severity:** Critical (audit C3)
+- **Track:** A · **Effort:** S · **Where:** app/api/cron/process-payouts/route.ts:130-141 
+  + every other `stripe.transfers.create` call site
+- **Why:** Stripe transfers are created without idempotency keys. If the cron creates a 
+  transfer, the response times out, and the cron retries — Stripe will create a SECOND 
+  transfer because each call without an idempotency key is treated as a new request. 
+  Real money sent twice.
+- **The work:**
+  1. Pass `{ idempotencyKey: payout.id }` (or a deterministic equivalent) as second 
+     arg to every `stripe.transfers.create()` call
+  2. Audit every other Stripe API call site for the same pattern: 
+     `stripe.checkout.sessions.create`, `stripe.refunds.create`, etc.
+  3. Document the idempotency key strategy in /docs/architecture/stripe.md
+- **Acceptance:** 
+  - Every `stripe.transfers.create` call passes an idempotency key
+  - Manual test: simulate a network timeout after transfer creation, confirm retry 
+    doesn't create a second transfer
+
+---
+
+### T-108: Standardize cron auth across all 6 cron files
+- **Status:** READY (TIER 0.5 — emergency)
+- **Severity:** Critical (audit C10)
+- **Track:** A · **Effort:** S · **Where:** all 6 app/api/cron/*/route.ts files + new 
+  lib/cron-auth.ts helper
+- **Why:** 5 of 6 cron jobs only check `Bearer ${CRON_SECRET}`. Vercel Cron 
+  sends `x-vercel-cron: 1` instead. In production these crons return 401 → never run 
+  → reconciliation never sweeps → stale intents accumulate forever.
+- **The work:**
+  1. Create lib/cron-auth.ts with a single `requireCronAuth(req: Request)` helper 
+     that accepts both Bearer CRON_SECRET and x-vercel-cron: 1
+  2. Replace the auth check in all 6 cron route handlers with this helper
+  3. Add a startup verification that confirms cron auth env vars are set
+  4. Test: deploy to Vercel preview, trigger each cron manually, verify all 6 return 200 
+     with valid auth
+- **Acceptance:** 
+  - One auth helper used by all 6 crons
+  - Vercel Cron auto-trigger succeeds for all 6 crons in production
+  - Cron logs show successful execution, not 401
+
+---
+
+### T-109: Rename proxy.ts to middleware.ts and add real auth-refresh
+- **Status:** READY (TIER 0.5 — emergency)
+- **Severity:** High-Critical boundary (audit M1, but compounds with C9 and C6)
+- **Track:** A · **Effort:** S · **Where:** repo root
+- **Why:** Next.js loads `middleware.ts` as global middleware; `proxy.ts` is not loaded. 
+  The auth-refresh logic in `proxy.ts` is dead code. Sessions don't refresh on long 
+  sessions; the redirect for `/protected` paths is dead since no such routes exist.
+- **The work:**
+  1. Rename proxy.ts → middleware.ts at repo root
+  2. Update the matcher in `config.matcher` to cover the actual protected routes 
+     (`/dashboard/*`, `/api/admin/*`)
+  3. Add real auth-refresh: read session from Supabase SSR cookie, refresh if 
+     near-expiry, write back to response
+  4. Add a redirect-to-login for unauthenticated requests to protected routes
+  5. Verify: visit a protected route in incognito → redirected to login. Visit while 
+     authenticated with stale session → session refreshes silently.
+- **Acceptance:** 
+  - middleware.ts exists at repo root, proxy.ts does not
+  - Sessions refresh on requests near expiry
+  - Unauthenticated requests to /dashboard/* and /api/admin/* are redirected
 ## TIER 1 — Architecture foundation (gates everything else)
 
 ### T-010: Module schema migration
@@ -253,7 +554,20 @@ of the policy rewrite work.
   - T-011e: Audit every RLS policy that references `staff_roles`, `tenant_memberships`, or `profiles.is_admin`; replace with `organization_members` predicate
   - T-011f: Drop `staff_roles` and `tenant_memberships` tables
 - **Acceptance:** All RLS policies pass an audit grep showing only `organization_members` references for auth. No staff_roles or tenant_memberships in policy definitions.
-
+- **Audit cross-references (2026-04-28):**
+  - C6 (profiles RLS allows self-promote): T-105 is the immediate fix; T-011 
+    completes the consolidation. Coordinate the two so T-105 doesn't have to be 
+    re-done.
+  - H10 (staff_roles has no tenant scope): T-011 must add tenant_id filter to all 
+    staff_roles policies during the migration.
+  - All 50 references to profiles.is_admin must be migrated to organization_members 
+    checks. This is the bulk of T-011's work.
+- **Pre-migration audit step:** Before any policy rewrites, run:
+    SELECT tablename, policyname, qual, with_check FROM pg_policies 
+    WHERE schemaname = 'public' AND (qual ILIKE '%is_admin%' OR qual ILIKE 
+    '%staff_roles%' OR qual ILIKE '%tenant_memberships%');
+  Document the count. Plan the rewrite in batches by table.
+  
 ### T-012: Build canonical `core.audit_log`
 - **Status:** BLOCKED-BY T-001, T-004, T-010
 - **Track:** A · **Effort:** M · **Where:** SQL migration + helper module
@@ -282,6 +596,77 @@ of the policy rewrite work.
 - **The work:** `app/api/cron/process-outbox/route.ts` runs every minute, claims unprocessed rows, dispatches to handlers based on `topic`, marks processed. Handlers registered in a switch statement; specific handlers built per-need (T-026 etc.)
 - **Acceptance:** New outbox row gets processed within 60 seconds. Failed rows retry up to max_attempts. Unprocessed-rows-older-than-5-minutes alert wired (T-068).
 
+### T-110: Webhook event.id idempotency
+- **Status:** READY (TIER 1)
+- **Severity:** High (audit H7)
+- **Track:** A · **Effort:** S · **Where:** app/api/stripe/webhook/route.ts + new 
+  webhook_events_processed table
+- **Why:** Stripe will replay webhook events on connection failures. The current 
+  webhook has path-specific idempotency in some places but no top-level event.id 
+  deduplication. Replays cause duplicate processing for any path without inline 
+  idempotency.
+- **The work:**
+  1. Create `webhook_events_processed` table with `event_id text primary key`, 
+     `processed_at timestamptz`
+  2. At the top of the webhook handler, after signature verification: INSERT event_id 
+     with ON CONFLICT DO NOTHING. If 0 rows inserted, return 200 immediately 
+     (already processed).
+  3. Backfill: don't worry about historical events; this protects forward.
+- **Acceptance:** Replaying a Stripe event from the dashboard produces no second 
+  side-effect.
+
+---
+
+### T-111: Webhook returns 500 on errors instead of 200
+- **Status:** READY (TIER 1)
+- **Severity:** High (audit H8)
+- **Track:** A · **Effort:** XS · **Where:** app/api/stripe/webhook/route.ts:478-480
+- **Why:** Currently the webhook returns 200 even on processing errors. Stripe 
+  considers it delivered and won't retry. Transient failures (e.g., DB temporarily 
+  unavailable) become permanent.
+- **The work:**
+  1. Wrap each event-type handler in try/catch
+  2. On caught exception: log error, return 500 → Stripe retries
+  3. Combined with T-110 (event.id idempotency), retries are safe
+- **Acceptance:** Forced exception during webhook processing returns 500; Stripe 
+  retries; second attempt succeeds and processes correctly.
+
+---
+
+### T-112: Single source of truth for platform fee
+- **Status:** READY (TIER 1)
+- **Severity:** High (audit H9)
+- **Track:** A · **Effort:** S · **Where:** webhook:754, scripts/119:294, scripts/121:14, 
+  new calculate_platform_fee SQL function
+- **Why:** Platform fee is hardcoded as 5% in webhook, 10% in ledger code, 10% in 
+  fee config table. Three sources of truth disagreeing means revenue calculation 
+  depends on which path executes.
+- **The work:**
+  1. Create `calculate_platform_fee(p_amount_cents bigint, p_event_type text, 
+     p_tenant_id uuid)` SQL function that returns the correct fee
+  2. Source of truth: a `fee_config` table per tenant per event-type
+  3. Replace all hardcoded fees with calls to this function
+  4. Add a default config row matching whatever the actual current fee policy is
+- **Acceptance:** No hardcoded fee literals in any code path; function is called from 
+  every reconciliation site.
+
+---
+
+### T-113: Add audit_log canonical table with append-only triggers
+- **Status:** READY (TIER 1)
+- **Severity:** High (audit H14)
+- **Track:** A · **Effort:** S · **Where:** new SQL migration
+- **Why:** Multiple SQL functions INSERT into a table called `audit_log` that doesn't 
+  exist in any migration. Inserts fail. Reconcile loses its audit trail. Architecture 
+  document specifies this table with append-only constraints; it was never created.
+- **The work:**
+  1. Create canonical `audit_log` table per ARCHITECTURE.md spec: id, actor, 
+     action, target_type, target_id, payload jsonb, occurred_at
+  2. Grants: INSERT only, no UPDATE, no DELETE for any role
+  3. Add a trigger that prevents UPDATE/DELETE explicitly (defense in depth)
+  4. Update all functions that INSERT into audit_log to match the canonical schema
+- **Acceptance:** audit_log table exists; INSERTs from existing functions succeed; 
+  attempting UPDATE or DELETE raises an error.
 ---
 
 ## TIER 2 — Tournament module (the core deliverable)
