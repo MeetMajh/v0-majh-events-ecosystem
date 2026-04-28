@@ -155,7 +155,7 @@
 - **Acceptance:** Authenticated user can SELECT from `escrow_status` view (showing only safe columns); cannot SELECT from `escrow_accounts` directly except via the existing organizer/staff policies.
 
 ### T-007: Fix `player_payouts` OR-composition bug
-- **Status:** READY
+- **Status:** DONE 2026-04-27
 - **Track:** A · **Effort:** XS · **Where:** SQL editor
 - **Why:** "No updates after completion" policy doesn't actually prevent updates because "Staff can manage all" policy is broader and permits everything. RLS policies OR together; AND must be expressed as triggers.
 - **The work:**
@@ -176,6 +176,8 @@
     FOR EACH ROW EXECUTE FUNCTION block_payout_updates_after_completion();
 ```
 - **Acceptance:** UPDATE on a completed/failed/cancelled payout raises exception even when called as service-role.
+**STATUS** DONE 2026-04-27
+- ...rest unchanged
 
 ### T-008: Audit dismissed_stripe_payments rows + plan deletion
 - **Status:** READY (depends on confirming 0 rows)
