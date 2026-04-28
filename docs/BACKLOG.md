@@ -74,7 +74,24 @@
 - **Acceptance:** `SET ROLE authenticated; SELECT * FROM wallets;` returns only the current user's row. INSERT fails.
 
 ### T-003: Enable RLS on tournament-integrity tables
-- **Status:** READY
+- **Status:** DONE 2026-04-27
+- **Scope correction (vs original task description):** RLS was already 
+  enabled on all 8 tables. Pre-flight audit revealed:
+  - 4 tables (matches, players, registrations, round_pairings) already 
+    had appropriate policies; left alone (matches/players/registrations 
+    slated for DROP via T-010/T-020 anyway)
+  - 4 tables (brackets, bracket_nodes, pools, pool_members) had RLS 
+    enabled but zero policies (i.e., denied to non-service-role users); 
+    these needed policy additions to allow the app to function
+- **Pattern applied:** Copy of round_pairings' existing policy structure
+  - Public SELECT (spectators can view bracket/pool data)
+  - TO-only INSERT/UPDATE/DELETE (only the tournament's created_by user)
+  - bracket_nodes and pool_members go through their parent table 
+    (brackets, pools) via JOIN since they don't have direct tournament_id
+- **Lessons:**
+  - Always audit pre-existing state before writing RLS policies
+  - "RLS enabled, zero policies" is functionally locked-down (denied) 
+    rather than open — different from "RLS off"
 - **Track:** A · **Effort:** S · **Where:** SQL migration file
 - **Blocks:** T-024 (registration consolidation)
 - **Why:** `brackets`, `bracket_nodes`, `pools`, `pool_members`, `players`, `registrations`, `round_pairings` are all currently world-writable. A user can edit `round_pairings` to avoid an opponent or flip `winner_id` on `brackets`.
