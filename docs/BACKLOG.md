@@ -105,7 +105,20 @@
 - **Acceptance:** Authenticated user who isn't the tournament organizer cannot INSERT/UPDATE/DELETE; can SELECT.
 
 ### T-004: Fix INSERT forgery vectors
-- **Status:** READY
+- **Status:** DONE 2026-04-27
+- **Notes for future reference:**
+  - Required 5 sub-passes (Parts 1-5) due to v0 generating new policies 
+    without dropping old ones; old policies remained active and continued 
+    to permit forgery via Postgres OR-composition
+  - Verification query is essential after every RLS migration; "no rows 
+    returned" on a CREATE POLICY does not mean the goal was achieved
+  - Tables affected: access_audit_log, analytics_events, financial_alerts, 
+    match_engagement_events, match_reactions, match_viewer_sessions, 
+    match_viewers, media_view_events, media_views, notifications, 
+    reaction_aggregates, wallet_transactions, plus 7 cb_* deferred-module 
+    tables
+  - Intentionally left open (rate-limit via T-064): contact_submissions, 
+    recruitment_applications
 - **Track:** A · **Effort:** S · **Where:** SQL migration file
 - **Blocks:** T-012
 - **Why:** Several tables have INSERT policies with `with_check = true`, allowing any user to forge rows attributing actions to others.
