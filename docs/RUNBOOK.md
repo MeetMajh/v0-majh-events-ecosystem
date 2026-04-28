@@ -115,5 +115,39 @@ we found when T-014 lands.]
 
 ---
 
-## (Add new entries here as issues arise)
+## After any RLS-modifying migration
 
+Always run the policy verification query immediately after any migration 
+that touches RLS:
+
+    SELECT tablename, policyname, cmd, with_check
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND cmd IN ('INSERT', 'ALL', 'UPDATE')
+      AND (with_check IS NULL OR with_check = 'true')
+    ORDER BY tablename, policyname;
+
+Then sort the results into three buckets:
+
+1. with_check = 'true' on policies targeting authenticated/anon roles 
+   → INVESTIGATE. Likely forgery vectors unless explicitly intentional.
+2. with_check = 'true' on policies named "Service role inserts X" → safe
+   (service_role bypasses RLS regardless).
+3. with_check = null with cmd in (ALL, UPDATE) → safe (Postgres uses qual 
+   for both read and write).
+
+"No rows returned" on the migration does NOT mean the goal was achieved. 
+The verification query is the only way to confirm policies actually 
+behave as intended.
+
+## Postgres RLS gotcha: policies OR together
+
+When multiple policies exist for the same (table, cmd) pair, a row is 
+permitted if ANY policy allows it. Adding a new restrictive policy does 
+NOT override an existing permissive policy. Both must be considered, and 
+the old permissive policy must be explicitly dropped.
+
+This is the most common failure mode when iteratively tightening RLS. 
+Always check pg_policies for existing policies before adding new ones.
+
+## (Add new entries here as issues arise)
