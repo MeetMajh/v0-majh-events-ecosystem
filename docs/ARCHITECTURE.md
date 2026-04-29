@@ -4,7 +4,7 @@
 boundaries, data ownership, and cross-module patterns. When code and this
 document disagree, the document is right and the code is wrong.
 
-**Last updated:** 2026-04-26  
+**Last updated:** 2026-04-28  
 **Owner:** Founder (changes require explicit decision, not v0 prompts)
 
 ---
