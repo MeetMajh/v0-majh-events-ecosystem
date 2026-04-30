@@ -293,9 +293,33 @@ vectors but are less immediately exploitable.
 
 ---
 
-### T-101: Wallet table consolidation and RLS lockdown (revised T-002)
-- **Status:** READY (TIER 0.5 — emergency)
+### T-101: Wallet RLS lockdown (interim)
+- **Status:** DONE 2026-04-30
 - **Severity:** Critical (audit C2)
+- **Completed:**
+  - T-101A: Explicit service-role-only writes on `wallets`. Table comment 
+    documents the intent and links to T-005 for proper consolidation.
+  - T-101B: Dropped permissive "System can manage wallets" policy on 
+    `user_wallets` that referenced deprecated staff_roles. Service-role-only 
+    writes now.
+  - T-101C: Deleted test data from both tables (4 rows from user_wallets, 
+    2 rows from wallets — confirmed test data by founder, no real money 
+    flowed through these balances).
+- **Verification:** pg_policies confirms only "Users can view own wallet" 
+  SELECT policy exists on each table. Both tables empty.
+- **Outstanding (deferred to T-005):**
+  - True consolidation of wallets and user_wallets into a single canonical 
+    representation
+  - Migration of code that uses user_wallets (4 files, 10 references) to 
+    use the canonical source
+  - Ledger as source of truth, wallet tables as derived views
+- **Notes for T-005 work:**
+  - The two tables have genuinely different schemas (wallets has 
+    freeze controls; user_wallets has earnings/withdrawals history)
+  - Consolidation is not a rename operation; it's a schema design exercise
+  - Current code reference counts: wallets (65 refs in 20 files), 
+    user_wallets (10 refs in 4 files)
+- **Severity:** Critical (audit C2) (PAST)
 - **Track:** A · **Effort:** L · **Where:** wallets, user_wallets, lib/wallet-actions.ts, 
   lib/player-payout-actions.ts, app/api/wallet/withdraw, app/api/stripe/webhook
 - **Why:** The `wallets` table has no RLS configuration in any migration file 
