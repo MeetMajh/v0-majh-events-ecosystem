@@ -264,7 +264,9 @@ vectors but are less immediately exploitable.
 ---
 
 ### T-100: Delete addFundsToWallet and audit all "use server" exports
-- **Status:** READY (TIER 0.5 — emergency)
+- **Status:** PARTIAL-DONE 2026-04-30
+  - Part A complete: addFundsToWallet deleted (commit f71dabb)
+  - Part B pending: full "use server" audit across the codebase
 - **Severity:** Critical (audit C1)
 - **Track:** A · **Effort:** S · **Where:** lib/wallet-actions.ts:302-365 + repo-wide grep
 - **Why:** The `addFundsToWallet` server action has no admin check and is callable by 
