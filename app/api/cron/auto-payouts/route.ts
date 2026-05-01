@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
+import { requireCronAuth } from "@/lib/cron-auth"
 
 export const runtime = "nodejs"
 export const maxDuration = 60
@@ -12,11 +13,8 @@ export const maxDuration = 60
  * 3. Create alerts for high-risk decisions
  */
 export async function GET(request: Request) {
-  // Verify cron secret
-  const authHeader = request.headers.get("authorization")
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  }
+  const authError = requireCronAuth(request)
+  if (authError) return authError
 
   const supabase = await createClient()
   const results = {

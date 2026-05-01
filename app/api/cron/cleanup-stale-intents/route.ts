@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { requireCronAuth } from "@/lib/cron-auth"
 
 // Service role client (bypasses RLS)
 const supabaseAdmin = createClient(
@@ -8,12 +9,10 @@ const supabaseAdmin = createClient(
 )
 
 export async function GET(req: NextRequest) {
+  const authError = requireCronAuth(req)
+  if (authError) return authError
+
   try {
-    // Security: Verify cron secret
-    const authHeader = req.headers.get("authorization")
-    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
 
     // Call the cleanup function
     const { data, error } = await supabaseAdmin.rpc("cleanup_stale_intents")

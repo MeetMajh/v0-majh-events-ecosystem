@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import Stripe from "stripe"
 import { createClient } from "@supabase/supabase-js"
+import { requireCronAuth } from "@/lib/cron-auth"
 
 // Initialize Stripe
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
@@ -34,12 +35,10 @@ interface ReconciliationResult {
 }
 
 export async function GET(req: NextRequest) {
+  const authError = requireCronAuth(req)
+  if (authError) return authError
+
   try {
-    // Security: Verify cron secret
-    const authHeader = req.headers.get("authorization")
-    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
 
     // 1. Fetch stale intents that need reconciliation
     const { data: intents, error: fetchError } = await supabaseAdmin.rpc(
