@@ -42,30 +42,24 @@ export async function createClient() {
  */
 export function createAdminClient() {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  
+
   if (!serviceRoleKey) {
-    console.warn('SUPABASE_SERVICE_ROLE_KEY is not set - admin operations will fail')
-    // Return a client that will fail gracefully instead of throwing
-    return createSupabaseClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false
-        }
-      }
+    throw new Error(
+      "SUPABASE_SERVICE_ROLE_KEY is not set. Admin operations require this " +
+      "environment variable. The application cannot operate without it. " +
+      "Set the variable in your environment configuration before running " +
+      "any code that calls createAdminClient()."
     )
   }
-  
+
   return createSupabaseClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     serviceRoleKey,
     {
       auth: {
         autoRefreshToken: false,
-        persistSession: false
-      }
+        persistSession: false,
+      },
     }
   )
 }
