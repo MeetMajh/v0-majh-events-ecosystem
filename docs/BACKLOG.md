@@ -510,7 +510,28 @@ vectors but are less immediately exploitable.
 ---
 
 ### T-108: Standardize cron auth across all 6 cron files
-- **Status:** READY (TIER 0.5 — emergency)
+- **Status:** DONE 2026-04-30 (PR #197, merged via v0)
+- **Severity:** Critical (audit C10)
+- **Completed:**
+  - Created lib/cron-auth.ts with requireCronAuth helper
+    accepting both Bearer CRON_SECRET (manual) and x-vercel-cron: 1 (production)
+  - All 6 cron route handlers (5 active in vercel.json + booking-emails dead handler)
+    now use the helper consistently
+- **Notes:**
+  - booking-emails cron remains unregistered in vercel.json. v0 added
+    requireCronAuth to it for consistency, but it's still dead code that 
+    won't run. Decision on its fate deferred — re-evaluate after May 16
+    or when catering module work resumes.
+  - Side effect of v0's parallel SQL work: T-001 partially reverted. The 
+    ML/treasury functions (process_auto_payouts, calculate_organizer_health_score, 
+    create_alert) were recreated to make auto-payouts cron functional. 
+    See SQL discussion in chat — formal decision deferred to post-May-16.
+- **Audit C10 status:** closed
+- **Outstanding (separate tasks):**
+  - T-107 (Stripe transfer idempotency keys) — process-payouts cron 
+    still creates transfers without idempotency keys
+  - Ledger-error-swallowed pattern in process-payouts:109-113 — known bug, 
+    deferred to financial spine work
 - **Severity:** Critical (audit C10)
 - **Track:** A · **Effort:** S · **Where:** all 6 app/api/cron/*/route.ts files + new 
   lib/cron-auth.ts helper
