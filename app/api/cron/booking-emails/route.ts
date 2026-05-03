@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { sendEventReminderEmail, sendPostEventFollowUpEmail } from "@/lib/booking-emails"
+import { requireCronAuth } from "@/lib/cron-auth"
 
 // Service role client for cron job (no auth context)
 const supabaseAdmin = createClient(
@@ -12,14 +13,8 @@ const supabaseAdmin = createClient(
 // Add to vercel.json: { "crons": [{ "path": "/api/cron/booking-emails", "schedule": "0 9 * * *" }] }
 
 export async function GET(req: Request) {
-  // Verify cron secret for security
-  const authHeader = req.headers.get("authorization")
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    // Allow local development without CRON_SECRET
-    if (process.env.NODE_ENV === "production" && process.env.CRON_SECRET) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-  }
+  const authError = requireCronAuth(req)
+  if (authError) return authError
 
   const results = {
     reminders: { sent: 0, failed: 0 },

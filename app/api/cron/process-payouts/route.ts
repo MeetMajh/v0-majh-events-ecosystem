@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import Stripe from "stripe"
 import { createClient } from "@supabase/supabase-js"
+import { requireCronAuth } from "@/lib/cron-auth"
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // PAYOUT EXECUTION WORKER
@@ -30,14 +31,10 @@ interface EligiblePayout {
 }
 
 export async function GET(req: NextRequest) {
+  const authError = requireCronAuth(req)
+  if (authError) return authError
+
   try {
-    // Auth guard: Vercel Cron or manual trigger with secret
-    const authHeader = req.headers.get("authorization")
-    const isVercelCron = req.headers.get("x-vercel-cron") === "1"
-    
-    if (!isVercelCron && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
 
     // 1. Fetch eligible payouts
     const { data: payouts, error: fetchError } = await supabase.rpc(
