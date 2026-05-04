@@ -19,7 +19,7 @@ as the migration.
 
 | Table | Status | Notes |
 |---|---|---|
-| profiles | KEEP | Move to `core.profiles`. Drop `is_admin`, `role` columns; derive from organization_members. |
+| profiles | KEEP | Move to `core.profiles`. Drop `is_admin`, `role` columns; derive from organization_members. | dd claim_status enum(claimed,shadow,merged), cardeio_player_id text, shadow_email text. Partial unique index on (shadow_email) WHERE claim_status = 'shadow' to prevent duplicate shadows. Discord OAuth claim flow merges shadow → claimed in a single transaction (see T-116 below). |
 | tenants | KEEP | Move to `core.tenants`. |
 | organization_members | KEEP | Move to `core.organization_members`. **Authoritative auth table.** |
 | organization_role_templates | KEEP | Move to `core.organization_role_templates`. |
@@ -125,10 +125,15 @@ as the migration.
 | Table | Status | Notes |
 |---|---|---|
 | broadcast_sessions | KEEP | Move to `broadcast.sessions`. **Canonical broadcast container.** |
-| broadcast_scenes | KEEP | Move to `broadcast.scenes`. |
-| broadcast_scene_items | KEEP | Move to `broadcast.scene_items`. |
+| broadcast_scenes | KEEP | Move to `broadcast.scenes`. Scene slots reference participants by predicate (role, slot, kind), NOT by hardcoded room names or participant IDs. This is what lets the same scene engine handle co-located events (May 16) and remote events (post-May 16 topologies B/C/D) without code changes.|
+| broadcast_scene_items | KEEP | Move to `broadcast.scene_items`. Scene slots reference participants by predicate (role, slot, kind), NOT by hardcoded room names or participant IDs. This is what lets the same scene engine handle co-located events (May 16) and remote events (post-May 16 topologies B/C/D) without code changes.d|
 | broadcast_sources | KEEP | Move to `broadcast.sources`. |
 | broadcast_outputs | KEEP | Move to `broadcast.outputs`. |
+|broadcast.broadcasts| NEW| Replaces ad-hoc per-match broadcast records. One row per match-being-streamed. Holds livekit_room_name, mux_live_stream_id, mux_playback_id, status. Supersedes broadcast_sessions for match-scoped broadcasts; broadcast_sessions retained for non-match broadcasts (solo streams, between-event content).
+broadcast.broadcast_participants |NEW | Who is in the LiveKit room and in what role. (broadcast_id, user_id) unique. Columns: role enum(player,caster,producer,observer), slot integer, joined_at, left_at. The slot field is independent of role — supports topologies with multiple casters, multiple observers, or per-player game-capture sources.
+broadcast.broadcast_sources |NEW | What media tracks each participant publishes. Columns: broadcast_participant_id, kind enum(face_cam,game_capture,mic,screen_share,venue_cam), livekit_track_sid, label, published_at, unpublished_at. The scene engine references slots by (role, slot, kind) predicates, never by topology-specific names.
+broadcast.egress_jobs |NEW | Tracks active LiveKit Egress sessions per broadcast. Columns: broadcast_id, livekit_egress_id, status enum(requested,active,stopping,stopped,failed), started_at, ended_at, last_error. Idempotency: at most one active row per broadcast, enforced by partial unique index.
+broadcast.broadcast_destinations | NEW | Per-broadcast (or per-tournament) third-party simulcast targets. Encrypted RTMP URL + stream key. Replaces the older multistream_destinations and stream_destinations tables marked CONSOLIDATE→broadcast_outputs in current SCHEMA.md. Decision needed: per-broadcast (caster reconfigures each match) or per-tournament (organizer configures once)? Decision: per-tournament with a per-broadcast override flag. 
 | stream_rooms | KEEP | Move to `broadcast.rooms`. |
 | stream_sessions | CONSOLIDATE→broadcast_sessions | Migrate, drop. |
 | stream_sources | CONSOLIDATE→broadcast_sources | Migrate, drop. Distinct from broadcast_sources only by feature, not concept. |
