@@ -29,6 +29,9 @@ The first paying customer is the Barbados convention in August 2026. The
 second is positioned as a tournament-and-streaming-software customer
 (Persona A). The architecture must serve both without code branching.
 
+For agents and contractors: MAJHEVENTS is a single-login, end-to-end product. Any flow that requires the user to open a separate desktop app, paste credentials between two tools, or "just use OBS for this part" is, by default, the wrong design. The platform composes its own broadcasts, runs its own scenes, calls its own clipping. We use Mux and LiveKit and Stripe and Discord as parts inside our engine, not just as places we send the user.
+
+
 ## 2. Hard architectural rules
 
 These do not change based on convenience.
@@ -185,8 +188,9 @@ dependencies.
 - **Auth**: Supabase Auth with Discord and Google OAuth providers
 - **Payments**: Stripe Connect (Express accounts for organizers); never
   handle card data directly
-- **Live video**: Mux primary (RTMP ingest, HLS playback, VOD, clips API);
-  LiveKit secondary (WebRTC for in-room player streams)
+- **Live video**: — composition stage: LiveKit for WebRTC ingest from participant browsers (players, casters, observers, producers), room state, and Room Composite Egress that renders the composed broadcast to RTMP. The MAJHEVENTS Caster Studio is the UI driving Egress; users never leave the platform to broadcast.
+Live video — distribution stage: Mux for ABR transcoding, HLS playback in the MAJHEVENTS player, VOD recording, clips API, and simulcast forwarding to third-party RTMP destinations (Twitch, YouTube, X/Twitter, Facebook).
+Pipeline: participant browsers → LiveKit room → LiveKit Egress (RTMP) → Mux Live Stream → {MAJHEVENTS player via HLS, simulcast targets, VOD asset, clips assets}.
 - **Object storage**: Vercel Blob (interim); migrate to Cloudflare R2 if
   storage costs justify
 - **Email**: Resend
@@ -363,6 +367,7 @@ explicitly not:
   buy F&B add-ons; it is not the system's default surface.
 - A CRM. The `catering.*` (`cb_*`) schema is a separate business that
   happens to share auth; it does not load for Barbados or platform tenants.
+- A platform that requires external broadcast software. The TO does not install OBS, Streamlabs, vMix, or any RTMP encoder to run a MAJHEVENTS event. Composition, switching, overlays, and multi-destination output happen inside the MAJHEVENTS UI, on MAJHEVENTS-controlled servers, through LiveKit Egress and Mux. If a future power-user wants to bring their own OBS, that is an additive integration in integrations.*, never the default path. Anyone proposing a feature that begins with "the user opens OBS" is proposing the wrong feature. 
 
 ### 8.1 Community surface — what we build, what we don't
 
@@ -460,4 +465,6 @@ they need to understand *why*.
   recognized: engineering, brand/experience, go-to-market. Sponsor pipeline, 
   audience acquisition, and cultural calibration added as explicit workstreams running 
   parallel to engineering.
-
+2026-05-04: LiveKit Egress promoted to a primary capability for live broadcasts. Reversal of the 2026-04-26 framing of LiveKit as "secondary, WebRTC-only."
+Composition runs on LiveKit Egress, not in the user's browser, not in OBS, not in any external tool. The platform's value proposition is one operating system, one login, end-to-end; telling the TO to install OBS reintroduces the tool-stitching problem the platform exists to eliminate. LiveKit Egress is purpose-built for server-side WebRTC-to-RTMP composition and bills per minute of composed output, which is acceptable for the audience-experience reasons. The original "Mux primary, LiveKit secondary" framing was a clean two-stage split that turned out to need a composition stage in the middle; that stage is LiveKit Egress. Both Mux and LiveKit are first-class.
+2026-05-04: Broadcast topology model is participant + source, not room-letter. Scenes reference media by (role, slot, kind) predicate so the same engine handles co-located events (May 16), remote casters, remote players sharing one game stream, and remote players with separate game-state captures + multiple audio inputs. Scene definitions are data; new topologies ship as new scenes, not as engine changes.
