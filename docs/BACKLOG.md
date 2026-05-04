@@ -714,6 +714,14 @@ of the policy rewrite work.
   4. Update all functions that INSERT into audit_log to match the canonical schema
 - **Acceptance:** audit_log table exists; INSERTs from existing functions succeed; 
   attempting UPDATE or DELETE raises an error.
+###   T-115: Carde.io CSV import + shadow profile creation. L.
+### T-116: Discord OAuth claim flow (shadow → claimed merge). L.
+### T-117: may16_payment_intents shim — explicitly interim, sunset after T-005 lands. M. Cross-references T-005, T-110.
+### T-118: LiveKit + Caster Studio + Egress wiring. XL. This is the single biggest piece of net-new code for May 16.
+### T-119: Mux Live Stream + simulcast targets + VOD asset wiring. M. Depends on T-118.
+### T-120: Manual clip capture from live broadcast or VOD via Mux clips API. M. Depends on T-119.
+### T-121: Discord webhook post on tournament completion (CSV + summary, idempotent). S.
+### T-122: /host page polish for streaming-platform pitch. S–M.
 ---
 
 ## TIER 2 — Tournament module (the core deliverable)
