@@ -151,3 +151,9 @@ This is the most common failure mode when iteratively tightening RLS.
 Always check pg_policies for existing policies before adding new ones.
 
 ## (Add new entries here as issues arise)
+For MAY 16th Tournament Event:
+Caster Studio not showing a participant. Check the participant's LiveKit publish status in their own browser console. Common cause: camera permission denied. Second most common: corporate / venue firewall blocking UDP — fall back to TURN over TCP/443 in the LiveKit token grants.
+Egress fails to start. Check egress_jobs.last_error. Most common: the egress render page returns a non-2xx for the signed token (token expired, or token doesn't grant Supabase access). Restart with a fresh token. Hard cap of 2 auto-retries; after that the Caster Studio shows a manual Retry.
+Mux Live Stream stuck in idle while LiveKit shows egress active. Wrong Mux ingest URL or wrong stream key in the egress request. Verify the StreamOutput URL in the LiveKit egress matches the Mux Live Stream's rtmp_server_url + stream_key.
+Simulcast target fails (Twitch or YouTube). The third-party stream key is wrong or expired. Mux marks the simulcast target with a status of errored; the broadcast continues to the other targets. The Caster Studio surfaces the error inline; organizer updates the key without stopping the broadcast.
+Discord post didn't fire. Check tournament_announcements for the row. If absent, the trigger didn't fire — manually fire via the "Mark complete + post" button. If present with status failed, check last_error (likely a 401 from Discord = revoked webhook URL) and re-post after fixing the URL.
