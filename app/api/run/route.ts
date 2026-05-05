@@ -1,14 +1,11 @@
 import { NextResponse } from "next/server";
+import { getSchema, getRLS } from "@/lib/supabase/introspection";
 
 export async function POST(req: Request) {
   const { task } = await req.json();
 
-  const context = await fetch("http://localhost:3000/api/ai/context", {
-    method: "POST",
-    body: JSON.stringify({
-      scope: ["db.schema", "rls"]
-    })
-  }).then(res => res.json());
+  const [schema, rls] = await Promise.all([getSchema(), getRLS()]);
+  const context = { schema, rls };
 
   const prompt = `
 You are the MAJH Architect.
