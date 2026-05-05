@@ -7,14 +7,17 @@ export default function Architect() {
   const [result, setResult] = useState("");
 
   const run = async () => {
-    const res = await fetch("/api/ai/run", {
-      method: "POST",
-      body: JSON.stringify({ task })
-    });
+  const res = await fetch("/api/ai/run", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ task })
+  });
 
-    const data = await res.json();
-    setResult(JSON.stringify(data.result, null, 2));
-  };
+  const data = await res.json();
+  setResult(JSON.stringify(data.result, null, 2));
+};
 
   return (
     <div className="p-6">
