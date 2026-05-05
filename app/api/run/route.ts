@@ -39,3 +39,22 @@ Plan, Code, Risks
 
   return NextResponse.json({ result: data });
 }
+// add this
+const schema = await getSchema();
+const rls = await getRLS();
+
+const systemContext = `
+You are the MAJH Architect.
+
+REAL SYSTEM DATA:
+Schema:
+${JSON.stringify(schema)}
+
+RLS:
+${JSON.stringify(rls)}
+
+RULES:
+- Do NOT assume anything
+- Use real system data
+- If unsure, request more data
+`;
