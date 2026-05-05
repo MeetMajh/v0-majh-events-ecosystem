@@ -80,7 +80,9 @@ OUTPUT FORMAT:
 
   const data = await res.json();
 
-  return NextResponse.json({
-    result: data.content
-  });
+  const output = data?.content?.[0]?.text || "No response";
+
+return NextResponse.json({
+  result: output
+});
 }
