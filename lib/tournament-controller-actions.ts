@@ -4,6 +4,7 @@ import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import { generateSwissPairings, calculateSwissRounds, type PairingPlayer } from "@/lib/pairing-algorithms"
+import { notifyTournamentRegistration } from "@/lib/notification-actions"
 
 // ── Types ──
 
@@ -1784,6 +1785,16 @@ export async function registerForTournament(
     return { error: error.message }
   }
 
+  // Send registration notification (non-blocking)
+  notifyTournamentRegistration({
+    userId: user.id,
+    tournamentId,
+    tournamentName: tournament.name,
+    tournamentSlug: tournament.slug,
+  }).catch((err) => {
+    console.error("[Registration] Notification error:", err)
+  })
+
   revalidatePath(`/esports/tournaments`)
   revalidatePath(`/dashboard/tournaments/${tournamentId}`)
   return { success: true, requiresPayment: registrationType === "paid" }
@@ -2777,7 +2788,7 @@ export async function addPlayerToTournament(tournamentId: string, email: string)
     // Check max participants
     const { data: tournament } = await supabase
       .from("tournaments")
-      .select("max_participants")
+      .select("max_participants, name, slug")
       .eq("id", tournamentId)
       .single()
 
@@ -2808,6 +2819,18 @@ export async function addPlayerToTournament(tournamentId: string, email: string)
 
     if (error) {
       return { error: `Failed to register player: ${error.message}` }
+    }
+
+    // Send registration notification to the player (non-blocking)
+    if (userId && tournament) {
+      notifyTournamentRegistration({
+        userId,
+        tournamentId,
+        tournamentName: tournament.name,
+        tournamentSlug: tournament.slug,
+      }).catch((err) => {
+        console.error("[Registration] Admin-add notification error:", err)
+      })
     }
 
     revalidatePath(`/dashboard/tournaments/${tournamentId}`)

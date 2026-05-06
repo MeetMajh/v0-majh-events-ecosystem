@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server"
 const EMAIL_WORTHY_TYPES = [
   "match_ready",
   "tournament_starting",
+  "tournament_registration",
   "staff_alert",
   "achievement_earned",
 ]
