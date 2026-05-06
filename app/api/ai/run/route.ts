@@ -1,21 +1,20 @@
-// /app/api/ai/run/route.ts
-import { NextResponse } from "next/server";
-import { getSchema, getRLS } from "@/lib/supabase/introspection";
+import { NextResponse } from "next/server"
+import { getSchema, getRLS } from "@/lib/supabase/introspection"
+import { requireAdmin } from "@/lib/auth/require-admin"
 
-// 🔬 Schema DNA builder
 function buildSchemaDNA(schema: any[]) {
   return schema.map((table: any) => ({
     name: table.table_name,
     columns: table.columns?.reduce((acc: any, col: any) => {
-      acc[col.column_name] = col.data_type;
-      return acc;
+      acc[col.column_name] = col.data_type
+      return acc
     }, {}) || {},
     relationships:
       table.foreign_keys?.map((fk: any) => ({
         from: fk.column,
         to: fk.references_table
       })) || []
-  }));
+  }))
 }
 
 function translateRLS(policies: any[]) {
@@ -24,20 +23,21 @@ function translateRLS(policies: any[]) {
     rule: p.qual?.includes("auth.uid()")
       ? "User owns this data"
       : "Custom policy"
-  }));
+  }))
 }
 
 export async function POST(req: Request) {
-  const { task } = await req.json();
+  const auth = await requireAdmin()
+  if ("error" in auth) return auth.error
 
-  // 🔐 Pull REAL system context
-  const rawSchema = await getSchema();
-  const rawRLS = await getRLS();
+  const { task } = await req.json()
 
-  const schemaDNA = buildSchemaDNA(rawSchema);
-  const rls = translateRLS(rawRLS);
+  const rawSchema = await getSchema()
+  const rawRLS = await getRLS()
 
-  // 🧠 Build controlled prompt
+  const schemaDNA = buildSchemaDNA(rawSchema)
+  const rls = translateRLS(rawRLS)
+
   const prompt = `
 You are the MAJH Architect.
 
@@ -63,9 +63,8 @@ OUTPUT FORMAT:
 2. Code
 3. Risks
 4. Required Env Vars (names only)
-`;
+`
 
-  // 🤖 Call :contentReference[oaicite:0]{index=0}
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -76,11 +75,11 @@ OUTPUT FORMAT:
       model: "claude-3-opus",
       messages: [{ role: "user", content: prompt }]
     })
-  });
+  })
 
-  const data = await res.json();
+  const data = await res.json()
 
   return NextResponse.json({
     result: data.content
-  });
+  })
 }
