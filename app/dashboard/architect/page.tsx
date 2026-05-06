@@ -7,26 +7,30 @@ export default function Architect() {
   const [result, setResult] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const run = async () => {
-    setLoading(true);
+ const run = async () => {
+  setLoading(true);
+  setResult("");
+  try {
+    const res = await fetch("/api/ai/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ task }),
+    });
 
-    try {
-      const res = await fetch("/api/ai/run", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ task })
-      });
+    const data = await res.json().catch(() => ({}));
 
-      const data = await res.json();
-      setResult(JSON.stringify(data.result, null, 2));
-    } catch (err) {
-      setResult("Error running architect");
+    if (!res.ok) {
+      setResult(`Error ${res.status}: ${data.error ?? res.statusText}`);
+      return;
     }
 
+    setResult(JSON.stringify(data.result ?? data, null, 2));
+  } catch (err: any) {
+    setResult(`Network error: ${err?.message ?? "Unknown error"}`);
+  } finally {
     setLoading(false);
-  };
+  }
+};
 
   return (
     <div className="p-6">
