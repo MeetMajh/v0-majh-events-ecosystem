@@ -1,4 +1,4 @@
-// app/dashboard/architect/architect-client.tsx
+// app/dashboard/architect/client.tsx
 "use client";
 import { useState } from "react";
 
