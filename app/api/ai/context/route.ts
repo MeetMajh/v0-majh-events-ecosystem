@@ -12,42 +12,70 @@ export async function POST(req: Request) {
   const auth = await requireAdmin()
   if ("error" in auth) return auth.error
 
-  const { scope } = await req.json()
+  try {
+    const { scope } = await req.json()
+    const response: Record<string, unknown> = {}
 
-  const response: any = {}
+    // Schema: normalize to client's expected shape (table_name, columns[].column_name, etc.)
+    let schemaForCounts: any[] = []
+    if (scope?.includes("db.schema") || scope?.includes("counts")) {
+      const rawSchema = await getSchema()
+      schemaForCounts = Array.isArray(rawSchema) ? rawSchema : []
 
-  if (scope.includes("db.schema")) {
-    response.schema = await getSchema()
-  }
+      if (scope?.includes("db.schema")) {
+        response.schema = schemaForCounts.map((t: any) => ({
+          table_name: t.table,
+          columns: (t.columns ?? []).map((c: any) => ({
+            column_name: c.name,
+            data_type: c.type,
+            is_nullable: c.nullable,
+          })),
+        }))
+      }
+    }
 
-  if (scope.includes("rls")) {
-    const raw = await getRLS()
-    response.rls = raw.map((p: any) => ({
-      table: p.tablename,
-      policyname: p.policyname,
-      cmd: p.cmd,
-      roles: p.roles,
-      permissive: p.permissive,
-      qual: p.qual,
-      with_check: p.with_check,
-    }))
-  }
+    // RLS: normalize to client's expected shape
+    if (scope?.includes("rls")) {
+      const raw = await getRLS()
+      response.rls = (raw ?? []).map((p: any) => ({
+        table: p.tablename,
+        policyname: p.policyname,
+        cmd: p.cmd,
+        roles: p.roles ?? [],
+        permissive: p.permissive,
+        qual: p.qual,
+        with_check: p.with_check,
+      }))
+    }
 
-  if (scope.includes("counts")) {
-    const schema = response.schema ?? await getSchema()
-    const tableNames: string[] = schema.map((t: any) => t.table_name)
+    // Counts: query each table individually
+    if (scope?.includes("counts")) {
+      const tableNames = schemaForCounts
+        .map((t: any) => t.table)
+        .filter((name: any) => typeof name === "string" && name.length > 0)
 
-    const counts: Record<string, number> = {}
-    await Promise.all(
-      tableNames.map(async (table) => {
-        const { count, error } = await supabaseAdmin
-          .from(table)
-          .select("*", { count: "exact", head: true })
-        counts[table] = error ? -1 : (count ?? 0)
-      })
+      const counts: Record<string, number> = {}
+      await Promise.all(
+        tableNames.map(async (table: string) => {
+          try {
+            const { count, error } = await supabaseAdmin
+              .from(table)
+              .select("*", { count: "exact", head: true })
+            counts[table] = error ? -1 : (count ?? 0)
+          } catch {
+            counts[table] = -1
+          }
+        })
+      )
+      response.counts = counts
+    }
+
+    return NextResponse.json(response)
+  } catch (err: any) {
+    console.error("[/api/ai/context] error:", err)
+    return NextResponse.json(
+      { error: err?.message ?? "Context fetch failed" },
+      { status: 500 }
     )
-    response.counts = counts
   }
-
-  return NextResponse.json(response)
 }
