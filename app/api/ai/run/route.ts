@@ -1,59 +1,85 @@
-// app/api/ai/run/route.ts
-import { NextResponse } from "next/server";
-import { getSchema, getRLS, getTableCounts } from "@/lib/supabase/introspection";
-import { requireAdmin } from "@/lib/auth/require-admin";
+import { NextResponse } from "next/server"
+import { getSchema, getRLS } from "@/lib/supabase/introspection"
+import { requireAdmin } from "@/lib/auth/require-admin"
 
 function buildSchemaDNA(schema: any[]) {
-  if (!Array.isArray(schema)) return { tables: 0, summary: "Schema not available" };
-  return {
-    tables: schema.length,
-    tableNames: schema.map((t: any) => t.table).sort(),
-    totalColumns: schema.reduce(
-      (sum: number, t: any) => sum + (t.columns?.length ?? 0),
-      0
-    ),
-  };
+  return schema.map((table: any) => ({
+    name: table.table_name,
+    columns: table.columns?.reduce((acc: any, col: any) => {
+      acc[col.column_name] = col.data_type
+      return acc
+    }, {}) || {},
+    relationships:
+      table.foreign_keys?.map((fk: any) => ({
+        from: fk.column,
+        to: fk.references_table
+      })) || []
+  }))
+}
+
+function translateRLS(policies: any[]) {
+  return policies.map((p: any) => ({
+    table: p.tablename,
+    rule: p.qual?.includes("auth.uid()")
+      ? "User owns this data"
+      : "Custom policy"
+  }))
 }
 
 export async function POST(req: Request) {
-  const auth = await requireAdmin();
-  if ("error" in auth) return auth.error;
+  const auth = await requireAdmin()
+  if ("error" in auth) return auth.error
 
-  try {
-    const { task } = await req.json();
-    const taskLower = (task ?? "").toLowerCase();
+  const { task } = await req.json()
 
-    const wantsSchema = !task || taskLower.includes("schema") || taskLower.includes("table");
-    const wantsRLS = taskLower.includes("rls") || taskLower.includes("polic") || taskLower.includes("security");
-    const wantsCounts = taskLower.includes("count") || taskLower.includes("rows");
-    const fetchAll = !wantsSchema && !wantsRLS && !wantsCounts;
+  const rawSchema = await getSchema()
+  const rawRLS = await getRLS()
 
-    const result: Record<string, unknown> = {
-      task: task ?? "(empty)",
-      timestamp: new Date().toISOString(),
-      user: auth.user.email,
-    };
+  const schemaDNA = buildSchemaDNA(rawSchema)
+  const rls = translateRLS(rawRLS)
 
-    if (wantsSchema || fetchAll) {
-      const schema = await getSchema();
-      result.schema = schema;
-      result.schemaDNA = buildSchemaDNA(schema as any[]);
-    }
+  const prompt = `
+You are the MAJH Architect.
 
-    if (wantsRLS || fetchAll) {
-      result.rls = await getRLS();
-    }
+REAL SYSTEM (SOURCE OF TRUTH):
+Schema:
+${JSON.stringify(schemaDNA, null, 2)}
 
-    if (wantsCounts || fetchAll) {
-      result.counts = await getTableCounts();
-    }
+RLS:
+${JSON.stringify(rls, null, 2)}
 
-    return NextResponse.json({ result });
-  } catch (err: any) {
-    console.error("[/api/ai/run] error:", err);
-    return NextResponse.json(
-      { error: err?.message ?? "Architect run failed" },
-      { status: 500 }
-    );
-  }
+STRICT RULES:
+- Do NOT recreate existing tables
+- Only extend current schema
+- Respect relationships
+- Respect RLS
+- If unsure, ask instead of assuming
+
+TASK:
+${task}
+
+OUTPUT FORMAT:
+1. Plan
+2. Code
+3. Risks
+4. Required Env Vars (names only)
+`
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": process.env.CLAUDE_API_KEY!,
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      model: "claude-3-opus",
+      messages: [{ role: "user", content: prompt }]
+    })
+  })
+
+  const data = await res.json()
+
+  return NextResponse.json({
+    result: data.content
+  })
 }

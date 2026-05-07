@@ -1,29 +1,53 @@
-import { NextResponse } from "next/server";
-import { getSchema, getRLS } from "@/lib/supabase/introspection";
-import { requireAdmin } from "@/lib/auth/require-admin";
+import { NextResponse } from "next/server"
+import { getSchema, getRLS } from "@/lib/supabase/introspection"
+import { createClient } from "@supabase/supabase-js"
+import { requireAdmin } from "@/lib/auth/require-admin"
+
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 export async function POST(req: Request) {
-  const auth = await requireAdmin();
-  if ("error" in auth) return auth.error;
+  const auth = await requireAdmin()
+  if ("error" in auth) return auth.error
 
-  const { scope } = await req.json();
-  const response: Record<string, unknown> = {};
+  const { scope } = await req.json()
 
-  if (scope?.includes("db.schema")) {
-    response.schema = await getSchema();
+  const response: any = {}
+
+  if (scope.includes("db.schema")) {
+    response.schema = await getSchema()
   }
 
-  if (scope?.includes("rls")) {
-    const raw = await getRLS();
-    response.rls = (raw ?? []).map((p: any) => ({
+  if (scope.includes("rls")) {
+    const raw = await getRLS()
+    response.rls = raw.map((p: any) => ({
       table: p.tablename,
-      policy: p.policyname,
-      command: p.cmd,
-      rule: p.qual?.includes("auth.uid()")
-        ? "User owns this data"
-        : "Custom policy",
-    }));
+      policyname: p.policyname,
+      cmd: p.cmd,
+      roles: p.roles,
+      permissive: p.permissive,
+      qual: p.qual,
+      with_check: p.with_check,
+    }))
   }
 
-  return NextResponse.json(response);
+  if (scope.includes("counts")) {
+    const schema = response.schema ?? await getSchema()
+    const tableNames: string[] = schema.map((t: any) => t.table_name)
+
+    const counts: Record<string, number> = {}
+    await Promise.all(
+      tableNames.map(async (table) => {
+        const { count, error } = await supabaseAdmin
+          .from(table)
+          .select("*", { count: "exact", head: true })
+        counts[table] = error ? -1 : (count ?? 0)
+      })
+    )
+    response.counts = counts
+  }
+
+  return NextResponse.json(response)
 }

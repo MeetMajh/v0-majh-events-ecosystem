@@ -1,7 +1,6 @@
-// lib/auth/require-admin.ts
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
-import { NextResponse } from "next/server";
+import { createServerClient } from "@supabase/ssr"
+import { cookies } from "next/headers"
+import { NextResponse } from "next/server"
 
 /**
  * Requires the request to come from an authenticated admin user.
@@ -11,11 +10,9 @@ import { NextResponse } from "next/server";
  * Admin status is determined by either:
  *   1. Email matching ADMIN_EMAILS env var (comma-separated), OR
  *   2. A row in the public.admins table with the user's id
- *
- * Either mechanism works — pick whichever fits your model.
  */
 export async function requireAdmin() {
-  const cookieStore = await cookies();
+  const cookieStore = await cookies()
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -23,26 +20,25 @@ export async function requireAdmin() {
     {
       cookies: {
         getAll() {
-          return cookieStore.getAll();
+          return cookieStore.getAll()
         },
         setAll(cookiesToSet) {
           try {
             cookiesToSet.forEach(({ name, value, options }) =>
               cookieStore.set(name, value, options)
-            );
+            )
           } catch {
             // Called from a Server Component — safe to ignore
           }
         },
       },
     }
-  );
+  )
 
-  // getUser() validates the JWT against Supabase Auth — do not trust getSession()
   const {
     data: { user },
     error,
-  } = await supabase.auth.getUser();
+  } = await supabase.auth.getUser()
 
   if (error || !user) {
     return {
@@ -50,30 +46,30 @@ export async function requireAdmin() {
         { error: "Unauthorized — sign in required" },
         { status: 401 }
       ),
-    };
-  }
-
-  // Path 1: env-var allowlist (simplest, good for solo founder)
-  const allowlist = (process.env.ADMIN_EMAILS ?? "")
-    .split(",")
-    .map((e) => e.trim().toLowerCase())
-    .filter(Boolean);
-
-  if (allowlist.length > 0 && user.email) {
-    if (allowlist.includes(user.email.toLowerCase())) {
-      return { user };
     }
   }
 
-  // Path 2: admins table lookup (better for multi-admin teams later)
+  // Path 1: env-var allowlist
+  const allowlist = (process.env.ADMIN_EMAILS ?? "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean)
+
+  if (allowlist.length > 0 && user.email) {
+    if (allowlist.includes(user.email.toLowerCase())) {
+      return { user }
+    }
+  }
+
+  // Path 2: admins table lookup
   const { data: adminRow } = await supabase
     .from("admins")
     .select("user_id")
     .eq("user_id", user.id)
-    .maybeSingle();
+    .maybeSingle()
 
   if (adminRow) {
-    return { user };
+    return { user }
   }
 
   return {
@@ -81,5 +77,5 @@ export async function requireAdmin() {
       { error: "Forbidden — admin access required" },
       { status: 403 }
     ),
-  };
+  }
 }

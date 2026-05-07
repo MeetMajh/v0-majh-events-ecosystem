@@ -13,6 +13,7 @@ export type NotificationType =
   | "match_starting"
   | "match_result"
   | "tournament_starting"
+  | "tournament_registration"
   | "round_starting"
   | "followed_player_live"
   | "followed_player_match"
@@ -486,6 +487,61 @@ export async function notifyNewClip(playerId: string, clipId: string, clipTitle:
     clipTitle,
     `/media/${clipId}`
   )
+}
+
+// Tournament registration confirmed
+export async function notifyTournamentRegistration(params: {
+  userId: string
+  tournamentId: string
+  tournamentName: string
+  tournamentSlug?: string
+}): Promise<{ success?: boolean; error?: string }> {
+  const supabase = await createClient()
+
+  // In-app + email notification
+  const result = await createNotification({
+    userId: params.userId,
+    type: "tournament_registration",
+    title: "Registration Confirmed",
+    body: `You are registered for ${params.tournamentName}. Good luck!`,
+    link: `/esports/tournaments/${params.tournamentSlug || params.tournamentId}`,
+    tournamentId: params.tournamentId,
+    icon: "trophy",
+    priority: "high",
+  })
+
+  // Discord webhook notification (if user has one linked)
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("discord_webhook_url, first_name, last_name")
+    .eq("id", params.userId)
+    .single()
+
+  if (profile?.discord_webhook_url) {
+    const displayName = [profile.first_name, profile.last_name].filter(Boolean).join(" ") || "Player"
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://majhevents.com"
+    const tournamentUrl = `${baseUrl}/esports/tournaments/${params.tournamentSlug || params.tournamentId}`
+
+    await fetch(profile.discord_webhook_url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        embeds: [
+          {
+            title: "Registration Confirmed",
+            description: `Hey ${displayName}, you are registered for **${params.tournamentName}**!\n\n[View Tournament](${tournamentUrl})`,
+            color: 0xeab308,
+            footer: { text: "MAJH EVENTS" },
+            timestamp: new Date().toISOString(),
+          },
+        ],
+      }),
+    }).catch((err) => {
+      console.error("[Notification] Discord webhook error:", err)
+    })
+  }
+
+  return result
 }
 
 // Trending match alert
