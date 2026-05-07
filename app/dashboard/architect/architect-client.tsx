@@ -1,234 +1,283 @@
-Auth Check for Your API Routes
-Good — your architect page exists and looks clean. The problem right now is that anyone on the internet who hits /api/ai/run or /api/ai/context gets your full schema and RLS rules. That's a recon goldmine for an attacker. Let's lock it down.
-I'll give you a layered approach: a reusable auth helper, then the updated routes, then a small change to your page so it actually authenticates correctly.
+"use client"
 
-Step 1: Create the Auth Helper
-Create lib/auth/require-admin.ts:
-typescript// lib/auth/require-admin.ts
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
-import { NextResponse } from "next/server";
+import { useState } from "react"
 
-/**
- * Requires the request to come from an authenticated admin user.
- * Returns either { user } on success or a NextResponse on failure
- * that the route handler should return immediately.
- *
- * Admin status is determined by either:
- *   1. Email matching ADMIN_EMAILS env var (comma-separated), OR
- *   2. A row in the public.admins table with the user's id
- *
- * Either mechanism works — pick whichever fits your model.
- */
-export async function requireAdmin() {
-  const cookieStore = await cookies();
+type Column = {
+  column_name: string
+  data_type: string
+  is_nullable: string
+}
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            );
-          } catch {
-            // Called from a Server Component — safe to ignore
-          }
-        },
-      },
+type TableSchema = {
+  table_name: string
+  columns: Column[]
+}
+
+type RLSPolicy = {
+  table: string
+  policyname: string
+  cmd: string
+  roles: string[]
+  permissive: string
+  qual: string | null
+  with_check: string | null
+}
+
+type ContextData = {
+  schema: TableSchema[]
+  rls: RLSPolicy[]
+  counts: Record<string, number>
+}
+
+function buildMarkdown(data: ContextData): string {
+  const lines: string[] = []
+
+  lines.push("# MAJHEVENTS Database Architect Context")
+  lines.push(`\n_Generated: ${new Date().toISOString()}_\n`)
+
+  // Schema
+  lines.push("---")
+  lines.push("## Schema\n")
+  for (const table of data.schema ?? []) {
+    lines.push(`### ${table.table_name}`)
+    lines.push("| Column | Type | Nullable |")
+    lines.push("|--------|------|----------|")
+    for (const col of table.columns ?? []) {
+      lines.push(`| ${col.column_name} | ${col.data_type} | ${col.is_nullable} |`)
     }
-  );
-
-  // getUser() validates the JWT against Supabase Auth — do not trust getSession()
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-
-  if (error || !user) {
-    return {
-      error: NextResponse.json(
-        { error: "Unauthorized — sign in required" },
-        { status: 401 }
-      ),
-    };
+    lines.push("")
   }
 
-  // Path 1: env-var allowlist (simplest, good for solo founder)
-  const allowlist = (process.env.ADMIN_EMAILS ?? "")
-    .split(",")
-    .map((e) => e.trim().toLowerCase())
-    .filter(Boolean);
-
-  if (allowlist.length > 0 && user.email) {
-    if (allowlist.includes(user.email.toLowerCase())) {
-      return { user };
+  // RLS
+  lines.push("---")
+  lines.push("## RLS Policies\n")
+  const grouped: Record<string, RLSPolicy[]> = {}
+  for (const p of data.rls ?? []) {
+    if (!grouped[p.table]) grouped[p.table] = []
+    grouped[p.table].push(p)
+  }
+  for (const [table, policies] of Object.entries(grouped)) {
+    lines.push(`### ${table}`)
+    for (const p of policies) {
+      lines.push(`- **${p.policyname}** (${p.cmd}, ${p.permissive}, roles: ${(p.roles ?? []).join(", ")})`)
+      if (p.qual) lines.push(`  - USING: \`${p.qual}\``)
+      if (p.with_check) lines.push(`  - WITH CHECK: \`${p.with_check}\``)
     }
+    lines.push("")
   }
 
-  // Path 2: admins table lookup (better for multi-admin teams later)
-  const { data: adminRow } = await supabase
-    .from("admins")
-    .select("user_id")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (adminRow) {
-    return { user };
+  // Counts
+  lines.push("---")
+  lines.push("## Row Counts\n")
+  lines.push("| Table | Rows |")
+  lines.push("|-------|------|")
+  for (const [table, count] of Object.entries(data.counts ?? {}).sort((a, b) => b[1] - a[1])) {
+    lines.push(`| ${table} | ${count === -1 ? "error" : count.toLocaleString()} |`)
   }
 
-  return {
-    error: NextResponse.json(
-      { error: "Forbidden — admin access required" },
-      { status: 403 }
-    ),
-  };
+  return lines.join("\n")
 }
-A few things to notice about this helper:
-It uses getUser() not getSession(). getSession() reads the cookie and trusts it; getUser() actually validates the JWT against Supabase. For an admin check, you want the validated version — always.
-It supports two admin mechanisms. The env-var allowlist is the fastest to set up: add ADMIN_EMAILS=you@majhevents.com to your Vercel env vars and you're done. The admins table is more flexible if you ever onboard a co-founder or contractor who needs architect access.
-
-Step 2: Optional — Create the Admins Table
-Skip this if you're going env-var-only. If you want the table approach, run in Supabase SQL editor:
-sqlcreate table if not exists public.admins (
-  user_id uuid primary key references auth.users(id) on delete cascade,
-  email text,
-  added_at timestamptz default now(),
-  added_by uuid references auth.users(id),
-  notes text
-);
-
-alter table public.admins enable row level security;
-
--- Only admins can read the admins table; nobody can write via API
--- (you add admins manually in SQL editor)
-create policy "admins can read admins"
-  on public.admins for select
-  using (auth.uid() in (select user_id from public.admins));
-
--- Seed yourself
-insert into public.admins (user_id, email, notes)
-values ('YOUR-AUTH-USER-UUID-HERE', 'you@majhevents.com', 'founder')
-on conflict (user_id) do nothing;
-You can find your auth user UUID in Supabase Dashboard → Authentication → Users.
-
-Step 3: Update Your API Routes
-app/api/ai/context/route.ts:
-typescriptimport { NextResponse } from "next/server";
-import { getSchema, getRLS } from "@/lib/supabase/introspection";
-import { requireAdmin } from "@/lib/auth/require-admin";
-
-export async function POST(req: Request) {
-  const auth = await requireAdmin();
-  if ("error" in auth) return auth.error;
-
-  const { scope } = await req.json();
-  const response: Record<string, unknown> = {};
-
-  if (scope?.includes("db.schema")) {
-    response.schema = await getSchema();
-  }
-
-  if (scope?.includes("rls")) {
-    const raw = await getRLS();
-    response.rls = (raw ?? []).map((p: any) => ({
-      table: p.tablename,
-      policy: p.policyname,
-      command: p.cmd,
-      rule: p.qual?.includes("auth.uid()")
-        ? "User owns this data"
-        : "Custom policy",
-    }));
-  }
-
-  return NextResponse.json(response);
-}
-app/api/ai/run/route.ts gets the same treatment — add the same two lines at the top of the handler:
-typescriptimport { NextResponse } from "next/server";
-import { getSchema, getRLS } from "@/lib/supabase/introspection";
-import { requireAdmin } from "@/lib/auth/require-admin";
-
-// ... your buildSchemaDNA function stays as-is ...
-
-export async function POST(req: Request) {
-  const auth = await requireAdmin();
-  if ("error" in auth) return auth.error;
-
-  // ... rest of your existing handler ...
-}
-
-Step 4: Protect the Architect Page Itself
-Right now, your page renders for anyone — the API will reject them, but they shouldn't even see the UI. Update app/dashboard/architect/page.tsx to gate at the page level:
-typescript// app/dashboard/architect/page.tsx
-import { redirect } from "next/navigation";
-import { requireAdmin } from "@/lib/auth/require-admin";
-import ArchitectClient from "./architect-client";
-
-export default async function ArchitectPage() {
-  const auth = await requireAdmin();
-  if ("error" in auth) {
-    redirect("/login?next=/dashboard/architect");
-  }
-  return <ArchitectClient />;
-}
-Then move your existing client code into app/dashboard/architect/architect-client.tsx:
-typescript// app/dashboard/architect/architect-client.tsx
-"use client";
-import { useState } from "react";
 
 export default function ArchitectClient() {
-  const [task, setTask] = useState("");
-  const [result, setResult] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [data, setData] = useState<ContextData | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+  const [activeTab, setActiveTab] = useState<"schema" | "rls" | "counts">("schema")
 
-  const run = async () => {
-    setLoading(true);
+  async function load() {
+    setLoading(true)
+    setError(null)
     try {
-      const res = await fetch("/api/ai/run", {
+      const res = await fetch("/api/ai/context", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ task }),
-      });
-      if (res.status === 401 || res.status === 403) {
-        setResult("Not authorized. Sign in as an admin.");
-        return;
-      }
-      const data = await res.json();
-      setResult(JSON.stringify(data.result ?? data, null, 2));
-    } catch {
-      setResult("Error running architect");
+        body: JSON.stringify({ scope: ["db.schema", "rls", "counts"] }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const json = await res.json()
+      setData(json)
+    } catch (e: any) {
+      setError(e.message)
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
+
+  async function copyMarkdown() {
+    if (!data) return
+    const md = buildMarkdown(data)
+    await navigator.clipboard.writeText(md)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const tabs = ["schema", "rls", "counts"] as const
 
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold mb-4">MAJH Architect OS</h1>
-      <textarea
-        value={task}
-        onChange={(e) => setTask(e.target.value)}
-        placeholder="What do you want to build?"
-        className="w-full h-40 border p-2 mb-4"
-      />
-      <button onClick={run} className="bg-black text-white px-4 py-2">
-        {loading ? "Running..." : "Run"}
-      </button>
-      <pre className="mt-4 bg-gray-100 p-4 whitespace-pre-wrap">{result}</pre>
+    <div>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-lg font-bold text-foreground">Database Snapshot</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">Schema, RLS policies, and row counts</p>
+        </div>
+        <div className="flex items-center gap-3">
+          {data && (
+            <button
+              onClick={copyMarkdown}
+              className="px-3 py-1.5 rounded text-xs font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
+            >
+              {copied ? "Copied!" : "Copy as Markdown"}
+            </button>
+          )}
+          <button
+            onClick={load}
+            disabled={loading}
+            className="px-3 py-1.5 rounded text-xs font-medium bg-secondary text-secondary-foreground hover:opacity-90 transition-opacity disabled:opacity-50"
+          >
+            {loading ? "Loading..." : data ? "Refresh" : "Load"}
+          </button>
+        </div>
+      </div>
+
+      {/* Error */}
+      {error && (
+        <div className="mb-4 px-3 py-2 rounded text-xs bg-destructive/10 border border-destructive/30 text-destructive">
+          {error}
+        </div>
+      )}
+
+      {/* Empty state */}
+      {!data && !loading && !error && (
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <p className="text-xs text-muted-foreground">No snapshot loaded yet.</p>
+        </div>
+      )}
+
+      {/* Loading */}
+      {loading && (
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <p className="text-xs text-muted-foreground">Querying database...</p>
+        </div>
+      )}
+
+      {/* Data */}
+      {data && (
+        <div>
+          {/* Summary */}
+          <div className="flex items-center gap-4 mb-4 px-3 py-2 rounded text-xs bg-muted/40 border border-border">
+            <span className="text-muted-foreground">
+              <span className="text-foreground font-semibold">{data.schema?.length ?? 0}</span> tables
+            </span>
+            <span className="text-muted-foreground">
+              <span className="text-foreground font-semibold">{data.rls?.length ?? 0}</span> policies
+            </span>
+          </div>
+
+          {/* Tabs */}
+          <div className="flex gap-1 mb-4 border-b border-border">
+            {tabs.map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors border-b-2 -mb-px ${
+                  activeTab === tab
+                    ? "border-primary text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {tab === "schema" ? "Schema" : tab === "rls" ? "RLS" : "Counts"}
+              </button>
+            ))}
+          </div>
+
+          {/* Schema tab */}
+          {activeTab === "schema" && (
+            <div className="space-y-3 max-h-96 overflow-y-auto">
+              {(data.schema ?? []).map((table) => (
+                <div key={table.table_name} className="rounded border border-border bg-muted/20 overflow-hidden text-xs">
+                  <div className="px-2 py-1.5 border-b border-border bg-muted/40 font-mono font-semibold">
+                    {table.table_name}
+                    <span className="ml-2 font-normal text-muted-foreground">({table.columns?.length ?? 0})</span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <tbody>
+                        {(table.columns ?? []).map((col) => (
+                          <tr key={col.column_name} className="border-t border-border hover:bg-muted/30">
+                            <td className="px-2 py-1 font-mono text-foreground">{col.column_name}</td>
+                            <td className="px-2 py-1 text-muted-foreground">{col.data_type}</td>
+                            <td className="px-2 py-1 text-muted-foreground text-right w-12">{col.is_nullable}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* RLS tab */}
+          {activeTab === "rls" && (
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {(() => {
+                const grouped: Record<string, RLSPolicy[]> = {}
+                for (const p of data.rls ?? []) {
+                  if (!grouped[p.table]) grouped[p.table] = []
+                  grouped[p.table].push(p)
+                }
+                return Object.entries(grouped).map(([table, policies]) => (
+                  <div key={table} className="rounded border border-border bg-muted/20 overflow-hidden">
+                    <div className="px-2 py-1 border-b border-border bg-muted/40 font-mono text-xs font-semibold">
+                      {table}
+                    </div>
+                    <div className="space-y-1 p-2">
+                      {policies.map((p) => (
+                        <div key={p.policyname} className="text-xs">
+                          <div className="font-mono font-semibold text-foreground mb-0.5">{p.policyname}</div>
+                          <div className="text-muted-foreground">
+                            <span className="inline-block px-1 py-0.5 rounded text-xs bg-primary/20 text-primary mr-1">
+                              {p.cmd}
+                            </span>
+                            {p.roles?.join(", ")}
+                          </div>
+                          {p.qual && (
+                            <div className="mt-0.5 font-mono text-muted-foreground text-xs bg-background/50 px-1 py-0.5 rounded break-all">
+                              {p.qual}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              })()}
+            </div>
+          )}
+
+          {/* Counts tab */}
+          {activeTab === "counts" && (
+            <div className="rounded border border-border bg-muted/20 overflow-hidden max-h-96 overflow-y-auto">
+              <table className="w-full text-xs">
+                <tbody>
+                  {Object.entries(data.counts ?? {})
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([table, count]) => (
+                      <tr key={table} className="border-b border-border hover:bg-muted/30">
+                        <td className="px-2 py-1 font-mono text-foreground">{table}</td>
+                        <td className="px-2 py-1 text-right text-muted-foreground font-mono">
+                          {count === -1 ? "error" : count.toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
     </div>
-  );
+  )
 }
-The split matters: server components do the auth check (so unauthorized users never get the JS bundle), client components handle interactivity.
-
-Step 5: Set the Env Var in Vercel
-In your Vercel project: Settings → Environment Variables → add ADMIN_EMAILS set to your email (or comma-separated list). Apply to Production, Preview, and Development. Redeploy.
-
-What You've Got Now
-After this, the security model is: unauthenticated requests get 401, authenticated non-admin requests get 403, only emails on your allowlist (or rows in admins) can hit the introspection endpoints or see the page. The service-role key never leaves the server. The endpoints return schema and policy metadata only — no row data, no PII, no secrets — exactly the constraint your engineering agent named.
-One thing I want to flag before you ship: make sure @supabase/ssr is in your package.json. If it isn't, run pnpm add @supabase/ssr first or the build will fail on the import. You can check by searching package.json in your repo for it.
-Want me to draft the /api/ai/run handler in full next, or the export-as-markdown button for the architect page that bridges output into Claude?
