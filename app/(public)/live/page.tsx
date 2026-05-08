@@ -274,7 +274,7 @@ export default function MajhLivePage() {
       // Fetch from user_streams (OBS/external software streams via Mux)
       const { data: userStreamsData, error: userStreamsError } = await supabase
         .from("user_streams")
-        .select("*, game:games(id, name, icon_url), user:profiles(id, first_name, last_name, avatar_url)")
+        .select("*, user:profiles(id, first_name, last_name, avatar_url)")
         .eq("status", "live")
         .eq("is_public", true)
         .order("total_views", { ascending: false })
@@ -377,7 +377,6 @@ export default function MajhLivePage() {
             is_live: stream.status === 'live',
             scheduled_at: stream.started_at,
             mux_playback_id: stream.mux_playback_id,
-            game: stream.game,
           }
         })
         combinedStreams.push(...convertedUserStreams)
