@@ -136,10 +136,13 @@ export default function GoLivePage() {
         // Optimistic update: populate SWR cache immediately so UI shows stream key right away
         await mutate({ data: result.data }, { revalidate: false })
         console.log("[v0] SWR cache updated optimistically with stream data")
+        console.log("[v0] Optimistic data shape:", JSON.stringify(result.data, null, 2))
         
         // Background sync: revalidate from server without disrupting the UI
-        mutate()
-        console.log("[v0] Background SWR refetch triggered")
+        const refetchedResponse = await mutate()
+        console.log("[v0] Background SWR refetch completed")
+        console.log("[v0] Refetched response:", JSON.stringify(refetchedResponse, null, 2))
+        console.log("[v0] Refetched data.data:", JSON.stringify(refetchedResponse?.data, null, 2))
       } else {
         // No error, no data - something unexpected
         setErrorMessage("Unexpected response - no data returned")
