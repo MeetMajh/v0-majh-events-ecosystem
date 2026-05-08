@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import useSWR from "swr"
 import { Button } from "@/components/ui/button"
@@ -70,6 +71,7 @@ import {
 const fetcher = (url: string) => fetch(url).then(res => res.json())
 
 export default function GoLivePage() {
+  const router = useRouter()
   const [showStreamKey, setShowStreamKey] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
@@ -132,8 +134,22 @@ export default function GoLivePage() {
       } else if (result.data) {
         console.log("[v0] Stream created successfully:", result.data)
         toast.success("Stream created! Your stream key is ready.")
-        // Force a full refetch from the server to ensure we get the new stream data
-        await mutate(undefined, { revalidate: true })
+        
+        // Option 1: Immediate state update (optimistic update)
+        // Populate SWR cache with the returned data to show UI instantly
+        await mutate({ data: result.data }, { revalidate: false })
+        console.log("[v0] SWR cache updated optimistically with stream data")
+        
+        // Option 2: Refresh server-side data to ensure sync
+        // Use router.refresh() to revalidate all server components on this page
+        router.refresh()
+        console.log("[v0] router.refresh() called to revalidate server-side data")
+        
+        // Then trigger a full SWR refetch to ensure we have the latest from the server
+        setTimeout(() => {
+          mutate()
+          console.log("[v0] SWR refetch triggered after server refresh")
+        }, 500)
       } else {
         // No error, no data - something unexpected
         setErrorMessage("Unexpected response - no data returned")
