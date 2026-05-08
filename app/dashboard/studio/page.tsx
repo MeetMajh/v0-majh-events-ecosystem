@@ -397,12 +397,12 @@ function MajhStudioContent() {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            title: streamSettings.title || "MAJH Studio Stream",
-            description: streamSettings.description,
-            is_public: streamSettings.visibility === "public",
-            game_id: streamSettings.gameId || null,
-            allow_chat: streamSettings.allowChat,
-            allow_clips: streamSettings.allowClips,
+            title: title || "MAJH Studio Stream",
+            description,
+            is_public: isPublic,
+            game_id: gameId || null,
+            allow_chat: allowChat,
+            allow_clips: allowClips,
           }),
         })
         const result = await res.json()
@@ -484,7 +484,7 @@ function MajhStudioContent() {
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Render
-  // ───────────────────────��─────────────────────────────────────────────────────
+  // ────────────────���──────��─────────────────────────────────────────────────────
 
   const hasAnyStream = screenStream || cameraStream
 
