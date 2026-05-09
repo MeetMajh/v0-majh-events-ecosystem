@@ -115,12 +115,6 @@ export default async function DashboardOverviewPage() {
             description="Explore the gaming lounge"
             href="/carbardmv"
           />
-          <QuickActionCard
-            icon={Monitor}
-            title="My Media"
-            description="Manage your uploaded content"
-            href="/dashboard/my-media"
-          />
         </div>
       </div>
 
