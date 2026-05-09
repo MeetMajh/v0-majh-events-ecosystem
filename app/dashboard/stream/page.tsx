@@ -172,10 +172,19 @@ export default function GoLivePage() {
     if (!stream) return
     
     try {
-      await endStream(stream.id)
-      mutate()
+      const result = await endStream(stream.id)
+      if (result.error) {
+        toast.error(result.error)
+        console.error("[v0] Error ending stream:", result.error)
+      } else {
+        toast.success("Stream ended successfully")
+        console.log("[v0] Stream ended:", result.data)
+        mutate()
+      }
     } catch (err) {
-      console.error("Error ending stream:", err)
+      const message = err instanceof Error ? err.message : "Failed to end stream"
+      toast.error(message)
+      console.error("[v0] Exception in handleEndStream:", err)
     }
   }
 
