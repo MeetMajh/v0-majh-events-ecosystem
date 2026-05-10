@@ -339,10 +339,7 @@ export async function getMyStreamSession() {
 
   const { data, error } = await supabase
     .from("stream_sessions")
-    .select(`
-      *,
-      game:games(id, name, icon_url)
-    `)
+    .select("*")
     .eq("user_id", user.id)
     .is("ended_at", null)
     .order("created_at", { ascending: false })
