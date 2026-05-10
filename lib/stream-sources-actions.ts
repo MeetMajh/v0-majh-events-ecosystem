@@ -338,6 +338,13 @@ export async function toggleStreamSourceActive(id: string, is_active: boolean) {
 }
 
 /**
+ * Toggle stream source live status (for public display)
+ */
+export async function toggleStreamSourceLive(id: string, is_live: boolean) {
+  return updateStreamSource(id, { is_live })
+}
+
+/**
  * Toggle stream source featured status
  */
 export async function toggleStreamSourceFeatured(id: string, is_featured: boolean) {
