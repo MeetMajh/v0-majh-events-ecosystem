@@ -28,5 +28,6 @@ CREATE POLICY "Only admins can insert stream sources" ON stream_sources
   );
 
 -- Public can still read stream sources
-CREATE POLICY IF NOT EXISTS "Anyone can view stream sources" ON stream_sources
+DROP POLICY IF EXISTS "Anyone can view stream sources" ON stream_sources;
+CREATE POLICY "Anyone can view stream sources" ON stream_sources
   FOR SELECT USING (true);
