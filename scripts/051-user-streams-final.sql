@@ -30,6 +30,9 @@ CREATE INDEX idx_user_streams_user_id ON user_streams(user_id);
 CREATE INDEX idx_user_streams_status ON user_streams(status);
 CREATE INDEX idx_user_streams_stream_key ON user_streams(stream_key);
 
+-- Add mux_playback_id for HLS playback generation
+ALTER TABLE user_streams ADD COLUMN IF NOT EXISTS mux_playback_id TEXT;
+
 -- Enable RLS
 ALTER TABLE user_streams ENABLE ROW LEVEL SECURITY;
 
@@ -52,3 +55,7 @@ CREATE POLICY "Users can delete own streams" ON user_streams
 -- Public can view live public streams
 CREATE POLICY "Public can view live streams" ON user_streams
   FOR SELECT USING (status = 'live' AND is_public = true);
+
+-- Public can view ended public streams (VOD viewing)
+CREATE POLICY "Public can view ended streams" ON user_streams
+  FOR SELECT USING (status = 'ended' AND is_public = true);
