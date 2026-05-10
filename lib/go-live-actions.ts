@@ -292,7 +292,7 @@ export async function manuallyStartStreaming(streamId: string) {
   // Generate playback URL from mux_playback_id
   let playbackUrl = stream.playback_url
   if (!playbackUrl && stream.mux_playback_id) {
-    playbackUrl = `https://image.mux.com/${stream.mux_playback_id}.m3u8`
+    playbackUrl = `https://stream.mux.com/${stream.mux_playback_id}.m3u8`
   }
 
   const { data, error } = await supabase
