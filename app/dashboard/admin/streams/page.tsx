@@ -66,6 +66,7 @@ import {
   deleteStreamSource,
   toggleStreamSourceActive,
   toggleStreamSourceFeatured,
+  toggleStreamSourceLive,
   type StreamSource,
   type CreateStreamSourceInput,
 } from "@/lib/stream-sources-actions"
@@ -166,6 +167,11 @@ export default function StreamSourcesAdminPage() {
 
   const handleToggleFeatured = async (id: string, current: boolean) => {
     await toggleStreamSourceFeatured(id, !current)
+    mutate()
+  }
+
+  const handleToggleLive = async (id: string, current: boolean) => {
+    await toggleStreamSourceLive(id, !current)
     mutate()
   }
 
@@ -507,6 +513,10 @@ export default function StreamSourcesAdminPage() {
                           <DropdownMenuItem onClick={() => handleToggleFeatured(source.id, source.is_featured)}>
                             <Star className="h-4 w-4 mr-2" />
                             {source.is_featured ? "Unfeature" : "Feature"}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleToggleLive(source.id, source.is_live)}>
+                            <Radio className="h-4 w-4 mr-2" />
+                            {source.is_live ? "Mark Offline" : "Mark Live"}
                           </DropdownMenuItem>
                           <DropdownMenuItem asChild>
                             <a href={source.channel_url} target="_blank" rel="noopener noreferrer">

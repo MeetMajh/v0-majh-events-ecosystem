@@ -234,7 +234,7 @@ export async function startStream(streamKey: string) {
 }
 
 /**
- * End streaming
+ * End streaming - Fetch VOD metadata from Mux and save playback URL
  */
 export async function endStream(streamId: string) {
   const supabase = await createClient()
@@ -244,11 +244,47 @@ export async function endStream(streamId: string) {
     return { error: "Unauthorized" }
   }
 
+  // Get the current stream to access Mux IDs
+  const { data: stream, error: fetchError } = await supabase
+    .from("user_streams")
+    .select("*")
+    .eq("id", streamId)
+    .eq("user_id", user.id)
+    .eq("status", "live")
+    .single()
+
+  if (fetchError || !stream) {
+    return { error: "Stream not found or not live" }
+  }
+
+  // Try to fetch Mux stream to get recording asset ID
+  let playbackId: string | null = null
+  if (stream.mux_stream_id) {
+    try {
+      const muxStream = await getMuxLiveStream(stream.mux_stream_id)
+      if (muxStream?.recent_asset_ids?.[0]) {
+        // Get the asset (VOD) that was recorded
+        const asset = await getMuxAsset(muxStream.recent_asset_ids[0])
+        if (asset?.playback_ids?.[0]?.id) {
+          playbackId = asset.playback_ids[0].id
+        }
+      }
+    } catch (err) {
+      console.error("[v0] Error fetching Mux asset:", err)
+      // Continue anyway - VOD will be saved with null playback_id
+    }
+  }
+
+  // Generate playback URL if we have a playback ID
+  const playbackUrl = playbackId ? `https://stream.mux.com/${playbackId}.m3u8` : null
+
   const { data, error } = await supabase
     .from("user_streams")
     .update({
       status: "ended",
       ended_at: new Date().toISOString(),
+      mux_playback_id: playbackId,
+      playback_url: playbackUrl,
       updated_at: new Date().toISOString(),
     })
     .eq("id", streamId)
@@ -262,6 +298,8 @@ export async function endStream(streamId: string) {
   }
 
   revalidatePath("/dashboard/stream")
+  revalidatePath("/live/vods")
+  revalidatePath("/dashboard/recordings")
   return { data: data as UserStream }
 }
 
