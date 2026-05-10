@@ -252,11 +252,12 @@ export default function MajhLivePage() {
       }
 
       // Fetch from stream_sources (admin-added external streams)
+      // Show ALL stream_sources, not just is_active=true, so admins can toggle visibility
       const { data: streamSourcesData, error: sourcesError } = await supabase
         .from("stream_sources")
         .select("*, game:games(id, name, icon_url)")
-        .eq("is_active", true)
         .order("is_live", { ascending: false })
+        .order("is_featured", { ascending: false })
         .order("priority", { ascending: false })
 
       console.log("[v0] stream_sources:", streamSourcesData?.length, "error:", sourcesError?.message)
@@ -337,6 +338,7 @@ export default function MajhLivePage() {
             channel_url: source.channel_url, // Keep original URL for fallback
             channel_name: source.title,
             is_live: source.is_live,
+            is_active: source.is_active, // Include active status
             scheduled_at: source.created_at,
           }
         })
