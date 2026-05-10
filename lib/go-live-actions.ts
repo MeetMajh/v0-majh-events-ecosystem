@@ -266,6 +266,155 @@ export async function endStream(streamId: string) {
 }
 
 /**
+ * Manually start streaming (user clicks "I'm streaming now" button)
+ * Used when OBS is already streaming but system hasn't detected it yet
+ */
+export async function manuallyStartStreaming(streamId: string) {
+  const supabase = await createClient()
+  
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    return { error: "Unauthorized" }
+  }
+
+  // Get the stream to access mux_playback_id
+  const { data: stream, error: fetchError } = await supabase
+    .from("user_streams")
+    .select("*")
+    .eq("id", streamId)
+    .eq("user_id", user.id)
+    .single()
+
+  if (fetchError || !stream) {
+    return { error: "Stream not found" }
+  }
+
+  // Generate playback URL from mux_playback_id
+  let playbackUrl = stream.playback_url
+  if (!playbackUrl && stream.mux_playback_id) {
+    playbackUrl = `https://image.mux.com/${stream.mux_playback_id}.m3u8`
+  }
+
+  const { data, error } = await supabase
+    .from("user_streams")
+    .update({
+      status: "live",
+      started_at: new Date().toISOString(),
+      playback_url: playbackUrl,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", streamId)
+    .eq("user_id", user.id)
+    .eq("status", "offline")
+    .select()
+    .single()
+
+  if (error) {
+    console.error("Error starting stream manually:", error)
+    return { error: error.message }
+  }
+
+  revalidatePath("/dashboard/stream")
+  return { data: data as UserStream }
+}
+
+/**
+ * Get live stream status (health check)
+ * Checks if stream is actually active on Mux
+ */
+export async function checkStreamStatus(streamId: string) {
+  const supabase = await createClient()
+  
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    return { error: "Unauthorized" }
+  }
+
+  const { data: stream, error: fetchError } = await supabase
+    .from("user_streams")
+    .select("*")
+    .eq("id", streamId)
+    .eq("user_id", user.id)
+    .single()
+
+  if (fetchError) {
+    return { error: fetchError.message }
+  }
+
+  // If stream is already live, return current status
+  if (stream.status === "live") {
+    return { 
+      data: { 
+        status: "live",
+        isActive: true,
+        started_at: stream.started_at
+      } 
+    }
+  }
+
+  // Check Mux API to see if stream is actually active
+  if (stream.mux_stream_id) {
+    try {
+      const muxResponse = await fetch(
+        `https://api.mux.com/video/v1/live_streams/${stream.mux_stream_id}`,
+        {
+          headers: {
+            Authorization: `Basic ${Buffer.from(
+              `${process.env.MUX_TOKEN_ID}:${process.env.MUX_TOKEN_SECRET}`
+            ).toString("base64")}`,
+          },
+        }
+      )
+
+      if (muxResponse.ok) {
+        const muxData = await muxResponse.json()
+        const isActive = muxData.data?.status === "active"
+
+        // If Mux says active but our DB says offline, auto-update
+        if (isActive && stream.status === "offline") {
+          const { data: updated } = await supabase
+            .from("user_streams")
+            .update({
+              status: "live",
+              started_at: new Date().toISOString(),
+            })
+            .eq("id", streamId)
+            .select()
+            .single()
+          
+          return { 
+            data: { 
+              status: "live",
+              isActive: true,
+              autoDetected: true,
+              started_at: updated?.started_at
+            } 
+          }
+        }
+
+        return { 
+          data: { 
+            status: stream.status,
+            isActive,
+            muxStatus: muxData.data?.status
+          } 
+        }
+      }
+    } catch (err) {
+      console.error("Error checking Mux stream status:", err)
+      // Fall through to return current status
+    }
+  }
+
+  return { 
+    data: { 
+      status: stream.status,
+      isActive: false
+    } 
+  }
+}
+
+/**
  * Regenerate stream key (security feature)
  */
 export async function regenerateStreamKey(streamId: string) {

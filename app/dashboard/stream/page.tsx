@@ -62,6 +62,8 @@ import {
   createStream,
   updateStream,
   endStream,
+  manuallyStartStreaming,
+  checkStreamStatus,
   regenerateStreamKey,
   type UserStream,
   type CreateStreamInput,
@@ -73,6 +75,8 @@ export default function GoLivePage() {
   const [showStreamKey, setShowStreamKey] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
+  const [isStarting, setIsStarting] = useState(false)
+  const [isChecking, setIsChecking] = useState(false)
   const [copiedKey, setCopiedKey] = useState(false)
   const [copiedUrl, setCopiedUrl] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -185,6 +189,61 @@ export default function GoLivePage() {
       const message = err instanceof Error ? err.message : "Failed to end stream"
       toast.error(message)
       console.error("[v0] Exception in handleEndStream:", err)
+    }
+  }
+
+  const handleStartStreaming = async () => {
+    if (!stream) return
+    
+    setIsStarting(true)
+    try {
+      const result = await manuallyStartStreaming(stream.id)
+      if (result.error) {
+        toast.error(result.error)
+        console.error("[v0] Error starting stream:", result.error)
+      } else {
+        toast.success("Stream is now live! You should see it on the Live Hub.")
+        console.log("[v0] Stream started:", result.data)
+        mutate()
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to start stream"
+      toast.error(message)
+      console.error("[v0] Exception in handleStartStreaming:", err)
+    } finally {
+      setIsStarting(false)
+    }
+  }
+
+  const handleCheckStatus = async () => {
+    if (!stream) return
+    
+    setIsChecking(true)
+    try {
+      const result = await checkStreamStatus(stream.id)
+      if (result.error) {
+        toast.error(result.error)
+        console.error("[v0] Error checking status:", result.error)
+      } else {
+        const status = result.data
+        if (status.autoDetected) {
+          toast.success("Stream detected and marked as live!")
+          console.log("[v0] Stream auto-detected:", status)
+        } else if (status.isActive) {
+          toast.info("Stream is active on Mux. Click 'Start Streaming' to mark it live on majhevents.")
+          console.log("[v0] Stream is active:", status)
+        } else {
+          toast.info("No active stream detected yet. Make sure OBS is streaming.")
+          console.log("[v0] No active stream:", status)
+        }
+        mutate()
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to check status"
+      toast.error(message)
+      console.error("[v0] Exception in handleCheckStatus:", err)
+    } finally {
+      setIsChecking(false)
     }
   }
 
@@ -623,6 +682,18 @@ export default function GoLivePage() {
               />
             </div>
 
+            {stream.status === "offline" && (
+              <div className="p-4 bg-warning/10 border border-warning/20 rounded-lg flex items-start gap-3 mb-4">
+                <AlertTriangle className="h-5 w-5 text-warning flex-shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-medium text-sm">Not Live Yet</p>
+                  <p className="text-xs text-muted-foreground">
+                    Start streaming from OBS or your streaming software using the credentials above. Then click &quot;I&apos;m Streaming Now&quot; to mark your stream as live on majhevents.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {stream.status === "live" && (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
@@ -645,6 +716,26 @@ export default function GoLivePage() {
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
+            )}
+
+            {stream.status === "offline" && (
+              <div className="flex flex-col gap-2 mt-4">
+                <Button 
+                  onClick={handleStartStreaming}
+                  disabled={isStarting}
+                  className="w-full bg-green-600 hover:bg-green-700"
+                >
+                  {isStarting ? "Starting..." : "I'm Streaming Now"}
+                </Button>
+                <Button 
+                  onClick={handleCheckStatus}
+                  disabled={isChecking}
+                  variant="outline"
+                  className="w-full"
+                >
+                  {isChecking ? "Checking..." : "Check Stream Status"}
+                </Button>
+              </div>
             )}
           </CardContent>
         </Card>
