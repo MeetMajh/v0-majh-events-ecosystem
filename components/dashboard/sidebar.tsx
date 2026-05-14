@@ -39,6 +39,7 @@ import {
   Video,
   TrendingUp,
   Activity,
+  Radio,
   Tv,
   Sliders,
   Ticket,
