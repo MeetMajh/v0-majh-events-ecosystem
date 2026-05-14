@@ -49,7 +49,6 @@ import {
 import {
   Plus,
   MoreHorizontal,
-  Radio,
   Tv,
   Eye,
   Trash2,
@@ -77,7 +76,7 @@ const PLATFORMS = [
   { value: "twitch", label: "Twitch", icon: Twitch },
   { value: "youtube", label: "YouTube", icon: Youtube },
   { value: "kick", label: "Kick", icon: Tv },
-  { value: "custom", label: "Custom RTMP", icon: Radio },
+  { value: "custom", label: "Custom RTMP", icon: Tv },
 ]
 
 const CATEGORIES = [
