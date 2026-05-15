@@ -130,6 +130,13 @@ export default function MajhLivePage() {
   const [activeTab, setActiveTab] = useState("trending")
   const [streamIndex, setStreamIndex] = useState(0)
 
+  // Sync streamIndex when liveStreams count changes
+  useEffect(() => {
+    if (streamIndex >= liveStreams.length && liveStreams.length > 0) {
+      setStreamIndex(Math.max(0, liveStreams.length - 1))
+    }
+  }, [liveStreams.length, streamIndex])
+
   useEffect(() => {
     const supabase = createClient()
     console.log("[v0] Live page fetchData starting...")
@@ -913,7 +920,16 @@ export default function MajhLivePage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => setStreamIndex(Math.max(0, streamIndex - 1))}
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            const newIndex = Math.max(0, streamIndex - 1)
+                            setStreamIndex(newIndex)
+                            if (liveStreams[newIndex]) {
+                              setSelectedStream(liveStreams[newIndex])
+                              setSelectedMatch(null)
+                            }
+                          }}
                           disabled={streamIndex === 0}
                           className="flex-shrink-0"
                         >
@@ -926,7 +942,16 @@ export default function MajhLivePage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => setStreamIndex(Math.min(liveStreams.length - 1, streamIndex + 1))}
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            const newIndex = Math.min(liveStreams.length - 1, streamIndex + 1)
+                            setStreamIndex(newIndex)
+                            if (liveStreams[newIndex]) {
+                              setSelectedStream(liveStreams[newIndex])
+                              setSelectedMatch(null)
+                            }
+                          }}
                           disabled={streamIndex === liveStreams.length - 1}
                           className="flex-shrink-0"
                         >
@@ -957,13 +982,19 @@ export default function MajhLivePage() {
                               </Badge>
                               <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <Button
+                                  type="button"
                                   variant="ghost"
                                   size="sm"
                                   className="h-6 w-6 p-0"
                                   onClick={(e) => {
+                                    e.preventDefault()
                                     e.stopPropagation()
                                     const shareUrl = `${typeof window !== 'undefined' ? window.location.origin : 'https://majhevents.com'}/watch/stream/${stream.id}`
-                                    navigator.clipboard.writeText(shareUrl)
+                                    navigator.clipboard.writeText(shareUrl).then(() => {
+                                      console.log("[v0] Share link copied:", shareUrl)
+                                    }).catch((err) => {
+                                      console.error("[v0] Failed to copy:", err)
+                                    })
                                   }}
                                   title="Copy share link"
                                 >
