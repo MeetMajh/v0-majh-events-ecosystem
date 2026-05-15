@@ -400,6 +400,30 @@ export default function StreamSourcesAdminPage() {
         </Card>
       </div>
 
+      {/* Bulk Actions */}
+      {sources.length > 0 && (
+        <div className="flex gap-2 flex-wrap">
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => sources.forEach(s => {
+              if (!s.is_live) handleToggleLive(s.id, s.is_live)
+            })}
+          >
+            Mark All Live
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => sources.forEach(s => {
+              if (s.is_live) handleToggleLive(s.id, s.is_live)
+            })}
+          >
+            Mark All Offline
+          </Button>
+        </div>
+      )}
+
       {/* Sources Table */}
       <Card>
         <CardHeader>
