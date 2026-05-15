@@ -206,6 +206,14 @@ function ClipRenderer({
         {item.description && (
           <p className="text-white/70 text-sm mt-1 line-clamp-2">{item.description}</p>
         )}
+        
+        {/* Engagement & View Count */}
+        <div className="flex items-center gap-3 mt-2 text-xs text-white/70">
+          <span className="flex items-center gap-1">
+            <Eye className="h-3 w-3" />
+            {item.view_count || 0} views
+          </span>
+        </div>
       </div>
 
       {/* Action buttons (right side) */}
@@ -223,10 +231,12 @@ function ClipRenderer({
           count={item.comment_count}
           onClick={() => {}}
         />
-        <ActionButton
-          icon={<Share2 className="h-7 w-7" />}
-          onClick={onShare}
-        />
+        <Link href={`/watch/clip/${item.id}`}>
+          <ActionButton
+            icon={<Share2 className="h-7 w-7" />}
+            onClick={onShare}
+          />
+        </Link>
         <button onClick={onToggleMute} className="text-white">
           {isMuted ? <VolumeX className="h-6 w-6" /> : <Volume2 className="h-6 w-6" />}
         </button>
