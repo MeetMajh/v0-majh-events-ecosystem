@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import { nanoid } from "nanoid"
-import { createMuxLiveStream, deleteMuxLiveStream } from "@/lib/mux"
+import { createMuxLiveStream, deleteMuxLiveStream, getMuxLiveStream, getMuxAsset } from "@/lib/mux"
 import { getActiveStreamingProvider, getPlaybackUrl } from "@/lib/streaming-config"
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -259,19 +259,42 @@ export async function endStream(streamId: string) {
 
   // Try to fetch Mux stream to get recording asset ID
   let playbackId: string | null = null
+  let assetId: string | null = null
+  
   if (stream.mux_stream_id) {
     try {
       const muxStream = await getMuxLiveStream(stream.mux_stream_id)
+      
       if (muxStream?.recent_asset_ids?.[0]) {
-        // Get the asset (VOD) that was recorded
-        const asset = await getMuxAsset(muxStream.recent_asset_ids[0])
-        if (asset?.playback_ids?.[0]?.id) {
-          playbackId = asset.playback_ids[0].id
+        assetId = muxStream.recent_asset_ids[0]
+        
+        // Retry logic - Mux may need time to process the asset
+        let retries = 0
+        let asset = null
+        
+        while (retries < 3 && !asset?.playback_ids?.[0]) {
+          try {
+            const { getMuxAsset } = await import("@/lib/mux")
+            asset = await getMuxAsset(assetId)
+            
+            if (asset?.playback_ids?.[0]?.id) {
+              playbackId = asset.playback_ids[0].id
+              break
+            }
+          } catch (err) {
+            console.log(`[v0] Mux asset fetch attempt ${retries + 1} failed, retrying...`)
+          }
+          
+          // Wait 2 seconds before retry
+          retries++
+          if (retries < 3) {
+            await new Promise(resolve => setTimeout(resolve, 2000))
+          }
         }
       }
     } catch (err) {
-      console.error("[v0] Error fetching Mux asset:", err)
-      // Continue anyway - VOD will be saved with null playback_id
+      console.error("[v0] Error fetching Mux stream or asset:", err)
+      // Continue anyway - VOD will be saved with null playback_id and can be filled later
     }
   }
 
@@ -285,6 +308,7 @@ export async function endStream(streamId: string) {
       ended_at: new Date().toISOString(),
       mux_playback_id: playbackId,
       playback_url: playbackUrl,
+      mux_asset_id: assetId,
       updated_at: new Date().toISOString(),
     })
     .eq("id", streamId)

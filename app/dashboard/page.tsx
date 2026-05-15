@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
-import { Gift, Gamepad2, CalendarCheck, Monitor, Play, Upload, Trophy, Clock, ChevronRight } from "lucide-react"
+import { Gift, Gamepad2, CalendarCheck, Monitor, Play, Upload, Trophy, Clock, ChevronRight, Radio } from "lucide-react"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -54,6 +54,25 @@ export default async function DashboardOverviewPage() {
       <div>
         <h2 className="text-2xl font-bold tracking-tight text-foreground">Dashboard</h2>
         <p className="text-muted-foreground">Your MAJH EVENTS command center</p>
+      </div>
+
+      {/* Go Live Hero Button */}
+      <div className="rounded-2xl bg-gradient-to-br from-primary/20 via-primary/10 to-transparent border-2 border-primary/50 p-8 overflow-hidden relative">
+        <div className="absolute inset-0 opacity-30">
+          <div className="absolute top-0 right-0 w-72 h-72 bg-primary/20 rounded-full blur-3xl"></div>
+        </div>
+        <div className="relative z-10 flex items-center justify-between">
+          <div>
+            <h3 className="text-2xl font-bold text-foreground mb-2">Ready to Stream?</h3>
+            <p className="text-muted-foreground mb-4">Go live and share your gameplay with the MAJH Events community</p>
+          </div>
+          <Button asChild size="lg" className="gap-2 px-8 py-6 text-base font-semibold">
+            <Link href="/dashboard/stream">
+              <Radio className="h-5 w-5" />
+              Go Live
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {/* Wallet & Points Cards */}
