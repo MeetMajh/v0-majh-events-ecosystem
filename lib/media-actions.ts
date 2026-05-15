@@ -347,6 +347,45 @@ export async function getMediaById(mediaId: string): Promise<PlayerMedia | null>
   return data as PlayerMedia | null
 }
 
+// ==========================================
+// VIEW TRACKING
+// ==========================================
+
+export async function trackClipView(clipId: string): Promise<{ success: boolean; views?: number; error?: string }> {
+  const supabase = await createClient()
+  
+  try {
+    // Get current view count
+    const { data: clip, error: fetchError } = await supabase
+      .from("player_media")
+      .select("view_count")
+      .eq("id", clipId)
+      .single()
+    
+    if (fetchError || !clip) {
+      return { success: false, error: "Clip not found" }
+    }
+    
+    // Increment view count
+    const newViews = (clip.view_count || 0) + 1
+    const { data: updated, error: updateError } = await supabase
+      .from("player_media")
+      .update({ view_count: newViews })
+      .eq("id", clipId)
+      .select("view_count")
+      .single()
+    
+    if (updateError) {
+      return { success: false, error: updateError.message }
+    }
+    
+    return { success: true, views: updated?.view_count || newViews }
+  } catch (error) {
+    console.error("[v0] Error tracking clip view:", error)
+    return { success: false, error: "Failed to track view" }
+  }
+}
+
 export async function getPlayerMedia(
   playerId: string,
   options?: {
