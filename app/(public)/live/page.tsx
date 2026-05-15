@@ -26,6 +26,7 @@ import {
   Flame,
   TrendingUp,
   ArrowUp,
+  Share2,
 } from "lucide-react"
 import { ReactionsBar, ReactionFeed } from "@/components/esports/reactions-bar"
 import { ViewerCount } from "@/components/esports/viewer-presence"
