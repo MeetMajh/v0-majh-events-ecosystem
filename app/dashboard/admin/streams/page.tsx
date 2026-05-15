@@ -402,28 +402,47 @@ export default function StreamSourcesAdminPage() {
       </div>
 
       {/* Bulk Actions */}
-      {sources.length > 0 && (
-        <div className="flex gap-2 flex-wrap">
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={() => sources.forEach(s => {
-              if (!s.is_live) handleToggleLive(s.id, s.is_live)
-            })}
-          >
-            Mark All Live
-          </Button>
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={() => sources.forEach(s => {
-              if (s.is_live) handleToggleLive(s.id, s.is_live)
-            })}
-          >
-            Mark All Offline
-          </Button>
-        </div>
-      )}
+      <div className="flex gap-2 flex-wrap">
+        <Button 
+          variant="outline" 
+          size="sm"
+          onClick={() => sources.forEach(s => {
+            if (!s.is_live) handleToggleLive(s.id, s.is_live)
+          })}
+        >
+          Mark All Live
+        </Button>
+        <Button 
+          variant="outline" 
+          size="sm"
+          onClick={() => sources.forEach(s => {
+            if (s.is_live) handleToggleLive(s.id, s.is_live)
+          })}
+        >
+          Mark All Offline
+        </Button>
+        <Button 
+          variant="default" 
+          size="sm"
+          onClick={async () => {
+            try {
+              const response = await fetch('/api/admin/import-mux-assets')
+              const result = await response.json()
+              if (result.success) {
+                alert(`Successfully imported ${result.imported_count} VODs from Mux!`)
+                window.location.reload()
+              } else {
+                alert('Failed to import Mux assets')
+              }
+            } catch (error) {
+              alert('Error importing Mux assets')
+              console.error(error)
+            }
+          }}
+        >
+          Import Mux VODs
+        </Button>
+      </div>
 
       {/* Sources Table */}
       <Card>
