@@ -127,6 +127,7 @@ export default function MajhLivePage() {
   const [selectedMatch, setSelectedMatch] = useState<FeatureMatch | null>(null)
   const [selectedStream, setSelectedStream] = useState<Stream | null>(null)
   const [activeTab, setActiveTab] = useState("trending")
+  const [streamIndex, setStreamIndex] = useState(0)
 
   useEffect(() => {
     const supabase = createClient()
@@ -905,31 +906,79 @@ export default function MajhLivePage() {
 
                 <TabsContent value="streams" className="mt-4 space-y-2">
                   {liveStreams.length > 0 ? (
-                    liveStreams.map((stream) => (
-                      <button
-                        key={stream.id}
-                        onClick={() => {
-                          setSelectedStream(stream)
-                          setSelectedMatch(null) // Clear match selection when selecting a stream
-                        }}
-                        className={cn(
-                          "block w-full text-left rounded-xl border bg-card p-3 transition-all hover:border-primary/50",
-                          selectedStream?.id === stream.id ? "border-primary ring-1 ring-primary" : "border-border"
-                        )}
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <Badge className="bg-destructive/10 text-destructive border-destructive/30 text-xs">
-                            <span className="mr-1 h-1.5 w-1.5 rounded-full bg-destructive animate-pulse" />
-                            LIVE
-                          </Badge>
-                          <Badge variant="outline" className="text-xs capitalize">{stream.platform}</Badge>
-                        </div>
-                        <h4 className="font-semibold text-foreground">{stream.title}</h4>
-                        {stream.channel_name && (
-                          <p className="mt-1 text-xs text-muted-foreground">{stream.channel_name}</p>
-                        )}
-                      </button>
-                    ))
+                    <>
+                      {/* Navigation Controls */}
+                      <div className="flex items-center justify-between gap-2 mb-4 p-2 bg-card/50 rounded-lg border border-border">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setStreamIndex(Math.max(0, streamIndex - 1))}
+                          disabled={streamIndex === 0}
+                          className="flex-shrink-0"
+                        >
+                          <ChevronRight className="h-4 w-4 rotate-180" />
+                          Previous
+                        </Button>
+                        <span className="text-xs text-muted-foreground text-center flex-1">
+                          Stream {streamIndex + 1} of {liveStreams.length}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setStreamIndex(Math.min(liveStreams.length - 1, streamIndex + 1))}
+                          disabled={streamIndex === liveStreams.length - 1}
+                          className="flex-shrink-0"
+                        >
+                          Next
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
+
+                      {/* Stream List */}
+                      <div className="space-y-2">
+                        {liveStreams.map((stream, index) => (
+                          <button
+                            key={stream.id}
+                            onClick={() => {
+                              setSelectedStream(stream)
+                              setStreamIndex(index)
+                              setSelectedMatch(null)
+                            }}
+                            className={cn(
+                              "w-full text-left rounded-xl border bg-card p-3 transition-all hover:border-primary/50 group",
+                              selectedStream?.id === stream.id ? "border-primary ring-1 ring-primary" : "border-border"
+                            )}
+                          >
+                            <div className="flex items-center justify-between mb-2">
+                              <Badge className="bg-destructive/10 text-destructive border-destructive/30 text-xs">
+                                <span className="mr-1 h-1.5 w-1.5 rounded-full bg-destructive animate-pulse" />
+                                LIVE
+                              </Badge>
+                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    const shareUrl = `${typeof window !== 'undefined' ? window.location.origin : 'https://majhevents.com'}/watch/stream/${stream.id}`
+                                    navigator.clipboard.writeText(shareUrl)
+                                  }}
+                                  title="Copy share link"
+                                >
+                                  <Share2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                              <Badge variant="outline" className="text-xs capitalize">{stream.platform}</Badge>
+                            </div>
+                            <h4 className="font-semibold text-foreground">{stream.title}</h4>
+                            {stream.channel_name && (
+                              <p className="mt-1 text-xs text-muted-foreground">{stream.channel_name}</p>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    </>
                   ) : (
                     <div className="rounded-xl border border-dashed border-border p-6 text-center">
                       <Tv className="mx-auto mb-2 h-8 w-8 text-muted-foreground/30" />
