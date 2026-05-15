@@ -130,6 +130,9 @@ export default function MajhLivePage() {
   const [activeTab, setActiveTab] = useState("trending")
   const [streamIndex, setStreamIndex] = useState(0)
 
+  // Compute liveStreams early so it's available for all effects
+  const liveStreams = streams.filter((s) => s.is_live)
+
   // Sync streamIndex when liveStreams count changes
   useEffect(() => {
     if (streamIndex >= liveStreams.length && liveStreams.length > 0) {
@@ -439,7 +442,6 @@ export default function MajhLivePage() {
     }
   }, [])
 
-  const liveStreams = streams.filter((s) => s.is_live)
   const hasLiveContent = featureMatches.length > 0 || liveTournaments.length > 0 || liveStreams.length > 0
 
   return (
