@@ -11,14 +11,22 @@ export default async function CreateTournamentPage() {
 
   if (!user) redirect("/auth/login")
 
-  // Check authorization
+  // Check authorization - staff role OR profile role
   const { data: staffRole } = await supabase
     .from("staff_roles")
     .select("role")
     .eq("user_id", user.id)
     .single()
 
-  const canOrganize = staffRole && ["owner", "manager", "organizer"].includes(staffRole.role)
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single()
+
+  const staffAllowed = staffRole && ["owner", "manager", "organizer"].includes(staffRole.role)
+  const profileAllowed = profile && ["admin", "organizer", "owner"].includes(profile.role ?? "")
+  const canOrganize = staffAllowed || profileAllowed
 
   if (!canOrganize) {
     redirect("/dashboard/tournaments")

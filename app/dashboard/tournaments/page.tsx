@@ -25,14 +25,22 @@ export default async function TournamentsDashboardPage() {
 
   if (!user) redirect("/auth/login")
 
-  // Check if user can organize tournaments
+  // Check if user can organize tournaments (staff_roles OR profiles.role)
   const { data: staffRole } = await supabase
     .from("staff_roles")
     .select("role")
     .eq("user_id", user.id)
     .single()
 
-  const canOrganize = staffRole && ["owner", "manager", "organizer"].includes(staffRole.role)
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single()
+
+  const staffAllowed = staffRole && ["owner", "manager", "organizer"].includes(staffRole.role)
+  const profileAllowed = profile && ["admin", "organizer", "owner"].includes(profile.role ?? "")
+  const canOrganize = staffAllowed || profileAllowed
 
   // Get tournaments user has created or has TO access to
   const { data: tournaments } = await supabase

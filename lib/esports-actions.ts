@@ -145,15 +145,25 @@ export async function createTournament(formData: FormData) {
     return { error: "You must be logged in to create a tournament" }
   }
   
-  // Check staff role or organizer permissions
+  // Check staff role or profile role for organizer permissions
   const { data: staffRole } = await supabase
     .from("staff_roles")
     .select("role")
     .eq("user_id", user.id)
     .single()
   
-  const allowedRoles = ["owner", "manager", "organizer"]
-  if (!staffRole || !allowedRoles.includes(staffRole.role)) {
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single()
+
+  const allowedStaffRoles = ["owner", "manager", "organizer"]
+  const allowedProfileRoles = ["admin", "organizer", "owner"]
+  const staffAllowed = staffRole && allowedStaffRoles.includes(staffRole.role)
+  const profileAllowed = profile && allowedProfileRoles.includes(profile.role ?? "")
+  
+  if (!staffAllowed && !profileAllowed) {
     return { error: "You don't have permission to create tournaments. Required role: owner, manager, or organizer" }
   }
   
