@@ -5,7 +5,7 @@
 CREATE TABLE IF NOT EXISTS role_requests (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  current_role TEXT,
+  requested_from_role TEXT,
   requested_role TEXT NOT NULL,
   reason TEXT,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'denied')),

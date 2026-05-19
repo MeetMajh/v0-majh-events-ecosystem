@@ -40,7 +40,7 @@ export async function submitRoleRequest(requestedRole: string, reason: string) {
     .from('role_requests')
     .insert({
       user_id: user.id,
-      current_role: profile?.role || null,
+      requested_from_role: profile?.role || null,
       requested_role: requestedRole,
       reason: reason,
       status: 'pending',
