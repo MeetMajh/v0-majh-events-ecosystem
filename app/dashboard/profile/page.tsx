@@ -1,6 +1,8 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { ProfileForm } from "@/components/dashboard/profile-form"
+import { RoleRequestDialog } from "@/components/dashboard/role-request-dialog"
+import { Badge } from "@/components/ui/badge"
 
 export const metadata = { title: "Profile" }
 
@@ -37,6 +39,37 @@ export default async function ProfilePage(props: {
           <p className="text-sm text-primary">Profile updated successfully.</p>
         </div>
       )}
+
+      {/* Role Display and Request Section */}
+      <div className="rounded-lg border border-border bg-card p-6">
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <h3 className="text-lg font-semibold text-foreground">Account Role</h3>
+            <div className="flex items-center gap-3">
+              {profile?.role ? (
+                <>
+                  <Badge variant="secondary" className="text-base capitalize">
+                    {profile.role}
+                  </Badge>
+                  <p className="text-sm text-muted-foreground">
+                    You currently have the <strong>{profile.role}</strong> role.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <Badge variant="outline" className="text-base">
+                    No Role
+                  </Badge>
+                  <p className="text-sm text-muted-foreground">
+                    You don't have a role assigned yet. Request one to unlock features.
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
+          <RoleRequestDialog currentRole={profile?.role || null} />
+        </div>
+      </div>
 
       <ProfileForm
         profile={{
