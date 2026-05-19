@@ -194,3 +194,79 @@ export async function denyRoleRequest(requestId: string, reason: string) {
 
   return { success: true }
 }
+
+// Admin direct role assignment (no request needed)
+export async function assignProfileRole(targetUserId: string, newRole: string) {
+  const cookieStore = await cookies()
+  const supabase = createClient(cookieStore)
+
+  // Verify admin privileges
+  const {
+    data: { user: currentUser },
+  } = await supabase.auth.getUser()
+
+  if (!currentUser) {
+    return { error: 'Not authenticated' }
+  }
+
+  // Check if current user is admin/owner/organizer
+  const { data: adminProfile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', currentUser.id)
+    .single()
+
+  const { data: adminStaffRole } = await supabase
+    .from('staff_roles')
+    .select('role')
+    .eq('user_id', currentUser.id)
+    .single()
+
+  const profileAllowed = adminProfile && ['admin', 'owner', 'organizer'].includes(adminProfile.role ?? "")
+  const staffAllowed = adminStaffRole && ['owner', 'manager', 'organizer'].includes(adminStaffRole.role)
+
+  if (!profileAllowed && !staffAllowed) {
+    return { error: 'You do not have permission to assign roles' }
+  }
+
+  // Get the target user's current profile
+  const { data: targetProfile } = await supabase
+    .from('profiles')
+    .select('id, role')
+    .eq('id', targetUserId)
+    .single()
+
+  if (!targetProfile) {
+    return { error: 'User profile not found' }
+  }
+
+  const previousRole = targetProfile.role
+
+  // Update the user's profile role
+  const { error: profileError } = await supabase
+    .from('profiles')
+    .update({ role: newRole })
+    .eq('id', targetUserId)
+
+  if (profileError) {
+    return { error: profileError.message }
+  }
+
+  // Log the role assignment (optional - for audit trail)
+  try {
+    await supabase.from('role_assignments_audit').insert({
+      admin_id: currentUser.id,
+      user_id: targetUserId,
+      previous_role: previousRole,
+      new_role: newRole,
+      created_at: new Date().toISOString(),
+    })
+  } catch {
+    // Audit log is optional, don't fail if it doesn't exist
+  }
+
+  return { 
+    success: true,
+    message: `Role updated from ${previousRole || 'none'} to ${newRole}`
+  }
+}

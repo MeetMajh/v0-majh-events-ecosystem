@@ -1,6 +1,7 @@
 import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { requireRole } from "@/lib/roles"
 import { createUserManually, deleteUser, assignStaffRole } from "@/lib/admin-actions"
+import { AssignProfileRoleDialog } from "@/components/admin/assign-profile-role-dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -271,7 +272,8 @@ export default async function UsersAdminPage({
               <th className="px-4 py-3 text-left font-medium text-muted-foreground">User</th>
               <th className="px-4 py-3 text-left font-medium text-muted-foreground hidden md:table-cell">Email</th>
               <th className="px-4 py-3 text-center font-medium text-muted-foreground">Status</th>
-              <th className="px-4 py-3 text-center font-medium text-muted-foreground hidden sm:table-cell">Role</th>
+              <th className="px-4 py-3 text-center font-medium text-muted-foreground hidden sm:table-cell">Staff Role</th>
+              <th className="px-4 py-3 text-center font-medium text-muted-foreground hidden sm:table-cell">Profile Role</th>
               <th className="px-4 py-3 text-left font-medium text-muted-foreground hidden lg:table-cell">Joined</th>
               <th className="px-4 py-3 text-left font-medium text-muted-foreground hidden lg:table-cell">Last Active</th>
               <th className="px-4 py-3 text-right font-medium text-muted-foreground">Actions</th>
@@ -324,6 +326,15 @@ export default async function UsersAdminPage({
                       <span className="text-xs text-muted-foreground">—</span>
                     )}
                   </td>
+                  <td className="px-4 py-3 text-center hidden sm:table-cell">
+                    {user.profile?.role ? (
+                      <Badge variant="secondary" className="capitalize text-xs">
+                        {user.profile.role}
+                      </Badge>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-muted-foreground hidden lg:table-cell">
                     <div className="flex items-center gap-1 text-xs">
                       <Calendar className="h-3 w-3" />
@@ -340,17 +351,24 @@ export default async function UsersAdminPage({
                     )}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <form action={deleteUser}>
-                      <input type="hidden" name="user_id" value={user.id} />
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="text-destructive hover:text-destructive"
-                        title="Delete user"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </form>
+                    <div className="flex items-center justify-end gap-2">
+                      <AssignProfileRoleDialog
+                        userId={user.id}
+                        userName={name || user.email || 'User'}
+                        currentRole={user.profile?.role || null}
+                      />
+                      <form action={deleteUser}>
+                        <input type="hidden" name="user_id" value={user.id} />
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="text-destructive hover:text-destructive"
+                          title="Delete user"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </form>
+                    </div>
                   </td>
                 </tr>
               )
