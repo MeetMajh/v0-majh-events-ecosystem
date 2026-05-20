@@ -92,19 +92,24 @@ Broadcast Studio UI (organizer browser)
    - Select tournament/event
    - Choose 1-4 player streams from active participants
    - Define layout (template: 1v1, 1v2, 2v2, commentary)
+   - **NEW: Add commentary/secondary audio input (commentator mic)**
+   - **NEW: Configure mute controls per player (independent of player's personal stream)**
    - Press "Start Broadcast"
 
 2. **Studio system:**
-   - Create `broadcast-{eventId}` room
+   - Create `broadcast-{eventId}` room with commentary track
    - Load composite participant (WebRTC canvas encoder)
    - Subscribe to 4 player rooms (fetch tracks)
-   - Compose onto canvas in real-time
+   - Compose onto canvas in real-time (video + commentary audio)
+   - **NEW: Support co-organizer joins (multiple organizers can adjust layout/overlays/mutes simultaneously)**
    - Publish composed stream back to broadcast room
 
 3. **Viewer joins broadcast:**
    - Join as subscriber to `broadcast-{eventId}`
-   - Receive composed video + commentary audio
+   - Receive composed video + commentary audio (+ player mute state)
    - See low-latency broadcast (~100-200ms)
+   - **NEW: Interactive elements - double-tap any video element (player 1/2, scoreboard, ads) to bring forward**
+   - **NEW: Mobile/tablet optimized - user controls their view focus**
 
 ---
 
@@ -225,8 +230,57 @@ CREATE TABLE broadcast_inputs (
   broadcast_id UUID NOT NULL REFERENCES broadcasts(id) ON DELETE CASCADE,
   player_stream_id UUID NOT NULL REFERENCES user_streams(id),
   input_position INT CHECK (input_position BETWEEN 1 AND 4),
+  is_muted BOOLEAN DEFAULT FALSE,            -- Mute this player's audio in broadcast (doesn't affect player's stream)
+  commentary_volume FLOAT DEFAULT 1.0,       -- Commentary audio level (0.0-1.0)
   started_at TIMESTAMPTZ,
   ended_at TIMESTAMPTZ
+);
+```
+
+### `broadcast_overlays` (NEW - for dynamic overlay insertion)
+
+```sql
+CREATE TABLE broadcast_overlays (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  broadcast_id UUID NOT NULL REFERENCES broadcasts(id) ON DELETE CASCADE,
+  overlay_type TEXT CHECK (overlay_type IN ('sponsor_logo', 'raffle', 'ad', 'scoreboard', 'custom')),
+  position_x INT,
+  position_y INT,
+  width INT,
+  height INT,
+  content_url TEXT,                          -- Image/video URL for overlay
+  start_time TIMESTAMPTZ,
+  end_time TIMESTAMPTZ,
+  z_index INT DEFAULT 10,                    -- Layer ordering
+  created_by UUID REFERENCES auth.users(id)
+);
+```
+
+### `broadcast_engagement_metrics` (NEW - track viewer interactions)
+
+```sql
+CREATE TABLE broadcast_engagement_metrics (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  broadcast_id UUID NOT NULL REFERENCES broadcasts(id),
+  viewer_id UUID REFERENCES auth.users(id),  -- NULL for anonymous viewers
+  element_type TEXT,                         -- 'player_1', 'player_2', 'ad', 'scoreboard', etc.
+  tap_count INT DEFAULT 0,
+  total_view_time_seconds INT,
+  last_interacted_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+```
+
+### `broadcast_replays` (NEW - for replay/rewind functionality)
+
+```sql
+CREATE TABLE broadcast_replays (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  broadcast_id UUID NOT NULL REFERENCES broadcasts(id),
+  replay_start_time TIMESTAMPTZ,             -- Segment start in broadcast timeline
+  replay_end_time TIMESTAMPTZ,               -- Segment end (e.g., last 5-10 minutes)
+  replay_url TEXT,                           -- HLS playlist for replay segment
+  created_at TIMESTAMPTZ DEFAULT now()
 );
 ```
 
@@ -312,6 +366,7 @@ If archived to Glacier after 30 days: **-$0.03** (net $3.18, amortized)
 - [ ] Create LiveKit account + environment config
 - [ ] Add `livekit_room_name` to `user_streams` (migration)
 - [ ] Create `broadcasts`, `broadcast_inputs`, `broadcast_recordings` tables
+- [ ] **NEW:** Create `broadcast_overlays`, `broadcast_engagement_metrics`, `broadcast_replays` tables
 - [ ] Build `/api/livekit/rooms` endpoints (create/delete rooms)
 
 ### Phase 2: Player Streaming (Weeks 3-4)
@@ -324,19 +379,126 @@ If archived to Glacier after 30 days: **-$0.03** (net $3.18, amortized)
 - [ ] Build broadcast creation UI (`/dashboard/broadcast/create`)
 - [ ] Implement composite participant server (WebRTC canvas encoding)
 - [ ] Build broadcast scene editor (drag-drop layout)
+- [ ] **NEW:** Add secondary audio input (commentary mic)
+- [ ] **NEW:** Add per-player mute controls
+- [ ] **NEW:** Implement co-organizer join (multiple editors simultaneous)
 - [ ] Implement egress job orchestration
 
-### Phase 4: Egress & Multistream (Weeks 7-8)
+### Phase 4: Broadcast Viewer Features (Weeks 7-8)
+- [ ] **NEW:** Interactive element system (double-tap to bring forward)
+- [ ] **NEW:** Mobile/tablet gesture controls
+- [ ] **NEW:** Dynamic overlay insertion system
+- [ ] **NEW:** Broadcast replay/rewind functionality (5-10 min clip, speed control)
 - [ ] Integrate LiveKit egress API
 - [ ] Implement multistream output (Twitch/YouTube RTMP)
+
+### Phase 5: Analytics & Engagement (Weeks 9-10)
+- [ ] Track viewer engagement metrics (interaction rate per element)
+- [ ] Build broadcast analytics dashboard
 - [ ] Set up VOD storage pipeline (Blob + cold archive)
 - [ ] Create broadcast VOD viewer page
 
-### Phase 5: Polish & Testing (Weeks 9-10)
+### Phase 6: Polish & Testing (Weeks 11-12)
 - [ ] Add failover logic (Mux fallback if LiveKit unavailable)
 - [ ] Performance tuning (composite frame rate, bitrate optimization)
 - [ ] Load testing (concurrent streams, viewer scale)
-- [ ] Analytics dashboard
+- [ ] VR readiness assessment (WebXR compatibility)
+
+---
+
+## Feature Specifications
+
+### Secondary Audio (Commentary) Input
+
+```
+Broadcast Studio Audio Mix:
+├─ Player 1 Audio Track (with mute toggle)
+├─ Player 2 Audio Track (with mute toggle)
+├─ Player 3 Audio Track (with mute toggle)
+├─ Player 4 Audio Track (with mute toggle)
+├─ Commentary/Narrator Audio Track (fixed input)
+│  └─ Volume slider (0-100%)
+└─ Output: Mixed audio to composite room
+    (Mutes on broadcast do NOT affect player's personal stream)
+```
+
+### Co-Organizer Broadcast Management
+
+```
+Broadcast Studio Room:
+├─ Primary Organizer (creator)
+├─ Secondary Organizer (co-manager)
+│  ├─ Can adjust layout in real-time
+│  ├─ Can toggle player mutes
+│  ├─ Can insert overlays
+│  └─ Can adjust commentary volume
+└─ Audit log: Who made what change at T=...
+```
+
+### Interactive Broadcast Elements (Mobile-First)
+
+```
+Viewer Interaction Model:
+├─ Double-tap Player 1 Box → Expands to fullscreen (PiP of other elements)
+├─ Double-tap Scoreboard → Fullscreen scoreboard + smaller player feeds
+├─ Double-tap Ad/Sponsor → Fullscreen ad overlay
+├─ Swipe/pan → Switch between bookmarked elements
+├─ Pinch → Zoom + reposition elements
+└─ Engagement Metrics:
+   └─ Track: tap count per element, total view duration per element, conversion (clicks to sponsor link)
+```
+
+### Broadcast Replay & Rewind
+
+```
+Viewer Controls:
+├─ "Rewind 5 minutes" button → Jump to T-5:00 in broadcast timeline
+├─ Playback speed control (0.5x, 1x, 1.5x, 2x)
+├─ Picture-in-Picture mode:
+│  ├─ Main: Replay clip playing at desired speed
+│  └─ Corner: Live broadcast continues in PiP
+└─ Timeline scrubber: Jump to any point in broadcast history
+```
+
+### Dynamic Overlay System
+
+```
+Overlay Types:
+├─ Sponsor Logo (static image, configurable size/position)
+├─ Raffle/Giveaway (animated prompt, CTA button)
+├─ Ad (video or image, timed insertion)
+├─ Scoreboard (dynamic data, real-time updates from tournament)
+├─ Custom (user-uploaded graphic)
+└─ Scheduling:
+   ├─ Absolute time: Show overlay at HH:MM:SS
+   ├─ Relative time: Show overlay at T+10 minutes into broadcast
+   └─ Event-triggered: Show overlay when player scores / match ends
+```
+
+### Engagement Metrics Dashboard
+
+```
+Per-Broadcast Analytics:
+├─ Total viewers (peak, average)
+├─ Element interaction breakdown:
+│  ├─ Player 1 screen: 45% interaction rate, avg 3.2 taps per viewer
+│  ├─ Player 2 screen: 38% interaction rate
+│  ├─ Scoreboard: 67% interaction rate
+│  ├─ Ad 1: 12% tap-through rate (clicks to sponsor link)
+│  └─ Raffle prompt: 23% CTA click rate
+├─ Engagement heatmap (timeline: when did most interactions occur)
+└─ Viewership path: How many viewers watched Player1 → Scoreboard → Ad?
+```
+
+### VR Readiness (Future)
+
+```
+Architecture allows future WebXR integration:
+├─ 360° camera support (player POV broadcast)
+├─ Spatial audio (3D audio field for immersive experience)
+├─ Hand gesture controls (replace tap/swipe with VR gestures)
+└─ Multiplayer VR rooms (viewers in shared virtual stadium)
+```
 
 ---
 
@@ -384,10 +546,27 @@ If archived to Glacier after 30 days: **-$0.03** (net $3.18, amortized)
 
 ## Open Questions
 
-1. **Commentary Input:** Should broadcast accept secondary audio input (commentator mic) or remix from existing sources?
-2. **Co-streaming:** Should two organizers be able to co-manage a broadcast simultaneously?
-3. **Replay/Rewind:** Should broadcast support live replay of last 5-10 minutes?
-4. **Graphics Overlay:** Should system support dynamic overlay insertion (sponsor logos, etc.)?
+1. **Commentary Input:** ✅ Should broadcast accept secondary audio input (commentator mic) or remix from existing sources?
+   - **ANSWER:** Yes. Secondary audio input + ability to mute/unmute individual player feeds independently (mute on broadcast does not affect player's personal stream)
+
+2. **Co-streaming:** ✅ Should two organizers be able to co-manage a broadcast simultaneously?
+   - **ANSWER:** Yes. Multiple organizers (e.g., Trinidad vs Barbados) should co-manage single broadcast room
+
+3. **Replay/Rewind:** ✅ Should broadcast support live replay of last 5-10 minutes?
+   - **ANSWER:** Yes. Picture-in-picture rewind capability with playback speed control (1.5x, 2x)
+
+4. **Graphics Overlay:** ✅ Should system support dynamic overlay insertion (sponsor logos, etc.)?
+   - **ANSWER:** Yes. Dynamic overlay insertion for sponsors, logos, brand deals, raffles, ads. Full overlay system required.
+
+5. **Mobile-First Interactivity:** Should viewers be able to interact with broadcast elements?
+   - **ANSWER:** YES. Critical for user engagement:
+     - Double-tap to bring forward any broadcast element (player 1/2/3/4, commentary, ads, scoreboard)
+     - User determines area of focus while broadcast plays
+     - Engagement metrics tied to interaction rate per element
+     - Mobile/tablet primary experience
+
+6. **VR Consideration:** Platform should support VR viewing/participation in future?
+   - **ANSWER:** Yes. Architecture should allow VR implementation as future phase (WebXR integration)
 
 ---
 
