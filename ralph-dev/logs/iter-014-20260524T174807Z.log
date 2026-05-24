@@ -1,0 +1,8 @@
+Done — iter 15 complete. Stopping per Ralph loop convention. (Task tool reminder N/A: state tracked via STATE.md/PROGRESS.md.)
+
+**Summary:**
+- Fixed `app/api/v1/tickets/check-in/route.ts` — applied iter-13/14 caller-alignment recipe to 13 api-response helper drift errors (8 × TS2559 dropped redundant status args; 4 × TS2345 remapped legacy names `permission_denied`→`authorization_error`, `database_error`→`internal_error`; 1 × TS2554 at line 61 rewrote 5-arg `apiError` call as raw `NextResponse.json` to preserve `code: "check_in_failed"` AND the `checked_in_at` metadata bag).
+- **Bonus runtime bug fix smuggled under the type fix:** the line-61 legacy call was serving HTTP 200 with no metadata (the helper had no `STATUS_CODES["check_in_failed"]` entry and silently dropped the 4th/5th args). The rewrite restores 400 status AND the metadata.
+- tsc: 283 → 270 (13 eliminated, zero new). Diff: 14 lines deleted, 1 added (the 1 added is a `user_id` TS2339 line-shift from raw `NextResponse.json` adding lines).
+- 3 errors remain in this file: `ApiAuthResult.user_id` shape drift (lines 38/50/117), deferred per "one root cause per iter" — recommended iter-16 sweep batches them with the 1 sibling in `events/route.ts:158`.
+- STATE.md + PROGRESS.md updated. No ACCEPTANCE boxes flipped (Phase 3 aggregate; 270 errors still to go). No `BLOCKED:` or `PLAN_DRIFT:` markers.

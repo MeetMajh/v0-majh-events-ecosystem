@@ -1,0 +1,1211 @@
+# MAJHEVENTS Backlog — Priority Queue
+
+**Status:** Living document. Update task status as you work.  
+**Rule:** Always work from READY, never from BLOCKED.
+
+## How to use this document
+
+1. Scan READY tasks. Pick one that fits your time and energy.
+2. Mark it IN-FLIGHT with timestamp + brief note when you start.
+3. When done, mark DONE and check what newly became READY.
+4. Calling an audible? Look at the dependency graph and surface the cost.
+5. Stuck? Mark IN-FLIGHT-BLOCKED with what you need.
+
+## Track legend
+- **A — Foundation** (security, financial spine, schema consolidation): focus work, hand-written SQL, multi-hour blocks
+- **B — Modules** (UI, server actions, features): v0-friendly, small, parallel
+- **C — Discovery** (Barbados specifics, partner conversations, integration testing): waiting-on-others
+
+## Effort legend
+- **XS** — under 30 min
+- **S** — 30 min to 2 hours
+- **M** — half a day (2–4 hours focused)
+- **L** — full day (4–8 hours)
+- **XL** — multi-day
+
+---
+
+## TIER 0 — Triage (do first, ungates everything else)
+
+### T-001: Drop fictional ML/treasury layer
+- **Status:** READY
+- **Track:** A · **Effort:** XS · **Where:** Supabase SQL editor
+- **Blocks:** T-005, T-012
+- **Why:** The functions reference tables that don't exist; first call will throw. Fictional layer misleads future planning.
+- **The work:**
+```sql
+  DROP FUNCTION IF EXISTS get_investor_reports(uuid, integer);
+  DROP FUNCTION IF EXISTS generate_financial_report(uuid, text, date, date);
+  DROP FUNCTION IF EXISTS get_treasury_history(uuid, integer);
+  DROP FUNCTION IF EXISTS check_treasury_rules(uuid);
+  DROP FUNCTION IF EXISTS capture_treasury_snapshot(uuid);
+  DROP FUNCTION IF EXISTS ml_score_payout_risk(uuid);
+  DROP FUNCTION IF EXISTS compute_ml_features(uuid);
+  DROP TABLE IF EXISTS organizer_cohorts;
+  DROP TABLE IF EXISTS financial_reports;
+  DROP TABLE IF EXISTS treasury_actions;
+  DROP TABLE IF EXISTS treasury_rules;
+  DROP TABLE IF EXISTS treasury_snapshots;
+  DROP TABLE IF EXISTS ml_scoring_history;
+  DROP TABLE IF EXISTS ml_feature_store;
+  DROP TABLE IF EXISTS ml_models;
+```
+- **Acceptance:** `\dt ml_*` and `\dt treasury_*` return nothing.
+
+### T-002: Wallet RLS lockdown (SUPERSEDED by T-101)
+- **Status:** SUPERSEDED-BY T-101 (TIER 0.5)
+- **Notes:** This task was originally scoped before we understood the dual-wallet 
+  situation. The audit (2026-04-28) confirmed that `wallets` has no RLS configuration 
+  in any migration and is used by the Stripe webhook for actual money flow IN, while 
+  `user_wallets` is parallel and used for money OUT. The proper consolidation work is 
+  in T-101. The original T-002 should not be executed standalone.
+### T-002: Enable RLS on `wallets` (or drop it)
+- **Status:** READY (refer to T-002: Wallet RLS lockdown (SUPERSEDED by T-101)
+- **Track:** A · **Effort:** XS · **Where:** SQL editor
+- **Blocks:** T-018
+- **Why:** Currently world-readable. Wallet balances exposed to any authenticated user.
+- **Decision needed first:** Is `wallets` or `user_wallets` the canonical table? Audit usage. If `user_wallets` is canonical, just drop `wallets` after migrating any rows. If `wallets` is canonical, enable RLS:
+```sql
+  ALTER TABLE public.wallets ENABLE ROW LEVEL SECURITY;
+  CREATE POLICY "users_view_own_wallet" ON public.wallets
+    FOR SELECT USING (auth.uid() = user_id);
+  CREATE POLICY "staff_view_all_wallets" ON public.wallets
+    FOR SELECT USING (
+      EXISTS (SELECT 1 FROM organization_members
+              WHERE user_id = auth.uid()
+                AND role_key IN ('owner','admin','finance')
+                AND is_active = true)
+    );
+  REVOKE INSERT, UPDATE, DELETE ON public.wallets FROM authenticated;
+```
+- **Acceptance:** `SET ROLE authenticated; SELECT * FROM wallets;` returns only the current user's row. INSERT fails.
+
+### T-003: Enable RLS on tournament-integrity tables
+- **Status:** DONE 2026-04-27
+- **Scope correction (vs original task description):** RLS was already 
+  enabled on all 8 tables. Pre-flight audit revealed:
+  - 4 tables (matches, players, registrations, round_pairings) already 
+    had appropriate policies; left alone (matches/players/registrations 
+    slated for DROP via T-010/T-020 anyway)
+  - 4 tables (brackets, bracket_nodes, pools, pool_members) had RLS 
+    enabled but zero policies (i.e., denied to non-service-role users); 
+    these needed policy additions to allow the app to function
+- **Pattern applied:** Copy of round_pairings' existing policy structure
+  - Public SELECT (spectators can view bracket/pool data)
+  - TO-only INSERT/UPDATE/DELETE (only the tournament's created_by user)
+  - bracket_nodes and pool_members go through their parent table 
+    (brackets, pools) via JOIN since they don't have direct tournament_id
+- **Lessons:**
+  - Always audit pre-existing state before writing RLS policies
+  - "RLS enabled, zero policies" is functionally locked-down (denied) 
+    rather than open — different from "RLS off"
+- **Track:** A · **Effort:** S · **Where:** SQL migration file
+- **Blocks:** T-024 (registration consolidation)
+- **Why:** `brackets`, `bracket_nodes`, `pools`, `pool_members`, `players`, `registrations`, `round_pairings` are all currently world-writable. A user can edit `round_pairings` to avoid an opponent or flip `winner_id` on `brackets`.
+- **The work:** Single migration; for each table:
+```sql
+  ALTER TABLE public.<table> ENABLE ROW LEVEL SECURITY;
+  CREATE POLICY "anyone_can_view" ON public.<table>
+    FOR SELECT USING (true);
+  CREATE POLICY "tournament_organizer_writes" ON public.<table>
+    FOR ALL USING (
+      EXISTS (
+        SELECT 1 FROM tournaments t
+        WHERE t.id = <table>.tournament_id
+          AND t.created_by = auth.uid()
+      )
+    ) WITH CHECK (
+      EXISTS (
+        SELECT 1 FROM tournaments t
+        WHERE t.id = <table>.tournament_id
+          AND t.created_by = auth.uid()
+      )
+    );
+  REVOKE INSERT, UPDATE, DELETE ON public.<table> FROM authenticated;
+  GRANT INSERT, UPDATE, DELETE ON public.<table> TO authenticated;
+  -- (revoke + re-grant ensures the policy is the only path)
+```
+  *(Adapt the FK reference for tables that don't have direct tournament_id; bracket_nodes goes through brackets.bracket_id.)*
+- **Acceptance:** Authenticated user who isn't the tournament organizer cannot INSERT/UPDATE/DELETE; can SELECT.
+
+### T-004: Fix INSERT forgery vectors
+- **Status:** DONE 2026-04-27
+- **Notes for future reference:**
+  - Required 5 sub-passes (Parts 1-5) due to v0 generating new policies 
+    without dropping old ones; old policies remained active and continued 
+    to permit forgery via Postgres OR-composition
+  - Verification query is essential after every RLS migration; "no rows 
+    returned" on a CREATE POLICY does not mean the goal was achieved
+  - Tables affected: access_audit_log, analytics_events, financial_alerts, 
+    match_engagement_events, match_reactions, match_viewer_sessions, 
+    match_viewers, media_view_events, media_views, notifications, 
+    reaction_aggregates, wallet_transactions, plus 7 cb_* deferred-module 
+    tables
+  - Intentionally left open (rate-limit via T-064): contact_submissions, 
+    recruitment_applications
+- **Track:** A · **Effort:** S · **Where:** SQL migration file
+- **Blocks:** T-012
+- **Why:** Several tables have INSERT policies with `with_check = true`, allowing any user to forge rows attributing actions to others.
+- **The work:** Tighten or revoke for each:
+  - `wallet_transactions`: revoke INSERT from authenticated entirely (service-role only)
+  - `notifications`: revoke INSERT from authenticated (service-role only)
+  - `financial_alerts`: revoke INSERT from authenticated (service-role only)
+  - `access_audit_log`: revoke INSERT from authenticated (service-role only)
+  - `match_reactions`: replace `with_check = true` with `with_check = (user_id = auth.uid() OR user_id IS NULL)`
+  - `match_viewer_sessions`: same pattern
+  - `match_viewers`: same pattern
+  - `match_engagement_events`: keep service-role only (these should not come from clients)
+  - `media_view_events`: replace with `with_check = (user_id = auth.uid() OR user_id IS NULL)`
+  - `media_views`: same
+  - `analytics_events`: replace with `with_check = (user_id = auth.uid() OR user_id IS NULL)`. Drop the duplicate "Allow insert analytics" policy.
+  - `cb_*` insert policies: revoke INSERT from authenticated (these run server-side via admin actions)
+  - `contact_submissions`: keep open (anonymous submission expected) but add rate-limiting at the app layer (T-064)
+- **Acceptance:** As authenticated user, attempts to insert forged rows (with another user's id) fail.
+
+### T-005: Build `core.financial_intents` table + reconciler
+- **Status:** BLOCKED-BY T-001
+- **Track:** A · **Effort:** L · **Where:** SQL migration + Vercel cron route + ask Claude for full draft
+- **Blocks:** T-021, T-024 (real-money flows), T-025 (refund flow)
+- **Why:** The platform has no idempotency layer for Stripe. Every payment-touching feature must use this. See ARCHITECTURE.md §7.
+- **Sub-tasks:**
+  - T-005a: Create `financial_intents` table with the canonical schema (intent_type enum, amount_cents, platform_fee_cents, currency, reference_type, reference_id, stripe_object_id, status enum, created_at, submitted_at, completed_at, last_error)
+  - T-005b: RLS policies (users see their own, staff see all per tenant)
+  - T-005c: Server action helper `createFinancialIntent()` that wraps insert
+  - T-005d: Stripe webhook handler at `app/api/webhooks/stripe/route.ts` that matches by intent.id, updates status, writes ledger entries
+  - T-005e: Reconciler at `app/api/cron/reconcile-stripe-intents/route.ts` that sweeps `submitted` intents older than 1 hour, queries Stripe, updates state
+  - T-005f: Add cron schedule to `vercel.json`
+- **Acceptance:** Test charge succeeds end-to-end via the new pattern. Test webhook delivery failure is recovered by reconciler within 1 hour.
+- **Audit cross-references (2026-04-28):**
+  - C2 (wallets RLS): T-005 is the long-term fix for the dual-wallet problem. The ledger 
+    becomes source of truth; wallet tables become derived views. T-101 is the interim 
+    emergency fix.
+  - H1 (tournament entry bypasses financial_intents): T-005 must include migrating 
+    tournament-payment-actions.ts to use createTrackedCheckoutSession.
+  - H3 (Date.now() in idempotency keys): T-005 must use deterministic idempotency 
+    keys (e.g., `tournament_entry_${tournamentId}_${userId}`).
+  - H7 (no event.id idempotency on webhook): T-005 should add 
+    webhook_events_processed table keyed by event.id.
+  - H9 (platform fee disagreement): T-005 must establish a single 
+    calculate_platform_fee RPC called from every reconciliation path.
+  - H14 (audit_log table not created): T-005 must create the canonical audit_log table.
+  - M10 (no Stripe amount verification on reconcile): T-005's reconcile path should 
+    verify Stripe amount matches the intent's stored amount.
+- **Revised effort:** L → XL (originally 1 dedicated session; now 2-3 weeks of focused 
+  work given the audit's expansion of scope)
+
+### T-006: Tighten `escrow_accounts` "Public can view funded escrow" policy
+- **Status:** DONE 2026-04-27
+- **Track:** A · **Effort:** XS · **Where:** SQL editor
+- **Why:** Current policy exposes amount_cents, funded_by, stripe_payment_intent_id, proof_of_funds_url to any authenticated user.
+- **The work:**
+```sql
+  DROP POLICY "Public can view funded escrow status" ON escrow_accounts;
+  CREATE VIEW public.escrow_status AS
+    SELECT tournament_id, status, amount_cents
+    FROM escrow_accounts
+    WHERE status IN ('funded', 'released');
+  GRANT SELECT ON public.escrow_status TO authenticated, anon;
+```
+- **Acceptance:** Authenticated user can SELECT from `escrow_status` view (showing only safe columns); cannot SELECT from `escrow_accounts` directly except via the existing organizer/staff policies.
+
+### T-007: Fix `player_payouts` OR-composition bug
+- **Status:** DONE 2026-04-27
+- **Track:** A · **Effort:** XS · **Where:** SQL editor
+- **Why:** "No updates after completion" policy doesn't actually prevent updates because "Staff can manage all" policy is broader and permits everything. RLS policies OR together; AND must be expressed as triggers.
+- **The work:**
+```sql
+  DROP POLICY "No updates after completion" ON player_payouts;
+  CREATE OR REPLACE FUNCTION block_payout_updates_after_completion()
+  RETURNS TRIGGER AS $$
+  BEGIN
+    IF OLD.status IN ('completed', 'failed', 'cancelled') THEN
+      RAISE EXCEPTION 'Cannot modify payout after status %', OLD.status;
+    END IF;
+    RETURN NEW;
+  END;
+  $$ LANGUAGE plpgsql;
+  
+  CREATE TRIGGER player_payouts_no_update_after_completion
+    BEFORE UPDATE ON player_payouts
+    FOR EACH ROW EXECUTE FUNCTION block_payout_updates_after_completion();
+```
+- **Acceptance:** UPDATE on a completed/failed/cancelled payout raises exception even when called as service-role.
+**STATUS** DONE 2026-04-27
+- ...rest unchanged
+
+### T-008: Audit dismissed_stripe_payments rows + plan deletion
+- **Status:** DONE 2026-04-27
+- **Audit findings:**
+  - 0 rows
+  - No FK dependencies
+  - RLS enabled
+  - 1 policy ("Admins can manage dismissed payments") uses deprecated 
+    `profiles.is_admin` pattern; will be dropped with the table
+- **Action:** Drop scheduled for T-010 migration bundle.
+- **Track:** A · **Effort:** XS · **Where:** SQL editor
+- **Why:** Already confirmed 0 rows. Drop the table once T-005 is in place (since reconciliation makes it unnecessary).
+- **The work:** Mark for drop in next migration after T-005 is shipped.
+
+---
+## TIER 0.5 — Emergency Fixes (Audit-Driven)
+
+These tasks come from the 2026-04-28 codebase audit (see /docs/audits/2026-04-28-codebase-audit.md).
+Each one is a critical-severity finding (C1-C10) that creates a money-loss or 
+catastrophic-failure risk if the system runs with real users. They jump in line ahead of 
+TIER 1 architectural work because the architectural work cannot ship safely on top of 
+these bugs.
+
+Execution order: T-100 → T-101 → T-102 → T-103 → T-104 → T-109 → T-105 → 
+T-106 → T-107 → T-108. Reasoning: T-100, T-101, T-104, T-109 are the highest 
+severity (free money mint, world-readable wallets, silent admin-degradation, broken 
+crons). T-102, T-103 fix the ticket-purchase pipeline. T-105-T-108 close exposure 
+vectors but are less immediately exploitable.
+
+---
+
+### T-100: Delete addFundsToWallet and audit all "use server" exports
+- **Status:** PARTIAL-DONE 2026-04-30
+  - Part A complete: addFundsToWallet deleted (commit f71dabb)
+  - Part B pending: full "use server" audit across the codebase
+- **Severity:** Critical (audit C1)
+- **Track:** A · **Effort:** S · **Where:** lib/wallet-actions.ts:302-365 + repo-wide grep
+- **Why:** The `addFundsToWallet` server action has no admin check and is callable by 
+  any authenticated user. They can mint up to $500 per call into their own wallet, then 
+  withdraw via Stripe Connect. This is unauthenticated free money minting in 
+  production. Same pattern likely exists in `syncWalletBalance` and 
+  `recalculateAllWallets`.
+- **The work:**
+  1. Delete `addFundsToWallet` from lib/wallet-actions.ts entirely
+  2. Audit `syncWalletBalance` — if not used, delete; if used, gate behind verified
+     admin check via core.organization_members
+  3. Audit `recalculateAllWallets` — same pattern
+  4. Run a repo-wide grep for `"use server"` and review each exported function:
+     - Is it gated by an auth check?
+     - Is the auth check on the deprecated `profiles.is_admin` (in which case the 
+       check is broken — see T-104)?
+     - Is the function safe to be reachable by any authenticated user?
+  5. Document each "use server" export and its access boundary in a new file 
+     /docs/security/server-actions.md
+- **Acceptance:** 
+  - `addFundsToWallet` does not exist in the codebase
+  - All remaining "use server" exports are documented with their auth requirement
+  - No "use server" function permits unauthenticated balance modification
+
+---
+
+### T-101: Wallet RLS lockdown (interim)
+- **Status:** DONE 2026-04-30
+- **Severity:** Critical (audit C2)
+- **Completed:**
+  - T-101A: Explicit service-role-only writes on `wallets`. Table comment 
+    documents the intent and links to T-005 for proper consolidation.
+  - T-101B: Dropped permissive "System can manage wallets" policy on 
+    `user_wallets` that referenced deprecated staff_roles. Service-role-only 
+    writes now.
+  - T-101C: Deleted test data from both tables (4 rows from user_wallets, 
+    2 rows from wallets — confirmed test data by founder, no real money 
+    flowed through these balances).
+- **Verification:** pg_policies confirms only "Users can view own wallet" 
+  SELECT policy exists on each table. Both tables empty.
+- **Outstanding (deferred to T-005):**
+  - True consolidation of wallets and user_wallets into a single canonical 
+    representation
+  - Migration of code that uses user_wallets (4 files, 10 references) to 
+    use the canonical source
+  - Ledger as source of truth, wallet tables as derived views
+- **Notes for T-005 work:**
+  - The two tables have genuinely different schemas (wallets has 
+    freeze controls; user_wallets has earnings/withdrawals history)
+  - Consolidation is not a rename operation; it's a schema design exercise
+  - Current code reference counts: wallets (65 refs in 20 files), 
+    user_wallets (10 refs in 4 files)
+- **Severity:** Critical (audit C2) (PAST)
+- **Track:** A · **Effort:** L · **Where:** wallets, user_wallets, lib/wallet-actions.ts, 
+  lib/player-payout-actions.ts, app/api/wallet/withdraw, app/api/stripe/webhook
+- **Why:** The `wallets` table has no RLS configuration in any migration file 
+  (audit confirmed). It's used by 65 references in 20 files for actual money flow IN. 
+  The `user_wallets` table is RLS-enabled and used by 10 references in 4 files for 
+  payouts (money OUT). Two parallel "truth" tables with disagreeing balances. 
+  The wallet RLS hole means any authenticated user can directly modify their own 
+  balance via the Supabase JS client.
+- **This task SUPERSEDES the original T-002.** The original was scoped before we 
+  understood the dual-wallet situation. This is the real work.
+- **The work:**
+  1. Decide canonical: investigate which wallet table should be source of truth. 
+     Per architecture, neither should be — the ledger should be. But for the immediate 
+     fix, we need ONE wallet table working correctly.
+  2. **Strategic option A (recommended):** Make the ledger the source of truth (T-005),
+     and have the wallet tables become derived views. This is the architecturally correct 
+     answer, and it dovetails with T-005 work. But it's a 2-3 week effort.
+  3. **Strategic option B (interim):** Pick `wallets` as canonical (since it has 65 refs 
+     including the Stripe webhook), enable RLS on it, migrate the 10 `user_wallets` 
+     references to use `wallets` instead, drop `user_wallets`. This is faster but creates 
+     work that gets undone in T-005.
+  4. **Recommendation:** Do option B as an emergency fix (this task), because we 
+     need RLS on `wallets` IMMEDIATELY. Then T-005 properly consolidates to the 
+     ledger.
+  5. SQL: `ALTER TABLE wallets ENABLE ROW LEVEL SECURITY` if not already on.
+  6. SQL: Add policies — users SELECT own wallet, no INSERT/UPDATE/DELETE 
+     for any role except service_role.
+  7. Code: Migrate the 4 user_wallets-using files to wallets. Remove `user_wallets` 
+     table.
+  8. Verify: pg_policies query confirms wallets has only service-role write access.
+- **Acceptance:** 
+  - `wallets` has RLS enabled with service-role-only writes
+  - Direct SELECT from authenticated user only returns their own row
+  - All 75 code references point to one table
+  - Verification query: any attempt by an authenticated user to UPDATE wallets is denied
+
+---
+
+### T-102: Fix complete_ticket_order parameter mismatch
+- **Status:** READY (TIER 0.5 — emergency)
+- **Severity:** Critical (audit C4)
+- **Track:** A · **Effort:** S · **Where:** app/api/stripe/webhook/route.ts:421, 
+  scripts/ticketing-rpc-functions.sql:277-281, app/api/v1/tickets/purchase/route.ts:105
+- **Why:** Webhook calls `complete_ticket_order` with parameter names 
+  `p_stripe_session_id`, `p_stripe_payment_intent`, `p_idempotency_key`. The SQL 
+  function signature uses `p_order_id`, `p_stripe_payment_intent_id`, 
+  `p_stripe_checkout_session_id`. Postgres errors at runtime on every call. 
+  Combined with audit finding H8 (webhook returns 200 on errors), Stripe never retries. 
+  Net: every ticket order paid via this path fails to complete; user is charged but no 
+  ticket is issued.
+- **The work:**
+  1. Choose canonical signature. Recommended: align the function signature to what 
+     the webhook is sending, since the webhook side is correct conceptually 
+     (session_id and payment_intent_id are the right Stripe identifiers).
+  2. Update SQL function to use parameter names: `p_order_id`, 
+     `p_stripe_session_id`, `p_stripe_payment_intent_id`, `p_idempotency_key`.
+  3. Update v1 ticket purchase call site to match.
+  4. Update webhook call to match.
+  5. Add a regression test (manual or scripted): create test order, simulate webhook, 
+     verify order status transitions to completed and tickets are created.
+- **Acceptance:** 
+  - Function signature matches all three call sites
+  - End-to-end test: paid ticket order results in completed order + tickets in DB
+  - No "function does not exist" errors in webhook logs
+
+---
+
+### T-103: Revoke complete_ticket_order from authenticated role
+- **Status:** READY (TIER 0.5 — emergency)
+- **Severity:** Critical (audit C5)
+- **Track:** A · **Effort:** XS · **Where:** scripts/ticketing-rpc-functions.sql:669
+- **Why:** `complete_ticket_order` is granted EXECUTE to `authenticated`. Any 
+  authenticated user can call it directly with any order UUID and a fake payment intent 
+  ID, marking unpaid orders as paid. Combined with C8 (free ticket bypass), this is a 
+  ticket-fraud vector.
+- **The work:**
+  1. SQL: `REVOKE EXECUTE ON FUNCTION complete_ticket_order FROM authenticated;`
+  2. SQL: `GRANT EXECUTE ON FUNCTION complete_ticket_order TO service_role;` 
+     (verify service role has it)
+  3. Verify webhook still works (service role still has access)
+  4. Audit OTHER ticketing functions for the same issue: `create_ticket_order`, 
+     `process_ticket_refund`, etc. Apply same pattern.
+- **Acceptance:** 
+  - `pg_proc` query for ticketing functions shows EXECUTE granted only to 
+    service_role
+  - Webhook still completes orders correctly post-fix
+
+---
+
+### T-104: createAdminClient throws on missing service-role key
+- **Status:** READY (TIER 0.5 — emergency)
+- **Severity:** Critical (audit C9)
+- **Track:** A · **Effort:** XS · **Where:** lib/supabase/server.ts:43-71
+- **Why:** When `SUPABASE_SERVICE_ROLE_KEY` is unset, `createAdminClient()` 
+  silently returns an anon client with a warning logged. Code that thinks it's bypassing 
+  RLS will silently behave as a logged-out user. This is far worse than a loud failure: 
+  admin operations return "no rows" or "permission denied" with no clear cause.
+- **The work:**
+  1. Modify `createAdminClient()` to throw a hard error if 
+     `SUPABASE_SERVICE_ROLE_KEY` is missing
+  2. Add an explicit env-var check at app startup that fails the build if any required 
+     server-side env var is missing
+  3. Document required env vars in /docs/RUNBOOK.md and add a `.env.example` 
+     to the repo
+- **Acceptance:** 
+  - Calling `createAdminClient()` without the env var throws immediately
+  - App startup fails loudly if any required env var is missing
+  - `.env.example` exists at repo root
+
+---
+
+### T-105: Profiles RLS column-scoped or split privileged columns
+- **Status:** READY (TIER 0.5 — emergency)
+- **Severity:** Critical (audit C6)
+- **Track:** A · **Effort:** M · **Where:** scripts/001_create_profiles.sql:34-35
+- **Why:** The `profiles_update_own` policy allows users to UPDATE any column 
+  on their own profile row. There's no `WITH CHECK` clause restricting which columns. 
+  If `is_admin` exists as a column (audit could not confirm without DB access), users 
+  can self-promote via `update({ is_admin: true })`. Even without `is_admin`, columns 
+  like `kyc_verified`, `stripe_connect_payouts_enabled`, `role` are user-modifiable.
+- **The work:**
+  1. Verify whether `profiles.is_admin` column exists (run query against Supabase)
+  2. If exists: drop it (per architecture, replace with org-members check)
+  3. Identify all privileged columns on profiles: `kyc_verified`, `stripe_connect_*`, 
+     `role` (if it exists), `is_verified`, etc.
+  4. Move privileged columns to a separate `core.user_security` (or similar) table 
+     that is service-role-only writeable
+  5. Update the 50 code references to read from the new location
+  6. OR (simpler interim): Replace `profiles_update_own` with a column-restricted 
+     policy that names the safe columns (display_name, avatar_url, bio, etc.) 
+     explicitly
+- **Acceptance:** 
+  - User cannot UPDATE privileged columns on profiles via direct Supabase JS
+  - Test: signed-in user attempts `update({ is_admin: true })` → denied
+  - All admin-checking code uses non-self-modifiable source of truth
+- **Notes:** This task overlaps with T-011 (auth model consolidation). When T-011 
+  runs, both should be coordinated. But T-105 is the immediate emergency fix; 
+  T-011 is the long-term migration to organization_members.
+
+---
+
+### T-106: Bind v1 ticket purchase to API key tenant
+- **Status:** READY (TIER 0.5 — emergency)
+- **Severity:** Critical (audit C7, C8)
+- **Track:** A · **Effort:** M · **Where:** app/api/v1/tickets/purchase/route.ts:43-50, 
+  102-122
+- **Why:** The v1 ticket purchase endpoint accepts `email`, `first_name`, `last_name`, 
+  `user_id` directly from the caller. An API key holder can issue tickets to any identity, 
+  including paid orders. Combined with the free-ticket bypass at line 102-122, an 
+  attacker can mint unlimited "free" tickets via API.
+- **The work:**
+  1. Validate that the `user_id` (if provided) belongs to the API key's tenant
+  2. If `email` is provided without `user_id`, validate that the email isn't being used to 
+     impersonate an existing user in another tenant
+  3. For the free-ticket path: require an explicit `comp_ticket_authorized: true` 
+     flag in the request, gated by an organizer-side configuration
+  4. Add rate limiting on free orders: max N free tickets per minute per API key
+  5. Add audit logging: every API ticket order is logged with the API key, requested 
+     identity, actual identity used
+- **Acceptance:** 
+  - API key for tenant A cannot issue tickets to user in tenant B
+  - Free tickets require explicit organizer authorization
+  - All API ticket orders are logged with caller identity
+  - Audit log can answer "who issued this ticket via API"
+
+---
+
+### T-107: Stripe transfer idempotency keys
+- **Status:** READY (TIER 0.5 — emergency)
+- **Severity:** Critical (audit C3)
+- **Track:** A · **Effort:** S · **Where:** app/api/cron/process-payouts/route.ts:130-141 
+  + every other `stripe.transfers.create` call site
+- **Why:** Stripe transfers are created without idempotency keys. If the cron creates a 
+  transfer, the response times out, and the cron retries — Stripe will create a SECOND 
+  transfer because each call without an idempotency key is treated as a new request. 
+  Real money sent twice.
+- **The work:**
+  1. Pass `{ idempotencyKey: payout.id }` (or a deterministic equivalent) as second 
+     arg to every `stripe.transfers.create()` call
+  2. Audit every other Stripe API call site for the same pattern: 
+     `stripe.checkout.sessions.create`, `stripe.refunds.create`, etc.
+  3. Document the idempotency key strategy in /docs/architecture/stripe.md
+- **Acceptance:** 
+  - Every `stripe.transfers.create` call passes an idempotency key
+  - Manual test: simulate a network timeout after transfer creation, confirm retry 
+    doesn't create a second transfer
+
+---
+
+### T-108: Standardize cron auth across all 6 cron files
+- **Status:** DONE 2026-04-30 (PR #197, merged via v0)
+- **Severity:** Critical (audit C10)
+- **Completed:**
+  - Created lib/cron-auth.ts with requireCronAuth helper
+    accepting both Bearer CRON_SECRET (manual) and x-vercel-cron: 1 (production)
+  - All 6 cron route handlers (5 active in vercel.json + booking-emails dead handler)
+    now use the helper consistently
+- **Notes:**
+  - booking-emails cron remains unregistered in vercel.json. v0 added
+    requireCronAuth to it for consistency, but it's still dead code that 
+    won't run. Decision on its fate deferred — re-evaluate after May 16
+    or when catering module work resumes.
+  - Side effect of v0's parallel SQL work: T-001 partially reverted. The 
+    ML/treasury functions (process_auto_payouts, calculate_organizer_health_score, 
+    create_alert) were recreated to make auto-payouts cron functional. 
+    See SQL discussion in chat — formal decision deferred to post-May-16.
+- **Audit C10 status:** closed
+- **Outstanding (separate tasks):**
+  - T-107 (Stripe transfer idempotency keys) — process-payouts cron 
+    still creates transfers without idempotency keys
+  - Ledger-error-swallowed pattern in process-payouts:109-113 — known bug, 
+    deferred to financial spine work
+- **Severity:** Critical (audit C10)
+- **Track:** A · **Effort:** S · **Where:** all 6 app/api/cron/*/route.ts files + new 
+  lib/cron-auth.ts helper
+- **Why:** 5 of 6 cron jobs only check `Bearer ${CRON_SECRET}`. Vercel Cron 
+  sends `x-vercel-cron: 1` instead. In production these crons return 401 → never run 
+  → reconciliation never sweeps → stale intents accumulate forever.
+- **The work:**
+  1. Create lib/cron-auth.ts with a single `requireCronAuth(req: Request)` helper 
+     that accepts both Bearer CRON_SECRET and x-vercel-cron: 1
+  2. Replace the auth check in all 6 cron route handlers with this helper
+  3. Add a startup verification that confirms cron auth env vars are set
+  4. Test: deploy to Vercel preview, trigger each cron manually, verify all 6 return 200 
+     with valid auth
+- **Acceptance:** 
+  - One auth helper used by all 6 crons
+  - Vercel Cron auto-trigger succeeds for all 6 crons in production
+  - Cron logs show successful execution, not 401
+
+---
+
+### T-109: Rename proxy.ts to middleware.ts and add real auth-refresh
+- **Status:** READY (TIER 0.5 — emergency)
+- **Severity:** High-Critical boundary (audit M1, but compounds with C9 and C6)
+- **Track:** A · **Effort:** S · **Where:** repo root
+- **Why:** Next.js loads `middleware.ts` as global middleware; `proxy.ts` is not loaded. 
+  The auth-refresh logic in `proxy.ts` is dead code. Sessions don't refresh on long 
+  sessions; the redirect for `/protected` paths is dead since no such routes exist.
+- **The work:**
+  1. Rename proxy.ts → middleware.ts at repo root
+  2. Update the matcher in `config.matcher` to cover the actual protected routes 
+     (`/dashboard/*`, `/api/admin/*`)
+  3. Add real auth-refresh: read session from Supabase SSR cookie, refresh if 
+     near-expiry, write back to response
+  4. Add a redirect-to-login for unauthenticated requests to protected routes
+  5. Verify: visit a protected route in incognito → redirected to login. Visit while 
+     authenticated with stale session → session refreshes silently.
+- **Acceptance:** 
+  - middleware.ts exists at repo root, proxy.ts does not
+  - Sessions refresh on requests near expiry
+  - Unauthenticated requests to /dashboard/* and /api/admin/* are redirected
+## TIER 1 — Architecture foundation (gates everything else)
+
+### T-010: Module schema migration
+- **Status:** BLOCKED-BY T-001 through T-007
+- **Track:** A · **Effort:** L · **Where:** Big SQL migration, with Claude help
+- **Blocks:** T-011, T-012, all module work after this
+- **Why:** Move all `public.*` tables into module schemas (`core.*`, `tournament.*`, etc.) per SCHEMA.md. This is reversible and makes every later RLS policy and FK reference cleaner.
+- **The work:** Generated migration; for each table: `ALTER TABLE public.<table> SET SCHEMA <module>;`. Update `search_path` in app config so existing code still resolves.
+- **Acceptance:** All tables visible via `SELECT schemaname, tablename FROM pg_tables WHERE schemaname IN ('core','tournament',...)`. App still functions (read-only smoke test).
+- **Caveat:** Because `search_path` includes the new schemas, app code keeps working without changes initially. Update queries to fully-qualified references as you touch each module.
+
+### T-011: Consolidate to `organization_members` as auth source
+- **Status:** BLOCKED-BY T-010
+- **Track:** A · **Effort:** L · **Where:** SQL migration + RLS audit
+- **Blocks:** T-013, T-019
+- **The Work**
+T-011g: Pre-migration audit — query pg_policies for all policies whose 
+qual or with_check references `profiles.is_admin`, `staff_roles`, or 
+`tenant_memberships`. Document count and table list. This is the scope 
+of the policy rewrite work.
+- **Why:** Currently 5 places encode "is this user staff" — `organization_members.role_key`, `tenant_memberships.role`, `staff_roles.role`, `profiles.is_admin`, `profiles.role`. Pick one.
+- **Sub-tasks:**
+  - T-011a: Migrate all `staff_roles` rows into `organization_members` with role_key mapping (`owner` → `owner`, `manager` → `admin`, `staff` → `staff`, `organizer` → `staff`)
+  - T-011b: Migrate `tenant_memberships` rows similarly
+  - T-011c: Set `profiles.is_admin = true` derives from membership in platform-owner tenant; backfill, then drop the column
+  - T-011d: Drop `profiles.role` after backfill
+  - T-011e: Audit every RLS policy that references `staff_roles`, `tenant_memberships`, or `profiles.is_admin`; replace with `organization_members` predicate
+  - T-011f: Drop `staff_roles` and `tenant_memberships` tables
+- **Acceptance:** All RLS policies pass an audit grep showing only `organization_members` references for auth. No staff_roles or tenant_memberships in policy definitions.
+- **Audit cross-references (2026-04-28):**
+  - C6 (profiles RLS allows self-promote): T-105 is the immediate fix; T-011 
+    completes the consolidation. Coordinate the two so T-105 doesn't have to be 
+    re-done.
+  - H10 (staff_roles has no tenant scope): T-011 must add tenant_id filter to all 
+    staff_roles policies during the migration.
+  - All 50 references to profiles.is_admin must be migrated to organization_members 
+    checks. This is the bulk of T-011's work.
+- **Pre-migration audit step:** Before any policy rewrites, run:
+    SELECT tablename, policyname, qual, with_check FROM pg_policies 
+    WHERE schemaname = 'public' AND (qual ILIKE '%is_admin%' OR qual ILIKE 
+    '%staff_roles%' OR qual ILIKE '%tenant_memberships%');
+  Document the count. Plan the rewrite in batches by table.
+  
+### T-012: Build canonical `core.audit_log`
+- **Status:** BLOCKED-BY T-001, T-004, T-010
+- **Track:** A · **Effort:** M · **Where:** SQL migration + helper module
+- **Blocks:** T-021, T-031, every state-transition feature
+- **Why:** Currently 7+ fragmented log tables, none are the canonical "what happened to entity X." Need one for tournament/match/payment/dispute audits.
+- **The work:**
+  - Create `core.audit_log` (id uuid, tenant_id, actor_id, entity_type, entity_id, event_type, before jsonb, after jsonb, metadata jsonb, created_at)
+  - INSERT permitted via SECURITY DEFINER function `core.write_audit(...)`
+  - UPDATE/DELETE blocked by trigger
+  - TypeScript helper `lib/audit.ts` exporting `recordAudit({entityType, entityId, eventType, before, after})` that calls the function
+- **Acceptance:** Helper successfully writes audit row in same transaction as state change. UPDATE attempt raises exception. Existing log tables (access_audit_log, reconciliation_audit_log) still serve their specialized purposes; this is the general one.
+
+### T-013: Tenant feature flag enforcement at RLS
+- **Status:** BLOCKED-BY T-010, T-011
+- **Track:** A · **Effort:** M · **Where:** SQL migration affecting many policies
+- **Blocks:** T-019 (deferred-module gating)
+- **Why:** Architecture rule §2.5 — tenant without `feature.fnb` enabled cannot read `fnb.*` tables.
+- **The work:** Helper SQL function `core.tenant_has_feature(tenant_id uuid, feature_key text) RETURNS boolean`. Update RLS policies on each module's tables to AND with this check.
+- **Acceptance:** A tenant without `feature.tournament` enabled cannot SELECT from `tournament.tournaments`. Verified by integration test.
+
+### T-014: Outbox worker
+- **Status:** BLOCKED-BY T-010
+- **Track:** A · **Effort:** M · **Where:** Vercel Cron route
+- **Blocks:** T-026 (read models), T-038 (clip pipeline)
+- **Why:** Cross-module events depend on outbox processing. The 1 stuck row in your current outbox confirms the pattern was started but not wired.
+- **The work:** `app/api/cron/process-outbox/route.ts` runs every minute, claims unprocessed rows, dispatches to handlers based on `topic`, marks processed. Handlers registered in a switch statement; specific handlers built per-need (T-026 etc.)
+- **Acceptance:** New outbox row gets processed within 60 seconds. Failed rows retry up to max_attempts. Unprocessed-rows-older-than-5-minutes alert wired (T-068).
+
+### T-110: Webhook event.id idempotency
+- **Status:** READY (TIER 1)
+- **Severity:** High (audit H7)
+- **Track:** A · **Effort:** S · **Where:** app/api/stripe/webhook/route.ts + new 
+  webhook_events_processed table
+- **Why:** Stripe will replay webhook events on connection failures. The current 
+  webhook has path-specific idempotency in some places but no top-level event.id 
+  deduplication. Replays cause duplicate processing for any path without inline 
+  idempotency.
+- **The work:**
+  1. Create `webhook_events_processed` table with `event_id text primary key`, 
+     `processed_at timestamptz`
+  2. At the top of the webhook handler, after signature verification: INSERT event_id 
+     with ON CONFLICT DO NOTHING. If 0 rows inserted, return 200 immediately 
+     (already processed).
+  3. Backfill: don't worry about historical events; this protects forward.
+- **Acceptance:** Replaying a Stripe event from the dashboard produces no second 
+  side-effect.
+
+---
+
+### T-111: Webhook returns 500 on errors instead of 200
+- **Status:** READY (TIER 1)
+- **Severity:** High (audit H8)
+- **Track:** A · **Effort:** XS · **Where:** app/api/stripe/webhook/route.ts:478-480
+- **Why:** Currently the webhook returns 200 even on processing errors. Stripe 
+  considers it delivered and won't retry. Transient failures (e.g., DB temporarily 
+  unavailable) become permanent.
+- **The work:**
+  1. Wrap each event-type handler in try/catch
+  2. On caught exception: log error, return 500 → Stripe retries
+  3. Combined with T-110 (event.id idempotency), retries are safe
+- **Acceptance:** Forced exception during webhook processing returns 500; Stripe 
+  retries; second attempt succeeds and processes correctly.
+
+---
+
+### T-112: Single source of truth for platform fee
+- **Status:** READY (TIER 1)
+- **Severity:** High (audit H9)
+- **Track:** A · **Effort:** S · **Where:** webhook:754, scripts/119:294, scripts/121:14, 
+  new calculate_platform_fee SQL function
+- **Why:** Platform fee is hardcoded as 5% in webhook, 10% in ledger code, 10% in 
+  fee config table. Three sources of truth disagreeing means revenue calculation 
+  depends on which path executes.
+- **The work:**
+  1. Create `calculate_platform_fee(p_amount_cents bigint, p_event_type text, 
+     p_tenant_id uuid)` SQL function that returns the correct fee
+  2. Source of truth: a `fee_config` table per tenant per event-type
+  3. Replace all hardcoded fees with calls to this function
+  4. Add a default config row matching whatever the actual current fee policy is
+- **Acceptance:** No hardcoded fee literals in any code path; function is called from 
+  every reconciliation site.
+
+---
+
+### T-113: Add audit_log canonical table with append-only triggers
+- **Status:** READY (TIER 1)
+- **Severity:** High (audit H14)
+- **Track:** A · **Effort:** S · **Where:** new SQL migration
+- **Why:** Multiple SQL functions INSERT into a table called `audit_log` that doesn't 
+  exist in any migration. Inserts fail. Reconcile loses its audit trail. Architecture 
+  document specifies this table with append-only constraints; it was never created.
+- **The work:**
+  1. Create canonical `audit_log` table per ARCHITECTURE.md spec: id, actor, 
+     action, target_type, target_id, payload jsonb, occurred_at
+  2. Grants: INSERT only, no UPDATE, no DELETE for any role
+  3. Add a trigger that prevents UPDATE/DELETE explicitly (defense in depth)
+  4. Update all functions that INSERT into audit_log to match the canonical schema
+- **Acceptance:** audit_log table exists; INSERTs from existing functions succeed; 
+  attempting UPDATE or DELETE raises an error.
+###   T-115: Carde.io CSV import + shadow profile creation. L.
+### T-116: Discord OAuth claim flow (shadow → claimed merge). L.
+### T-117: may16_payment_intents shim — explicitly interim, sunset after T-005 lands. M. Cross-references T-005, T-110.
+### T-118: LiveKit + Caster Studio + Egress wiring. XL. This is the single biggest piece of net-new code for May 16.
+### T-119: Mux Live Stream + simulcast targets + VOD asset wiring. M. Depends on T-118.
+### T-120: Manual clip capture from live broadcast or VOD via Mux clips API. M. Depends on T-119.
+### T-121: Discord webhook post on tournament completion (CSV + summary, idempotent). S.
+### T-122: /host page polish for streaming-platform pitch. S–M.
+---
+
+## TIER 2 — Tournament module (the core deliverable)
+
+### T-020: Consolidate match table — pick `tournament_matches`
+- **Status:** BLOCKED-BY T-010
+- **Track:** A · **Effort:** M · **Where:** SQL migration
+- **Blocks:** T-021, T-022, T-026
+- **Why:** Two parallel match tables with different schemas. Keep `tournament_matches` (richer columns including streaming/engagement); drop `matches`.
+- **The work:** Migrate any data from `matches` into `tournament_matches`. Repoint FKs (especially `brackets`, `bracket_nodes`, `clip_jobs`). Drop `matches`.
+- **Acceptance:** `matches` table gone. App references all updated. Brackets render correctly.
+
+### T-021: Tournament entry payment via financial_intents
+- **Status:** BLOCKED-BY T-005, T-012, T-020
+- **Track:** B · **Effort:** L · **Where:** Server action + Stripe + Claude help
+- **Blocks:** T-022
+- **Why:** First end-to-end use of the financial spine. Refactor existing tournament entry payment to use intent → execute → reconcile pattern.
+- **Acceptance:** Test tournament entry creates intent row, calls Stripe with idempotency key, webhook updates status, ledger entries balance, audit log row written. Repeat the same call: no double charge.
+
+### T-022: End-to-end tournament money test (the critical path)
+- **Status:** BLOCKED-BY T-021, T-029, T-030
+- **Track:** A · **Effort:** L · **Where:** Vitest + Postgres testcontainer
+- **Blocks:** Barbados readiness
+- **Why:** This is the bet-the-company test. If it passes, the platform handles money correctly.
+- **The work:** Single integration test: organizer creates tournament with $25 entry, 8 players register and pay, matches play through to completion, prizes distribute, payouts process. Verifies every ledger transaction balances and every state transition has an audit row.
+- **Acceptance:** Test passes 5 times in a row in CI without flake.
+
+### T-023: Tournament check-in page
+- **Status:** READY (good v0 candidate; uses existing tables)
+- **Track:** B · **Effort:** S · **Where:** v0
+- **Blocks:** T-022
+- **Why:** Players need to confirm presence within the check-in window before tournament starts.
+- **The prompt:** *(see PROMPTS.md → "Tournament check-in page")*
+- **Acceptance:** Logged-in registered player can check in within window; sees clear error outside window; status flips to checked_in atomically; `audience.viewer` row optional.
+
+### T-024: Consolidate registration tables
+- **Status:** BLOCKED-BY T-010, T-011
+- **Track:** A · **Effort:** M · **Where:** SQL migration
+- **Blocks:** T-022
+- **Why:** Currently 4 registration representations (registrations, players, tournament_participants, tournament_registrations). Keep tournament_registrations + tournament_participants (one is payment-side, one is play-side).
+- **The work:** Migrate rows from `registrations` and `players` into the canonical pair. Repoint FKs. Drop the deprecated tables. Fix exports_*_missing_* tables to verify zero drift remains, then drop those too.
+- **Acceptance:** Schema has one canonical registration model. exports_* tables empty and dropped.
+
+### T-025: Refund + cancel flow
+- **Status:** BLOCKED-BY T-005
+- **Track:** B · **Effort:** M · **Where:** Server action + Claude help
+- **Why:** When tournament is cancelled or organizer issues refund, money flow must reverse cleanly through ledger.
+- **Acceptance:** Refund creates compensating ledger entries, audit log row, Stripe refund call via intent pattern, audit log shows complete history.
+
+### T-026: `audience.match_summary` read model
+- **Status:** BLOCKED-BY T-014, T-020
+- **Track:** A · **Effort:** M · **Where:** SQL + worker handler
+- **Blocks:** T-031
+- **Why:** Live match page needs denormalized data (match + tournament + stream + scores + reactions) in one query. Maintained from outbox.
+- **Acceptance:** Match state change writes outbox row; summary table updates within 5 seconds; live page renders in single SELECT.
+
+### T-027: Pairings audit
+- **Status:** READY (independent investigation)
+- **Track:** A · **Effort:** M · **Where:** Code review + tests
+- **Blocks:** T-028
+- **Why:** Swiss pairings are notoriously tricky. Need to know if existing implementation is correct, broken, or missing.
+- **The work:** Find pairing function in repo (likely `lib/pairings/*` or a SQL function). Read it. Build test cases from DCI floor rules examples. Verify or document gaps.
+- **Acceptance:** Document `docs/pairings-audit.md` describing what's there, what works, what's broken, what's missing.
+
+### T-028: Add head-to-head tracking for Swiss
+- **Status:** BLOCKED-BY T-027 (depends on what we find)
+- **Track:** B · **Effort:** S · **Where:** SQL + pairing code
+- **Why:** Swiss must avoid repeat pairings. If the existing implementation doesn't track this, it's broken.
+- **Acceptance:** Pairing for round N+1 cannot match two players who already played each other in rounds 1..N.
+
+### T-029: Tournament list page
+- **Status:** READY
+- **Track:** B · **Effort:** S · **Where:** v0
+- **The prompt:** *(see PROMPTS.md)*
+- **Acceptance:** Public list of tournaments with filters (game, status, format, prize range), accessible without login.
+
+### T-030: Tournament detail / registration page
+- **Status:** READY
+- **Track:** B · **Effort:** M · **Where:** v0 + financial intent integration
+- **The prompt:** *(see PROMPTS.md)*
+- **Acceptance:** Visitor sees tournament details; logged-in user can register (free) or pay entry fee (uses T-021's flow).
+
+---
+
+## TIER 3 — Audience module (the audience-facing live experience)
+
+### T-031: Live match page
+- **Status:** BLOCKED-BY T-026, T-035
+- **Track:** B · **Effort:** L · **Where:** v0 + realtime wiring
+- **Why:** The single most important user-facing surface for an audience event.
+- **Acceptance:** Page shows live video (Mux player), real-time score, reactions appearing live, viewer count, chat (T-033). Updates without polling.
+
+### T-032: Reactions UI
+- **Status:** BLOCKED-BY T-004 (forgery fix)
+- **Track:** B · **Effort:** S · **Where:** v0
+- **Why:** Hype emojis users tap to express engagement. Feeds match_reactions, drives reaction_aggregates, contributes to hype_score.
+- **Acceptance:** Tappable reaction bar; rate-limit (1 per second per user); reactions visible on stream within 500ms; counts persisted.
+
+### T-033: Match chat with moderation tools
+- **Status:** BLOCKED-BY T-031, T-004 (forgery fix)
+- **Track:** B · **Effort:** L · **Where:** v0 + realtime + moderation logic
+- **Blocks:** Barbados readiness (live finals chat)
+- **Why:** Live chat tied to a specific match while it's live, locked after. The Twitch model. Core to the audience layer feeling like a live event rather than a recording. The organizer is the moderator of their tournament's chat by default; they have skin in the game.
+- **Schema:** Uses existing `audience.chat_messages` (renamed from `match_chat_messages`). Uses existing `audience.viewers` to enforce follower-only mode. New table NOT required.
+- **Sub-features required:**
+  - **Slow mode** — configurable per match, default 3 seconds between messages from the same user. Stored on `tournament.matches` as `chat_slow_mode_seconds` (use existing column or add via T-033 migration if absent — verify before assuming).
+  - **Follower-only mode** — toggle stored on tournament_matches; if true, message INSERT requires sender to follow the streamer or be registered for the tournament.
+  - **Caster/moderator badge** — `is_caster` and `is_moderator` flags on chat_messages already exist per schema. Surface them in UI with distinct badge styling.
+  - **Mod actions** — delete message (soft-delete via `is_deleted = true`), timeout user (insert into `core.user_restrictions` with `restriction_type = 'muted'`, scope to this match's chat via metadata, with expires_at), ban from match (same pattern, no expiry until match ends).
+  - **AutoMod blocklist** — basic word/phrase blocklist stored as a tenant config (use `core.site_settings` keyed by `automod.blocklist.{tenant_id}`). Blocked messages get `is_deleted = true` on insert via a server-side check; sender sees "your message was filtered" silently.
+  - **Per-tournament chat disable** — `chat_enabled` toggle on tournament; if false, chat panel doesn't render and INSERTs are denied at the server action layer.
+  - **Read-only after match ends** — server action checks `match.status = 'completed'` AND `now() - match.completed_at > interval '30 minutes'`; if true, INSERTs return error "Chat closed."
+- **Default settings for Barbados:**
+  - For tournaments under 200 expected viewers: follower-only ON, slow mode 3s
+  - For larger tournaments: follower-only OFF, slow mode 5s
+  - AutoMod blocklist: a baseline list seeded for the platform tenant; convention tenant can add to theirs
+- **The work:**
+  1. Audit `audience.chat_messages` schema for missing columns (e.g., `chat_slow_mode_seconds`); add via migration if needed
+  2. Server action `sendChatMessage(matchId, content)` enforcing all preconditions atomically (slow mode, follower-only, AutoMod, restrictions)
+  3. Server action `moderateChatMessage(messageId, action)` for mods
+  4. Server action `setMatchChatConfig(matchId, config)` for organizers
+  5. Component `<MatchChat matchId={...} />` — paginated history + Realtime subscription on `audience:match:{matchId}:chat`; renders messages with badges, supports moderator inline actions, shows current chat state (slow mode, follower-only) inline
+  6. Mod tool drawer for organizers/casters — list of recent messages with one-click timeout/delete/ban
+  7. AutoMod check at the server action layer; do NOT trust client to filter
+- **Acceptance:** 
+  - Audience member sends message; appears in real-time for all viewers
+  - Slow mode prevents second message within window with clear inline error
+  - Non-follower cannot send in follower-only mode
+  - Moderator can timeout user; user's subsequent INSERTs fail with restriction message
+  - AutoMod-blocked message returns success to sender (no leak) but never appears in feed
+  - Chat locks 30 min after match completion
+  - Organizer can disable chat entirely for a match before/during; existing messages remain readable
+- **Anti-patterns to refuse:**
+  - Client-side AutoMod filtering (always server-side)
+  - "Trusted user" bypasses for slow mode (no exceptions)
+  - Hard-deleting messages (soft-delete only, for audit)
+  - Cross-match moderation actions (a timeout in match A does not apply to match B; that's user_restrictions territory and a separate decision)
+
+
+### T-034: Predictions
+- **Status:** READY
+- **Track:** B · **Effort:** M · **Where:** v0
+- **Why:** Engagement loop — viewers predict match outcomes; correct predictions earn prediction_points.
+- **Acceptance:** Predictions submitted before match starts; locked at start; resolved on match completion; user gains/loses points; leaderboard updated.
+
+### T-035: Mux player integration
+- **Status:** READY (Track A focus task)
+- **Track:** A · **Effort:** M · **Where:** Library code, ask Claude for help
+- **Blocks:** T-031, T-036
+- **Why:** Mux is the primary video stack. Need clean React component wrapping `@mux/mux-player-react` with the platform's overlay layer.
+- **Acceptance:** `<MajhVideoPlayer playbackId={...} />` component renders, supports overlays (T-036), reports analytics events.
+
+### T-036: Match overlays
+- **Status:** BLOCKED-BY T-035
+- **Track:** B · **Effort:** M · **Where:** v0 + animation library
+- **Why:** Score/timer/round-info overlays rendered on top of video. The "looks like ESPN" requirement.
+- **Acceptance:** Overlays customizable per tournament (theme, colors, layout); update in real-time from match state.
+
+### T-037: Hype/trending score job
+- **Status:** BLOCKED-BY T-014
+- **Track:** A · **Effort:** M · **Where:** Cron route
+- **Why:** Surface trending matches in feed and auto-feature. Score is a function of viewer count, reaction rate, score changes, recency.
+- **Acceptance:** Cron updates trending_score on tournament_matches every minute. Documented formula in code comments.
+
+---
+
+## TIER 4 — Clips module (audience growth + sponsor deliverable)
+
+### T-038: Clip job worker
+- **Status:** BLOCKED-BY T-014, T-035
+- **Track:** A · **Effort:** L · **Where:** Cron route + Mux clips API + Claude help
+- **Blocks:** T-039, T-040
+- **Why:** `clip_jobs` rows pile up forever without a worker. Mux has a clips API; this worker calls it.
+- **Acceptance:** New clip_job processes within 5 minutes; output_url populated; failed jobs marked with error.
+
+### T-039: Manual clipping UI
+- **Status:** BLOCKED-BY T-038
+- **Track:** B · **Effort:** M · **Where:** v0
+- **Why:** Producer/audience member selects clip range during live or VOD playback.
+- **Acceptance:** Range slider over playback; submit creates clip_job row; user gets notification when clip ready.
+
+### T-040: Auto-highlight detector
+- **Status:** BLOCKED-BY T-014, T-037
+- **Track:** A · **Effort:** L · **Where:** Heuristic-based logic, NOT ML (call it what it is)
+- **Why:** Detect moments worth clipping based on engagement spikes (reaction velocity, viewer spike, score change).
+- **Acceptance:** Clip candidates created automatically when engagement signals exceed thresholds; reviewed status starts as 'pending'.
+
+### T-041: Clip publication
+- **Status:** BLOCKED-BY T-039 or T-040
+- **Track:** B · **Effort:** S · **Where:** v0
+- **Why:** Approved clips become content_items in the feed.
+- **Acceptance:** Approving a clip creates a content_item row; clip appears in feed; feed_cache invalidated.
+
+---
+
+## TIER 5 — Feed module (between-events retention)
+
+### T-045: Feed page
+- **Status:** BLOCKED-BY T-041
+- **Track:** B · **Effort:** L · **Where:** v0
+- **Why:** TikTok-style scrollable content surface. Where audiences spend attention between events.
+- **Acceptance:** Vertical scroll feed of clips/highlights/streams; infinite scroll; per-item engagement (like, save, share); feed personalization (T-047).
+
+### T-046: Follows + follower count
+- **Status:** READY (good v0 task)
+- **Track:** B · **Effort:** S · **Where:** v0
+- **The prompt:** *(see PROMPTS.md)*
+- **Acceptance:** Follow/unfollow buttons; counts update; profile pages show follower/following counts.
+
+### T-047: Feed ranking algorithm v1
+- **Status:** BLOCKED-BY T-045
+- **Track:** A · **Effort:** M · **Where:** SQL function + cron + Claude help
+- **Why:** Currently feed_cache has no ranking logic. Need basic algorithm: trending_score + recency + follow boost.
+- **Acceptance:** Documented formula. Feed for a user reflects their follows + globally trending content.
+
+---
+
+## TIER 6 — Venue module (Barbados ticketing + check-in)
+
+### T-050: Ticket purchase via financial_intents
+- **Status:** BLOCKED-BY T-005, T-013
+- **Track:** B · **Effort:** L · **Where:** Server action + Stripe
+- **Why:** Ticket purchase must use the same money pattern as tournament entry.
+- **Acceptance:** Test ticket purchase end-to-end; refund flow works; sold-out enforcement (race-condition safe).
+
+### T-051: QR code + check-in flow
+- **Status:** BLOCKED-BY T-050
+- **Track:** B · **Effort:** M · **Where:** v0 + scanner
+- **Why:** Convention attendees scan QR at door; staff sees green/red.
+- **Acceptance:** Generate QR per ticket; scanner page validates, marks attended, prevents double check-in; offline fallback (T-067).
+
+### T-052: Promo codes
+- **Status:** READY
+- **Track:** B · **Effort:** S · **Where:** v0
+- **Acceptance:** Organizer creates code; applies discount at checkout; usage limits enforced.
+
+### T-053: Event chat rooms (venue-scoped, lifecycle-bound)
+- **Status:** BLOCKED-BY T-013 (tenant feature flag enforcement), T-014 (outbox worker)
+- **Track:** B · **Effort:** L · **Where:** v0 + Realtime + schema migration
+- **Blocks:** Barbados convention experience
+- **Why:** Conventions need event-scoped chat ("main stage," "side events," "vendors," "lost & found") without the platform becoming Discord. Rooms are properties of events: they start when the event opens, close when the event ends. This is a different lifecycle from match chat (which is per-match) and from a hypothetical persistent global community (which we are not building). Default rooms are auto-created per event; convention staff are auto-moderators of their event's rooms.
+- **Schema migration required:** Move and rename existing `community_*` tables into venue scope:
+  - `public.community_rooms` → `venue.event_rooms`
+  - `public.community_room_members` → `venue.event_room_members`
+  - `public.community_messages` → `venue.event_room_messages`
+  - `public.community_moderators` → `venue.event_room_moderators`
+  - Add `event_id uuid REFERENCES venue.events(id) NOT NULL` to event_rooms (currently missing)
+  - Existing data migration: if any `community_rooms` rows exist that aren't tied to an event, archive them and start fresh; verify before destructive migration
+- **Lifecycle (enforced in code, audited in core.audit_log):**
+  - Room created → status `active` (only when parent event is `published` or running)
+  - Event ends → cron handler closes all rooms to read-only (`status = 'archived'`)
+  - Archived rooms: INSERTs denied; SELECTs allowed for 90 days; then soft-deleted
+- **Auto-creation:** When an event is created with `feature.event_rooms` enabled for the tenant, default rooms get inserted via the same transaction: `general`, `matches`, `vendors`, `help`. Organizer can add/remove rooms.
+- **Moderation features required for August:**
+  - Slow mode per room (default 5 seconds; configurable per room)
+  - Per-room ability to require a valid ticket (`venue.tickets` row) for the parent event before posting
+  - Soft-delete messages (`is_deleted = true`)
+  - User timeout scoped to a single room (insert into `core.user_restrictions` with metadata identifying the room and an expires_at)
+  - Pin message (existing `is_pinned` column)
+  - Auto-moderators: event organizer + any `organization_members` row with role_key in (`owner`, `admin`, `staff`) for the tenant owning the event
+  - Same AutoMod blocklist mechanism as T-033 (server-side check on insert; soft-delete blocked content)
+- **The work:**
+  1. SQL migration: move tables, rename, add event_id FK, backfill if any rows
+  2. RLS policies: tenant-feature-flag check (`feature.event_rooms`), event-membership check (must have ticket OR be staff), per-room read/write
+  3. Server action `createEventRoom(eventId, name, settings)` — staff only, fires outbox event
+  4. Server action `sendEventRoomMessage(roomId, content)` — preconditions: event is active, room is active, user has access (ticket holder or staff), slow mode satisfied, AutoMod passed
+  5. Server action `moderateEventRoomMessage(messageId, action)` — moderator-only
+  6. Cron handler subscribed to outbox event `event.ended` → closes rooms to read-only
+  7. Component `<EventRoomsList eventId={...} />` — list of rooms in sidebar
+  8. Component `<EventRoom roomId={...} />` — message list with Realtime subscription on `venue:event:{eventId}:room:{roomId}`, send box, mod tools for moderators
+- **Acceptance:**
+  - Convention organizer creates event → 4 default rooms appear automatically
+  - Ticket holder can join and post in event rooms
+  - Non-ticket-holder is denied posting (and seeing, depending on room visibility)
+  - Convention staff can moderate without holding a ticket
+  - Event ends → rooms become read-only within 60 seconds (outbox cycle); cannot post; can read for 90 days
+  - Per-room slow mode enforced
+  - Timeout in room A does not affect room B
+- **Anti-patterns to refuse:**
+  - Cross-event rooms (rooms must be tied to a specific event for lifecycle clarity)
+  - Voice chat in rooms (out of scope for August; resist requests)
+  - Tenant-wide global rooms (not building global community; raise as architecture decision before starting)
+  - Rooms that survive event end (archived only; new event = new rooms)
+
+---
+
+## TIER 7 — Metrics module (sponsor + organizer reporting)
+
+### T-055: Real-time tenant dashboard
+- **Status:** BLOCKED-BY T-014
+- **Track:** B · **Effort:** L · **Where:** v0 + Realtime subscription
+- **Why:** Organizers see live numbers during their event. Sponsors get live readouts.
+- **Acceptance:** Dashboard shows current viewers, ticket sales, top matches by engagement, trending clips, all updating in real-time.
+
+### T-056: Sponsor report PDF generator
+- **Status:** BLOCKED-BY T-055
+- **Track:** B · **Effort:** L · **Where:** Server action + react-pdf or similar
+- **Why:** Post-event PDF deliverable to sponsors. The "we got you 3,200 peak viewers and X impressions" report.
+- **Acceptance:** Generate PDF for any past event; cached on disk; downloadable from organizer dashboard.
+
+### T-057: Sponsor live API endpoint
+- **Status:** BLOCKED-BY T-055, T-058
+- **Track:** B · **Effort:** S · **Where:** Route handler + auth
+- **Why:** Some sponsors want their own dashboard pulling live data.
+- **Acceptance:** Authenticated API endpoint returns sponsor-relevant metrics in JSON; rate-limited.
+
+---
+
+## TIER 8 — Integrations module (the platform layer)
+
+### T-058: Webhook subscription system
+- **Status:** BLOCKED-BY T-014
+- **Track:** A · **Effort:** L · **Where:** SQL + worker + admin UI
+- **Why:** "Plug into your existing infrastructure" requires outbound webhooks for partner systems (e.g., Barbados venue's ticketing reconciliation, accounting system).
+- **Acceptance:** Tenant configures webhook URL + event types; webhook fires within 60s of event; signed payload; retry on failure.
+
+### T-059: Public API (read-only) for tenant data
+- **Status:** BLOCKED-BY T-058
+- **Track:** B · **Effort:** M · **Where:** Route handlers + API key auth
+- **Why:** Allow Barbados to pull data into their own systems.
+- **Acceptance:** API key auth via api_keys table; per-tenant data only; rate-limited per key.
+
+### T-060: Stripe Connect onboarding flow
+- **Status:** READY
+- **Track:** B · **Effort:** M · **Where:** v0 + Stripe Connect API
+- **Why:** Organizers need to onboard to Stripe Connect to receive payouts.
+- **The prompt:** *(see PROMPTS.md)*
+- **Acceptance:** Organizer completes Stripe-hosted onboarding; status tracked in profiles.stripe_connect_status; payouts blocked until 'complete'.
+
+---
+
+## TIER 9 — Operations + readiness
+
+### T-064: Rate limiting on public endpoints
+- **Status:** READY
+- **Track:** A · **Effort:** S · **Where:** Middleware + Upstash Redis or Vercel Edge Config
+- **Why:** contact_submissions, login attempts, registration attempts all need rate limiting.
+- **Acceptance:** 5 req/min per IP for sensitive endpoints; gracefully degrades to in-memory if Redis unavailable.
+
+### T-065: Error monitoring
+- **Status:** READY
+- **Track:** A · **Effort:** S · **Where:** Sentry or similar
+- **Why:** When something breaks at 11pm in Barbados, you need to know without checking logs.
+- **Acceptance:** All server errors reported; client errors captured; alerts to phone for critical paths.
+
+### T-066: Logging + alerting on financial operations
+- **Status:** BLOCKED-BY T-005, T-012, T-065
+- **Track:** A · **Effort:** S · **Where:** Logging helper + Sentry rules
+- **Why:** Every Stripe call, every payout, every refund logs structured events with intent_id for correlation.
+- **Acceptance:** Can search logs by intent_id and see entire flow.
+
+### T-067: Offline mode for venue check-in
+- **Status:** BLOCKED-BY T-051
+- **Track:** B · **Effort:** M · **Where:** PWA + IndexedDB
+- **Why:** Convention venues have flaky wifi. Check-in must work offline and sync.
+- **Acceptance:** Check-in works with no connection; syncs to offline_sync_queue when online; conflicts surfaced.
+
+### T-068: Operational runbook (RUNBOOK.md)
+- **Status:** READY (incremental)
+- **Track:** A · **Effort:** XS each, ongoing · **Where:** RUNBOOK.md
+- **Why:** Record every "what to do when X breaks" lesson as you encounter it.
+- **Acceptance:** By August, RUNBOOK.md is 5+ pages.
+
+### T-069: Tenant admin UI
+- **Status:** BLOCKED-BY T-013
+- **Track:** B · **Effort:** L · **Where:** v0
+- **Why:** Tenant owners need to manage their feature flags, members, branding, integrations.
+- **Acceptance:** Owner can toggle features (within their plan limits); add/remove members; configure webhooks.
+
+### T-070: Tenant onboarding flow
+- **Status:** BLOCKED-BY T-069
+- **Track:** B · **Effort:** L · **Where:** v0
+- **Why:** First time a new tenant signs up, they need a guided setup.
+- **Acceptance:** New tenant: pick plan → set name + slug → configure features → invite team → first event/tournament wizard.
+
+### T-071: Test in production with one real $20 tournament
+- **Status:** BLOCKED-BY T-022 plus all TIER 2 tasks
+- **Track:** A · **Effort:** L · **Where:** Production
+- **Why:** Final validation before Barbados.
+- **Acceptance:** Real tournament runs end-to-end with real Stripe in real production; you sit through it; nothing requires admin intervention.
+
+---
+
+## TIER C — Discovery (Barbados-specific, blocking on partner)
+
+### T-080: Barbados partner discovery call
+- **Status:** READY (you schedule this)
+- **Track:** C · **Effort:** S · **Where:** Phone/Zoom
+- **Blocks:** T-081, T-082, T-083, T-084
+- **Why:** Until we know what they need, half of Phase 3 is guessing.
+- **Questions to ask:**
+  - Date(s) of event?
+  - Expected attendance?
+  - Are they selling tickets through MAJH or their own system?
+  - Are they running F&B through MAJH or in-house?
+  - How many tournaments? What formats?
+  - Any sponsors and what's the deliverable to them?
+  - What existing tech (POS, badges, registration system) needs integration?
+  - Internet/wifi reliability at venue?
+  - On-site staff with phones for check-in?
+  - Day-before walkthrough possible?
+
+### T-081: Barbados feature flag plan
+- **Status:** BLOCKED-BY T-080
+- **Track:** C · **Effort:** S · **Where:** Document
+- **Why:** Document exactly which modules are on for this tenant.
+
+### T-082: Barbados sponsor deliverable spec
+- **Status:** BLOCKED-BY T-080
+- **Track:** C · **Effort:** S · **Where:** Document
+- **Why:** Specific format and metrics for the PDF/dashboard sponsors will see.
+
+### T-083: Barbados integration spec
+- **Status:** BLOCKED-BY T-080
+- **Track:** C · **Effort:** S · **Where:** Document
+- **Why:** Which webhooks they need, which APIs they're pulling.
+
+### T-084: Barbados full dry run
+- **Status:** BLOCKED-BY T-071, T-080, T-081
+- **Track:** C · **Effort:** L · **Where:** Live test event
+- **Why:** Run the entire Barbados shape end-to-end, in test mode, before traveling.
+
+### T-200: Financial scoping — add department_id and location_id to ledger_transactions, update v_financial_summary to support department aggregation (** Up Next**)
+T-200: Financial scoping ✓ COMPLETE May 18, 2026
+- Migration 20260518_005_financial_scoping.sql: department_id and location_id added to ledger_transactions and ledger_entries with consistency-enforcing trigger
+- Migration 20260518_006_financial_summary_v2.sql: v_financial_summary view rewritten to include department/location grouping with proper grants
+### T-201: CarBadMV operational features — event booking, menu builder, food costing, staff scheduling (TPP replacement)
+### T-202: Wizard UI — contextual help drawer, article rendering, search bar (Path C)
+### T-203: Semantic search — embedding generation pipeline, vector search RPC (Path A)
+### T-204: Authorization migration — checkPermission function, page-by-page migration of 144 check points
+
+### T-205: Public schema grant audit and lockdown
+Discovered May 18, 2026 during T-200 verification: anon role had INSERT/UPDATE/DELETE/TRUNCATE grants on 258 tables (~1,578 grant rows). RLS partially mitigated exposure but defense-in-depth was missing.
+
+Phase 1 (Planning) — COMPLETE May 19, 2026
+Categorization documented in /docs/grant-audit.md. All 258 tables and 7 views mapped to one of four categories (A/B/C/D).
+
+Phase 2 (Execution) — IN PROGRESS
+Batches sequenced by priority:
+
+- T-205.0 (URGENT, this week): Enable RLS on 10 currently-disabled tables. 
+  Tables: ad_clicks, ad_conversions, allowed_embed_domains, content_embeddings,
+  conversion_events, exports_participants_missing_registrations,
+  exports_registrations_missing_participants, moderation_alerts, outbox, 
+  platform_metrics. Migration: 20260519_007_enable_rls_disabled_tables.sql
+
+- T-205.1 (THIS WEEK): Lock down Category A financial tables + views (~30 objects).
+  Migration: 20260519_008_revoke_anon_financial.sql
+
+- T-205.2 (THIS WEEK): Lock down Category A compliance + admin tables (~30 tables).
+  Migration: 20260519_009_revoke_anon_admin_compliance.sql
+
+- T-205.3 (THIS WEEK): Lock down Category A tenant + CarBadMV + ads tables (~45 tables).
+  Migration: 20260519_010_revoke_anon_tenant_cb_ads.sql
+
+- T-205.4 (AFTER 0-3 VERIFIED): Lock down Category D authenticated-only tables (~50 tables).
+  Migration: 20260519_011_revoke_anon_authenticated_only.sql
+
+- T-205.5 (AFTER 0-3 VERIFIED): Set Category B public-readable tables to SELECT only (~50 tables).
+  Migration: 20260519_012_anon_select_only_public.sql
+
+- T-205.6 (AFTER 0-3 VERIFIED): Set Category C contact_submissions to INSERT only.
+  Migration: 20260519_013_anon_insert_only_forms.sql
+
+Phase 3 (Verification): After all batches, run full grant audit again. Expected result: zero anon grants except SELECT on Category B and INSERT on Category C.
+
+Estimated remaining effort: 4-6 focused sessions.
+Scope:
+- Full audit of all anon and PUBLIC grants across public schema
+- Per-table evaluation of what anon should actually be allowed
+- Systematic REVOKE of unintended grants
+- Verification that RLS is appropriately configured per table
+- Documentation of the intended grant model going forward
+
+Priority: PRECEDES T-201. Lock down grants before CarBadMV starts generating real financial data through the platform.
+
+Estimated effort: 1-2 weeks of careful, table-by-table work.
+---
+
+## STATUS TRACKER (update inline as you work)
+
+TIER 0 (Triage) | T-001 | T-002 | T-003 | T-004 | T-005 | T-006 | T-007 | T-008 | _____ | _____ | _____ | _____ | _____ | _____ | _____ | _____ TIER 1 (Foundation) | T-010 | T-011 | T-012 | T-013 | T-014 | _____ | _____ | _____ | _____ | _____ TIER 2 (Tournament) | T-020 | T-021 | T-022 | T-023 | T-024 | T-025 | T-026 | T-027 | T-028 | T-029 | T-030 | _____ | _____ | _____ | _____ | _____ | _____ | _____ | _____ | _____ | _____ | _____ TIER 3 (Audience) | T-031 | T-032 | T-033 | T-034 | T-035 | T-036 | T-037 | _____ | _____ | _____ | _____ | _____ | _____ | _____ TIER 4 (Clips) | T-038 | T-039 | T-040 | T-041 | _____ | _____ | _____ | _____ TIER 5 (Feed) | T-045 | T-046 | T-047 | _____ | _____ | _____ TIER 6 (Venue) | T-050 | T-051 | T-052 | _____ | _____ | _____ TIER 7 (Metrics) | T-055 | T-056 | T-057 | _____ | _____ | _____ TIER 8 (Integrations) | T-058 | T-059 | T-060 | _____ | _____ | _____ TIER 9 (Ops + Ready) | T-064 | T-065 | T-066 | T-067 | T-068 | T-069 | T-070 | T-071 | _____ | _____ | _____ | _____ | _____ | _____ | _____ | _____ TIER C (Discovery) | T-080 | T-081 | T-082 | T-083 | T-084 | _____ | _____ | _____ | _____ | _____
+
+Mark each cell: `OPEN` / `READY` / `WIP` / `DONE` / `BLOCKED:T-NNN`
+
+That's 75 tasks. About 20 are READY right now. The rest open as their dependencies clear.
+

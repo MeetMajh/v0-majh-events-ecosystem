@@ -1,0 +1,10 @@
+Iter 22 complete. Summary:
+
+- **21 TypeScript errors closed** (tsc count: 225 → 204): all 19 TS2551 errors plus 2 incidental TS2339 errors.
+- **Cluster A (10 sites):** `.catch(handler)` → `.then(undefined, handler)` on Supabase PostgrestFilterBuilder chains in `setup-carbardmv/route.ts`, `admin-actions.ts` (×2), `content-moderation.ts`, `media-actions.ts`, `moderation-actions.ts` (×2), `wallet-actions.ts`.
+- **Cluster B (6 + 2 incidental):** Added `player1_wins, player2_wins, is_bye` to the `tournament_matches` SELECT in `app/dashboard/my-events/page.tsx`.
+- **Cluster C (4 errors):** Added optional `reported_player1_draws?` and `reported_player2_draws?` to the `matches` array shape in `components/tournaments/tournament-controller.tsx`.
+- **Two runtime concerns surfaced** (not fixed — Phase 4 / runtime testing): un-awaited fire-and-forget fallback chains in Cluster A handlers; probable schema drift for `reported_player*_draws` columns (no `ADD COLUMN` migration found in `scripts/`).
+- Updated `ralph-dev/STATE.md` (current phase, last-iteration entry, iter-22 fix detail, open notes, next-iter recommendations) and appended iter-22 entry to `ralph-dev/PROGRESS.md`.
+
+Next iter (23) should profile the TS2339 hotspot (104 errors, 51% of remaining queue) — likely concentrated in `tournament-controller.tsx`.

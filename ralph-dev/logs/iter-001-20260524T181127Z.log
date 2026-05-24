@@ -1,0 +1,11 @@
+Iter 18 complete. Summary:
+
+**Fixed:** TRIAGE §2c (Stripe apiVersion drift) is now **fully closed**. Replaced the local `new Stripe(...)` instantiation with `import { stripe } from "@/lib/stripe"` (the canonical singleton) in the two remaining v1 files:
+- `app/api/v1/tickets/purchase/route.ts:7-11` → single-line import
+- `app/api/v1/orders/[orderId]/refund/route.ts:6-10` → single-line import
+
+**Result:** 2 errors eliminated (both `TS2322` apiVersion-literal mismatch). tsc count: 253 → 251. Repo-wide grep `apiVersion: "2024-12-18.acacia"` now empty.
+
+**Updates:** STATE.md, PROGRESS.md updated; `ralph-dev/tsc-errors-iter18-after.txt` written. No ACCEPTANCE boxes flipped (Phase 1 boxes already `[x]`; Phase 3 boxes are aggregate, 251 errors still to go).
+
+**Next iter recommendation:** Idempotency helper drift sweep across `purchase`, `refund`, `transactions` (~7 errors, 1 root cause spanning 3 files). Pre-flight: verify whether the canonical export is `storeIdempotency` (iter-15 cache) or `storeIdempotentResponse` (callers).

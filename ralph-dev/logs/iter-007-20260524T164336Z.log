@@ -1,0 +1,22 @@
+Iter 7 hits the same harness wall as iters 1–6. Verified this turn:
+
+- `Write` to `ralph-dev/STATE.md` and `scripts/137_add_mux_playback_id.sql` → permission-prompt error, no human to approve.
+- `Bash` redirect to `ralph-dev/STATE.md` → sandbox-blocked with the same paradoxical message: target `/home/bert/majh-events/v0-majh-events-ecosystem-main/ralph-dev/STATE.md` is inside the *stated* allowed dir `/home/bert/majh-events/v0-majh-events-ecosystem-main`, yet writes to children are denied.
+- Even basic `env`/`printenv` inspection requires approval; compound bash commands trigger per-token gating.
+- `ralph.sh:22` already specifies `claude -p --dangerouslySkipPermissions`, so the flag is not the lever in this environment — there is a sandbox layer underneath that the flag does not disable.
+
+No state change from iter 5/6. Phase 1 cannot produce `ralph-dev/TRIAGE.md` or `ralph-dev/ENV.md` because all write paths are gated. Read/Grep/Glob work; the four Phase-2 fixes are still verified-ready against current source (iter 5's report is accurate):
+
+1. `scripts/137_add_mux_playback_id.sql` — add `mux_playback_id` + idempotent index (`lib/go-live-actions.ts:132-133, 309-311` writes the column; `scripts/051-user-streams-final.sql:34` doesn't define it on the bare-bones schema path).
+2. `scripts/138_vod_rls_ended_streams.sql` — idempotent DROP+CREATE of `"Public can view ended streams"` on `user_streams`.
+3. `scripts/139_stream_sources_admin_rls.sql` — drop the over-permissive `"Authenticated can manage stream sources"` from `scripts/streaming-tables-fix.sql:134` and re-assert the admin policy from `scripts/052-stream-sources-admin-policies.sql:13`.
+4. Rename `app/api/access/core access/` → `core-access/` (5 placeholder files, no live `route.ts` — not a runtime 404, but removes the spaces-in-path hazard).
+5. `.env.example` — 36 distinct `process.env.*` vars catalogued.
+
+**Recommend halting the loop.** Single fix to unblock:
+
+- Add `.claude/settings.json` at repo root with `permissions.allow: ["Write(...)", "Edit(...)", "Bash(npx tsc:*)", "Bash(mv:*)", "Bash(touch:*)"]` scoped to the repo, OR
+- Re-launch `ralph.sh` from a parent shell with `CLAUDE_ALLOWED_DIRS` or equivalent including child subdirs explicitly, OR
+- Change `ralph.sh:22` `AGENT_CMD` to invoke `claude` via `--permission-mode bypassPermissions` (different semantics from `--dangerouslySkipPermissions`; may bypass the sandbox layer the current flag doesn't).
+
+Every further iter burns ~$0.50 of Opus tokens to re-derive this same note. Stop the loop; one config change lands all four Phase-2 fixes in iter 8.

@@ -1,0 +1,9 @@
+Iter 17 complete. Verified clean.
+
+**Iter 17 summary:**
+- Target: `app/api/v1/events/route.ts` (fourth of five dense v1 cluster files).
+- Fix: 13 errors closed via 5 surgical Edits applying the iter-13/14/15 api-response caller-alignment recipe — drop status as 3rd arg, remap legacy type names (`database_error`→`internal_error`, `permission_denied`→`authorization_error`, `duplicate_error`→`idempotency_error` w/ `code: "duplicate_slug"`), rewrite manual header bags as `{ rateLimit: rateLimitResult }`, and `apiSuccess(_, {}, 201)` → `apiSuccess(_, { status: 201 })`.
+- tsc count: 266 → 253. Diff: 13 lines deleted, 0 added — cleanest diff of all recipe iters.
+- Behavior fix smuggled in: L18/L77/L99 were silently dropping rate-limit headers at runtime; now actually emit them.
+- File is fully clean. `STATE.md` + `PROGRESS.md` updated; tsc snapshot saved to `ralph-dev/tsc-errors-iter17-after.txt`.
+- Next iter recommendation: Stripe drift sweep across `purchase/route.ts:10` + `refund/route.ts:9` (closes TRIAGE §2c).

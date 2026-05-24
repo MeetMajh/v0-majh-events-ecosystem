@@ -1,0 +1,25 @@
+export function buildSchemaDNA(schema: any) {
+  return schema.map((table: any) => ({
+    name: table.table_name,
+
+    columns: table.columns.reduce((acc: any, col: any) => {
+      acc[col.column_name] = col.data_type;
+      return acc;
+    }, {}),
+
+    relationships: table.foreign_keys?.map((fk: any) => ({
+      from: fk.column,
+      to: fk.references_table
+    })) || [],
+
+    inferredPurpose: inferPurpose(table.table_name)
+  }));
+}
+
+function inferPurpose(name: string) {
+  if (name.includes("event")) return "Event system";
+  if (name.includes("match")) return "Match system";
+  if (name.includes("user")) return "Authentication";
+  if (name.includes("order")) return "Commerce";
+  return "Custom domain";
+}

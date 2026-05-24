@@ -1,0 +1,12 @@
+Iter 13 complete. `app/api/v1/events/[eventId]/route.ts` is fully clean.
+
+**Summary:**
+- Closed 15 errors in `app/api/v1/events/[eventId]/route.ts` (7 × TS2559, 7 × TS2345, 1 × TS2353) by aligning callers to the canonical `apiError`/`apiSuccess` helper in `lib/middleware/api-response.ts`.
+- Canonical-name remap applied: `"not_found"` → `"resource_not_found"`, `"permission_denied"` → `"authorization_error"`, `"database_error"` → `"internal_error"`, `"conflict"` → `"idempotency_error"`.
+- Dropped all 3rd-arg status codes (each matched the helper's auto-derivation — no behavior change).
+- Rewrote `apiSuccess(data, { "X-RateLimit-Remaining": ... })` as `apiSuccess(data, { rateLimit: rateLimitResult })`; also added rate-limit headers to the 429 response which was missing them.
+- tsc count: 310 → 295. Diff is surgical: 15 lines deleted, 0 added.
+- Verified helper-usage breadth before committing the caller-alignment direction: 12 importers, all under `app/api/v1/`.
+- ACCEPTANCE: no flips (Phase 3 aggregate, 295 to go).
+- STATE.md + PROGRESS.md updated. No `BLOCKED:` or `PLAN_DRIFT:`.
+- Next: iter 14 applies the same recipe to `app/api/v1/tickets/purchase/route.ts` (16 errors).

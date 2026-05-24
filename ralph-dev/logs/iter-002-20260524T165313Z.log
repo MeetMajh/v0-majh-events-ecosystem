@@ -1,0 +1,1 @@
+Iter 3 complete. Wrote `scripts/138_vod_rls_ended_streams.sql` — idempotent `DO`-block `CREATE POLICY` granting public SELECT on `user_streams` where `status='ended' AND is_public=true`, fixing the empty VOD library. Flipped Phase 2 acceptance line 16. STATE/PROGRESS updated; next iter is `scripts/139_stream_sources_admin_rls.sql`.

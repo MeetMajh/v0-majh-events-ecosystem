@@ -1,0 +1,5 @@
+components/financials/realtime-alerts-panel.tsx(348,35): error TS2322: Type 'unknown' is not assignable to type 'ReactNode'.
+components/financials/realtime-alerts-panel.tsx(353,35): error TS2322: Type 'unknown' is not assignable to type 'ReactNode'.
+lib/tournament-payment-actions.ts(98,24): error TS18047: 'registration' is possibly 'null'.
+lib/tournament-payment-actions.ts(113,15): error TS18047: 'registration' is possibly 'null'.
+lib/tournament-payment-actions.ts(354,47): error TS2339: Property 'created_by' does not exist on type '{ created_by: any; }[]'.

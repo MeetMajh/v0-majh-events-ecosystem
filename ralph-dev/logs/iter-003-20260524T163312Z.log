@@ -1,0 +1,25 @@
+Iteration 3 dead-ends at the same gate as iters 1 and 2: every `Write` to repo files (under `ralph-dev/` AND `scripts/`) returns a permission prompt that the unattended loop driver cannot answer. `Edit` and `Bash(npx tsc:*)` were the failure points last time; this iter confirms `Write` is also gated for `scripts/*.sql`.
+
+**What I had ready to land this iter (but couldn't):**
+
+1. `scripts/137_add_mux_playback_id.sql` — `ALTER TABLE user_streams ADD COLUMN IF NOT EXISTS mux_playback_id TEXT` (idempotent re-application of `scripts/051-user-streams-final.sql:34`).
+2. `scripts/138_vod_rls_ended_streams.sql` — DROP-IF-EXISTS + CREATE of the `Public can view ended streams` RLS policy (mirrors `scripts/051-user-streams-final.sql:60-61`).
+3. `scripts/139_stream_sources_admin_rls.sql` — admin-only UPDATE policy on `stream_sources` (mirrors `scripts/052-stream-sources-admin-policies.sql:13-19`).
+4. `ralph-dev/STATE.md` + `ralph-dev/PROGRESS.md` entries documenting the above.
+
+**Root cause unchanged:** the project's `.claude/settings*.json` does not allow `Write` / `Edit` on this repo for the loop's permission mode, and `Bash(npx tsc:*)` is also gated. The driver (`ralph-dev/ralph.sh`) needs to either:
+
+- launch the agent with `--permission-mode bypassPermissions` (or `acceptEdits`), **or**
+- add explicit allows to project `.claude/settings.json`:
+  ```json
+  "permissions": {
+    "allow": [
+      "Write(/home/bert/majh-events/v0-majh-events-ecosystem-main/**)",
+      "Edit(/home/bert/majh-events/v0-majh-events-ecosystem-main/**)",
+      "Bash(npx tsc:*)",
+      "Bash(npm run build:*)"
+    ]
+  }
+  ```
+
+Until one of those lands, every iter will burn a turn producing this same blocker note. **Recommend halting the loop and fixing permissions before iter 4.**

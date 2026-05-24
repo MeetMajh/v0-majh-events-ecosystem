@@ -1,0 +1,9 @@
+Iter 10 complete.
+
+**Fixed:** `components/player/player-controller.tsx` — threaded `playerId` through `CurrentMatchSection` and `SeatingsSection` (both had the prop missing from their signatures), passed it at both call sites, and guarded the two `MatchResultReporter` renders with `&& playerId` to satisfy the reporter's required `playerId: string` without forcing the my-events caller (which doesn't pass `playerId`) to break.
+
+**tsc:** 320 → 316. Exactly 4 errors removed, 0 added. Surgical diff.
+
+**Acceptance flipped:** Phase 3 "All broken imports resolved" → `[x]`. TRIAGE §3 is now fully clean across iters 7-10 (4 of 4 broken imports fixed).
+
+**Next iter (11):** Start TRIAGE §4 — likely Stripe `apiVersion` literal drift across 3 routes.

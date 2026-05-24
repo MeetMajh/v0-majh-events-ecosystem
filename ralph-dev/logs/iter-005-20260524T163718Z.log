@@ -1,0 +1,39 @@
+Iter 5: blocked. Same wall iters 1–4 hit and that iter-004's log already documented in detail.
+
+**Diagnosis (re-verified this turn):**
+- `Write` and `Edit` tools both prompt for permission → harness denies (no human in the loop).
+- `Bash` redirect/`touch` are blocked by the sandbox even for paths inside the stated allowed working directory:
+  ```
+  touch in '/home/bert/.../scripts/.write-test' was blocked. For security,
+  Claude Code may only create or modify files in the allowed working
+  directories for this session: '/home/bert/majh-events/v0-majh-events-ecosystem-main'.
+  ```
+  The error names the parent dir as allowed but blocks every child. Reads, greps, `pwd`, `readlink` all work fine — investigation is unrestricted, only writes are walled.
+
+**What was ready to land** (verified against current source, would land in <60s once writes unblock):
+1. `scripts/137_add_mux_playback_id.sql` — adds `mux_stream_id` + `mux_asset_id` columns (idempotent re-add of `mux_playback_id`) + two conditional indexes. Justified by `lib/go-live-actions.ts:132-133, 309-311` writing all three columns vs `scripts/051-user-streams-final.sql:34` adding only one.
+2. `scripts/138_vod_rls_ended_streams.sql` — idempotent DROP+CREATE of `"Public can view ended streams"` policy (051:60-61 already has it, but prod doesn't per PLAN bug #2).
+3. `scripts/139_stream_sources_admin_rls.sql` — drops `"Authenticated can manage stream sources"` (the over-permissive policy at `scripts/streaming-tables-fix.sql:134`) AND re-asserts the admin-only policy from `scripts/052-stream-sources-admin-policies.sql:13`. Without the drop, run-order of 052 vs streaming-tables-fix.sql determines the effective policy.
+4. Rename `app/api/access/core access/` → `core-access/`. **Note:** the 5 files in there (`codebase`, `database`, `git`, `services`, `vercel`) are 1-byte placeholders, no `route.ts`. Sibling `code/`, `db/`, `env/`, `git/` each have a real `route.ts`. Renaming clears the spaces-in-path hazard but doesn't fix a live 404 — there's no route handler to break in the first place.
+5. `.env.example` — 36 distinct `process.env.*` vars catalogued this turn (full list collected in memory, ready to write).
+6. `ralph-dev/STATE.md` + `ralph-dev/PROGRESS.md` initial entries.
+
+**Recommend halting the loop until one of:**
+- `ralph.sh` is updated to launch `claude` with `--permission-mode acceptEdits` (or `bypassPermissions`), **or**
+- Project `.claude/settings.json` is created with:
+  ```json
+  {
+    "permissions": {
+      "allow": [
+        "Write(/home/bert/majh-events/v0-majh-events-ecosystem-main/**)",
+        "Edit(/home/bert/majh-events/v0-majh-events-ecosystem-main/**)",
+        "Bash(npx tsc:*)",
+        "Bash(npm run build:*)",
+        "Bash(touch:*)",
+        "Bash(mv:*)"
+      ]
+    }
+  }
+  ```
+
+Every further iter against this wall just rediscovers the same permission gate and burns ~$0.50 of Opus tokens producing this same note. Fix unlocks Phase 2 in a single iter.

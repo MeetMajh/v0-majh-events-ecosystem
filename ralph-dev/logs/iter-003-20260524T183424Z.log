@@ -1,0 +1,9 @@
+Iter 21 done. Quick summary:
+
+**Iter 21 — `app/api/v1/ticket-types/route.ts` api-response drift sweep**
+- 12 errors closed in one file (7 × TS2559, 4 × TS2345 for `database_error`/`permission_denied`/`not_found`, 1 × TS2554 for `apiSuccess(_, {}, 201)`).
+- tsc count: **237 → 225**. Diff: 12 lines deleted, 0 added — cleanest possible.
+- Applied iter-13/14/15/17/20 recipe (sixth successful application). Canonical remaps: `database_error` → `internal_error` (no `code` — both equally generic); `permission_denied` → `authorization_error`; `not_found` → `resource_not_found`. Added `{ rateLimit: rateLimitResult }` to L16 rate-limit-exceeded response (correctness improvement).
+- **The entire dense v1 API cluster is now fully clean** (7 of 7 originally-named files; ~85 errors closed across the cluster over 6 iters).
+
+**Next iter (22):** TS2551 mechanical batch (19 errors). Lowest-risk pivot from the now-exhausted v1 cluster work. STATE.md and PROGRESS.md updated.

@@ -1,0 +1,9 @@
+Iter 24 complete. 
+
+**Summary:**
+- **tsc errors: 178 → 169** (9 closed, 0 added)
+- **File:** `components/tournaments/tournament-controller.tsx`
+- **Fix:** added 4 optional field declarations across 2 manually-typed `matches` array prop interfaces (`is_feature_match`, `draws`, `dispute_reason` on the `allRounds[].matches` interface; `is_feature_match` on the `currentRound.matches` interface). All 3 columns confirmed real in migrations `scripts/042_*.sql`, `scripts/050_*.sql`, `scripts/053_*.sql` — no schema-drift warning needed.
+- **Iter-23 recommendation verified as no-op:** repo-wide `grep -rln "createClient(cookieStore)"` returned 0 hits across 242 server.ts importers. The legacy drift was self-contained to `lib/role-actions.ts`. Saved this finding to STATE.md.
+- **Process note:** the file has TWO distinct `matches` prop interfaces; first edit only closed 3 of 9 errors, requiring a second edit on the smaller interface. New convention added: use error-message type signature (presence of `loser_id` etc.) to distinguish multi-interface shapes.
+- **STATE.md + PROGRESS.md updated.** No acceptance boxes flipped. Iter-25 recommended target: `lib/cold-start-service.ts` (new top TS2339 hotspot at 12 errors).

@@ -1,0 +1,8 @@
+Iter 6 complete. Phase 2 of the Ralph dev-completion loop is now fully checked.
+
+**This iter:**
+- Wrote `/home/bert/majh-events/v0-majh-events-ecosystem-main/.env.example` (3,981 bytes, 11 sections) directly from `ralph-dev/ENV.md`, preserving section order for 1-to-1 traceability.
+- Blank `VAR=` for every secret; `http://localhost:3000` defaults only for `NEXT_PUBLIC_APP_URL` and `NEXT_PUBLIC_SITE_URL` (non-secret). Vercel-provided vars listed in a trailing comment block with no `=` to prevent accidental shadowing.
+- Flipped Phase 2 acceptance line 19. Updated STATE.md (current phase → "Phase 2 COMPLETE, ready for Phase 3"). Appended iter-6 entry to PROGRESS.md.
+
+**Next iter (7)** starts Phase 3 — TYPESCRIPT ERRORS: rerun `tsc --noEmit` to refresh the error set, then begin at TRIAGE.md §3's 4 broken-import entries, one per iter.

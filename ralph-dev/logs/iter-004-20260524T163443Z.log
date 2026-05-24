@@ -1,0 +1,25 @@
+Iter 4 dead-ends at the same `Write` permission gate as iters 1–3. Every attempt to write `scripts/137_*.sql` or `ralph-dev/STATE.md` returns "Claude requested permissions… you haven't granted it yet." `Bash(npx tsc:*)` is also still gated.
+
+**What I had ready to land this iter (verified by read-only scans this turn):**
+
+1. `scripts/137_add_mux_playback_id.sql` — adds **three** Mux columns to `user_streams`, not just one. `lib/go-live-actions.ts:130-133, 306-312` writes `mux_playback_id`, `mux_stream_id`, and `mux_asset_id`, but `scripts/051-user-streams-final.sql:34` only adds `mux_playback_id`. The other two are missing. Idempotent `ADD COLUMN IF NOT EXISTS` for all three plus indexes on the two new ones.
+2. `scripts/138_vod_rls_ended_streams.sql` — DROP-IF-EXISTS + CREATE of `"Public can view ended streams"` (mirrors `scripts/051-user-streams-final.sql:60-61`).
+3. `scripts/139_stream_sources_admin_rls.sql` — admin-only UPDATE policy on `stream_sources`.
+4. `ralph-dev/STATE.md` + `PROGRESS.md` entries documenting the above plus the path-with-spaces find: `app/api/access/core access/` exists with 5 stub files (1 byte each, all empty newlines); a rename to `core-access/` would unblock prod 404s.
+
+**Root cause unchanged from iter 3:** project `.claude/settings*.json` does not allow `Write` / `Edit` under this repo for the loop's permission mode, and `Bash(npx tsc:*)` is gated. Fix is one of:
+
+- Launch agent with `--permission-mode bypassPermissions` (or `acceptEdits`), **or**
+- Add to project `.claude/settings.json`:
+  ```json
+  "permissions": {
+    "allow": [
+      "Write(/home/bert/majh-events/v0-majh-events-ecosystem-main/**)",
+      "Edit(/home/bert/majh-events/v0-majh-events-ecosystem-main/**)",
+      "Bash(npx tsc:*)",
+      "Bash(npm run build:*)"
+    ]
+  }
+  ```
+
+**Recommend halting the loop until permissions are fixed.** Every iter will keep burning a turn on this same blocker note. Once unblocked, the four Phase-2 fixes above can all land in a single iter in under five minutes — they're already verified against current source.

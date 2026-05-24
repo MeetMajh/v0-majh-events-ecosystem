@@ -1,0 +1,167 @@
+{
+  "id": "com.majhevents.app",
+  "name": "MAJH EVENTS",
+  "short_name": "MAJH",
+  "description": "The ultimate esports and entertainment ecosystem. Gaming tournaments, bar & cafe, mobile events, equipment rentals.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#1a0e2e",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  
+  "categories": ["entertainment", "games", "sports"],
+  "lang": "en-US",
+  "dir": "ltr",
+  "screenshots": [
+    {
+      "src": "/screenshots/desktop-home.jpg",
+      "type": "image/jpeg",
+      "form_factor": "wide",
+      "label": "MAJH EVENTS Homepage - Desktop"
+    },
+    {
+      "src": "/screenshots/mobile-home.jpg",
+      "type": "image/jpeg",
+      "form_factor": "narrow",
+      "label": "MAJH EVENTS Homepage - Mobile"
+    },
+    {
+      "src": "/screenshots/mobile-tournaments.jpg",
+      "type": "image/jpeg",
+      "form_factor": "narrow",
+      "label": "Tournament Listings"
+    }
+  ],
+  "iarc_rating_id": "e84b0e10-5f33-4321-a123-000000000000",
+  "display_override": ["tabbed", "window-controls-overlay", "standalone", "minimal-ui"],
+  "edge_side_panel": {
+    "preferred_width": 400
+  },
+  "widgets": [
+    {
+      "name": "MAJH Quick Access",
+      "description": "Quick access to tournaments and events",
+      "tag": "majh-widget",
+      "ms_ac_template": "widget/quick-access.json",
+      "screenshots": [
+        {
+          "src": "/screenshots/mobile-home.jpg",
+          "label": "Widget preview"
+        }
+      ],
+      "icons": [
+        {
+          "src": "/icons/icon-192x192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Tournaments",
+      "short_name": "Tournaments",
+      "description": "Browse and join gaming tournaments",
+      "url": "/esports",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Book Event",
+      "short_name": "Book",
+      "description": "Book a CARBARDMV experience",
+      "url": "/events",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Dashboard",
+      "short_name": "Dashboard",
+      "description": "Access your dashboard",
+      "url": "/dashboard",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ],
+  "related_applications": [
+    {
+      "platform": "play",
+      "url": "https://play.google.com/store/apps/details?id=com.majhevents.app"
+    }
+  ],
+  "prefer_related_applications": false,
+  "share_target": {
+    "action": "/share",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  },
+  "handle_links": "preferred",
+  "launch_handler": {
+    "client_mode": "navigate-existing"
+  },
+  "protocol_handlers": [
+    {
+      "protocol": "web+majh",
+      "url": "/share?url=%s"
+    }
+  ],
+  "file_handlers": [
+    {
+      "action": "/share",
+      "accept": {
+        "text/plain": [".txt"]
+      }
+    }
+  ],
+  "scope_extensions": [
+    {
+      "origin": "https://*.majhevents.com"
+    },
+    {
+      "origin": "https://auth.majhevents.com"
+    },
+    {
+      "origin": "https://api.majhevents.com"
+    },
+    {
+      "origin": "https://cdn.majhevents.com"
+    },
+    {
+      "origin": "https://admin.majhevents.com"
+    },
+    {
+      "origin": "https://esports.majhevents.com"
+    },
+    {
+      "origin": "https://events.majhevents.com"
+    },
+    {
+      "origin": "https://carbardmv.majhevents.com"
+    },
+    {
+      "origin": "https://streams.majhevents.com"
+    }
+  ]
+}

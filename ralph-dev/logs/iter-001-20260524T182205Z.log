@@ -1,0 +1,3 @@
+Iter 19 complete. Skipping task tooling — not relevant for a single-iter Ralph step.
+
+**Summary:** Iter 19 closed the idempotency helper drift sweep across 2 caller files (purchase + refund). 6 errors eliminated (5 idempotency + 1 coupled api-response TS2353). tsc count: 251 → 245. `purchase/route.ts` is now fully clean; `transactions/route.ts` stays clean (was the gold-standard reference). All 3 idempotency callers repo-wide now use the canonical `checkIdempotency(req, tenantId)` and 5-arg `storeIdempotency/storeIdempotentResponse(req, tenantId, apiKeyId, {status, body}, durationMs)` signatures. Next iter recommended: `refund/route.ts` api-response drift (8 remaining errors, proven iter-13/14/15/17 recipe).

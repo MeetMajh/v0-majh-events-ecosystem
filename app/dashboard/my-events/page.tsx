@@ -1,0 +1,682 @@
+import { createClient, createAdminClient } from "@/lib/supabase/server"
+import { cn } from "@/lib/utils"
+import { redirect } from "next/navigation"
+import Link from "next/link"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { 
+  Trophy, Swords, Calendar, MapPin, Clock, ChevronRight, 
+  Users, Gamepad2, Target, TrendingUp, Medal, Star
+} from "lucide-react"
+import { format, formatDistanceToNow, isPast, isFuture } from "date-fns"
+
+export const metadata = {
+  title: "My Events | MAJH EVENTS",
+  description: "View your tournament registrations and match history as a player",
+}
+
+async function getMyEvents(userId: string) {
+  const supabase = await createClient()
+  const adminClient = createAdminClient()
+
+  // PRIMARY: Get matches directly using user.id (matches store auth user IDs)
+  // Use adminClient to bypass RLS restrictions
+  const { data: matchData } = await adminClient
+    .from("tournament_matches")
+    .select(`
+      id,
+      tournament_id,
+      status,
+      result,
+      player1_id,
+      player2_id,
+      player1_wins,
+      player2_wins,
+      winner_id,
+      is_bye,
+      tournament_rounds (round_number, status)
+    `)
+    .or(`player1_id.eq.${userId},player2_id.eq.${userId}`)
+    .order("created_at", { ascending: false })
+    .limit(50)
+  
+  // Fetch opponent profiles
+  const allPlayerIds = new Set<string>()
+  matchData?.forEach(m => {
+    if (m.player1_id) allPlayerIds.add(m.player1_id)
+    if (m.player2_id) allPlayerIds.add(m.player2_id)
+  })
+  
+  let profilesMap: Record<string, { id: string; first_name: string | null; last_name: string | null; avatar_url: string | null }> = {}
+  if (allPlayerIds.size > 0) {
+    const { data: profiles } = await adminClient
+      .from("profiles")
+      .select("id, first_name, last_name, avatar_url")
+      .in("id", Array.from(allPlayerIds))
+    
+    profiles?.forEach(p => {
+      profilesMap[p.id] = p
+    })
+  }
+  
+  // Attach profile data to matches
+  const matches = (matchData || []).map(m => ({
+    ...m,
+    player1: m.player1_id ? profilesMap[m.player1_id] : null,
+    player2: m.player2_id ? profilesMap[m.player2_id] : null,
+  }))
+
+  // Get registrations for additional tournament info
+  const { data: registrationRecords } = await adminClient
+    .from("tournament_registrations")
+    .select("player_id, tournament_id")
+    .eq("player_id", userId)
+
+  // playerIds for leaderboard/results queries
+  const playerIds = [userId]
+
+  const playerMap = new Map<string, string>(
+    (registrationRecords || []).map(r => [r.tournament_id, r.player_id])
+  )
+  // Also add userId for tournaments found via matches
+  matches.forEach(m => {
+    if (!playerMap.has(m.tournament_id)) {
+      playerMap.set(m.tournament_id, userId)
+    }
+  })
+
+  // Get unique tournament IDs from matches
+  const tournamentIdsFromMatches = [...new Set(matches.map(m => m.tournament_id).filter(Boolean))]
+
+  // Fetch tournament details for tournaments the user has matches in
+  let tournamentsFromMatches: any[] = []
+  if (tournamentIdsFromMatches.length > 0) {
+    const { data: tournamentData } = await adminClient
+      .from("tournaments")
+      .select(`
+        id, name, slug, status, start_date, end_date, game_id
+      `)
+      .in("id", tournamentIdsFromMatches)
+      .order("start_date", { ascending: false })
+    
+    tournamentsFromMatches = tournamentData || []
+  }
+
+  // Build registration-like objects from match data
+  const registrations = tournamentsFromMatches.map(tournament => ({
+    id: `match-${userId}-${tournament.id}`,
+    player_id: userId,
+    tournament_id: tournament.id,
+    status: "checked_in",
+    created_at: new Date().toISOString(),
+    tournaments: tournament
+  }))
+
+  // SECONDARY: Get from tournament_participants (the correct table with user_id)
+  const { data: participantRegs } = await adminClient
+    .from("tournament_participants")
+    .select(`
+      *,
+      tournaments (
+        id, name, slug, status, start_date, end_date, game_id
+      )
+    `)
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+
+  // Merge registrations, preferring participant records if they exist
+  const existingTournamentIds = new Set(registrations.map(r => r.tournament_id))
+  participantRegs?.forEach(reg => {
+    if (!existingTournamentIds.has(reg.tournament_id)) {
+      registrations.push(reg)
+    }
+  })
+
+  // Get user's leaderboard entries (using playerIds)
+  let leaderboardEntries: any[] = []
+  if (playerIds.length > 0) {
+    const { data } = await adminClient
+      .from("leaderboard_entries")
+      .select(`
+        *,
+        games (id, name, category, icon_url)
+      `)
+      .in("player_id", playerIds)
+      .order("ranking_points", { ascending: false })
+    leaderboardEntries = data || []
+  }
+
+  // Get user's tournament results (using playerIds)
+  let results: any[] = []
+  if (playerIds.length > 0) {
+    const { data } = await adminClient
+      .from("tournament_results")
+      .select(`
+        *,
+        tournaments (id, name, slug, start_date, games (name))
+      `)
+      .in("player_id", playerIds)
+      .order("created_at", { ascending: false })
+      .limit(10)
+    results = data || []
+  }
+
+  return {
+    registrations: registrations ?? [],
+    matches: matches ?? [],
+    leaderboardEntries,
+    results,
+    playerMap, // Pass the map for UI to check player identity
+  }
+}
+
+export default async function MyEventsPage() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) {
+    redirect("/login?redirect=/dashboard/my-events")
+  }
+
+  const { registrations, matches, leaderboardEntries, results } = await getMyEvents(user.id)
+
+  // Categorize registrations - be more lenient with status matching
+  const activeEvents = registrations.filter(
+    r => r.tournaments && r.tournaments.status === "in_progress" && !["dropped", "disqualified"].includes(r.status)
+  )
+  const upcomingEvents = registrations.filter(
+    r => r.tournaments && (r.tournaments.status === "registration" || 
+         (r.tournaments.start_date && isFuture(new Date(r.tournaments.start_date)))) && 
+         !["dropped", "disqualified"].includes(r.status) &&
+         r.tournaments.status !== "in_progress" &&
+         r.tournaments.status !== "completed"
+  )
+  const pastEvents = registrations.filter(
+    r => r.tournaments && r.tournaments.status === "completed"
+  )
+
+  // Calculate stats from matches directly
+  const matchWins = matches.filter(m => m.winner_id === user.id).length
+  const matchLosses = matches.filter(m => m.winner_id && m.winner_id !== user.id).length
+  const matchDraws = matches.filter(m => m.status === "confirmed" && !m.winner_id).length
+  
+  // Use match-based stats (fallback to leaderboard entries if no wins from matches)
+  const totalWins = matchWins > 0 ? matchWins : leaderboardEntries.reduce((sum, e) => sum + (e.total_wins ?? 0), 0)
+  const totalLosses = matchLosses > 0 ? matchLosses : leaderboardEntries.reduce((sum, e) => sum + (e.total_losses ?? 0), 0)
+  const totalPoints = leaderboardEntries.reduce((sum, e) => sum + (e.ranking_points ?? 0), 0)
+  const tournamentsWon = results.filter(r => r.placement === 1).length
+  const totalMatches = matches.length
+  const eventsEntered = registrations.length
+  const winRate = totalMatches > 0 ? Math.round((totalWins / totalMatches) * 100) : 0
+
+  return (
+    <div className="container mx-auto py-8 px-4">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-foreground">My Events</h1>
+        <p className="text-muted-foreground mt-1">
+          View your tournament registrations, matches, and player stats
+        </p>
+      </div>
+
+      {/* Player Controller Quick Access - Prominent for Active Tournaments */}
+      {activeEvents.length > 0 && (
+        <Link href="/dashboard/player-controller">
+          <Card className="mb-8 border-primary/50 bg-primary/5 hover:bg-primary/10 transition-colors cursor-pointer">
+            <CardContent className="flex items-center justify-between p-4">
+              <div className="flex items-center gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/20">
+                  <Gamepad2 className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-primary">Player Controller</h3>
+                  <p className="text-sm text-muted-foreground">
+                    You have {activeEvents.length} active tournament{activeEvents.length !== 1 ? "s" : ""} - manage your matches
+                  </p>
+                </div>
+              </div>
+              <ChevronRight className="h-5 w-5 text-primary" />
+            </CardContent>
+          </Card>
+        </Link>
+      )}
+
+      {/* Player Stats Overview */}
+      <div className="grid gap-4 md:grid-cols-5 mb-8">
+        <Card className="border-border bg-card">
+          <CardContent className="flex items-center gap-3 p-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+              <TrendingUp className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-primary">{totalPoints.toLocaleString()}</p>
+              <p className="text-xs text-muted-foreground">Ranking Points</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-border bg-card">
+          <CardContent className="flex items-center gap-3 p-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-500/10">
+              <Swords className="h-5 w-5 text-green-600" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold">
+                <span className="text-green-600">{totalWins}</span>
+                <span className="text-muted-foreground"> - </span>
+                <span className="text-red-500">{totalLosses}</span>
+              </p>
+              <p className="text-xs text-muted-foreground">Match Record</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-border bg-card">
+          <CardContent className="flex items-center gap-3 p-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10">
+              <Target className="h-5 w-5 text-blue-600" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-foreground">{winRate}%</p>
+              <p className="text-xs text-muted-foreground">Win Rate</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-border bg-card">
+          <CardContent className="flex items-center gap-3 p-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10">
+              <Gamepad2 className="h-5 w-5 text-amber-600" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-foreground">{registrations.length}</p>
+              <p className="text-xs text-muted-foreground">Events Entered</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-border bg-card">
+          <CardContent className="flex items-center gap-3 p-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-yellow-500/10">
+              <Trophy className="h-5 w-5 text-yellow-500" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-foreground">{tournamentsWon}</p>
+              <p className="text-xs text-muted-foreground">Titles Won</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-8 lg:grid-cols-3">
+        {/* Active & Upcoming Events */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Active Events */}
+          {activeEvents.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                  Active Events
+                </CardTitle>
+                <CardDescription>Tournaments currently in progress</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {activeEvents.map((reg) => (
+                  <Link 
+                    key={reg.id} 
+                    href={`/dashboard/player-portal/${reg.tournaments?.id}`}
+                    className="flex items-center justify-between p-4 rounded-lg border border-border hover:border-primary/30 hover:bg-muted/30 transition-colors"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
+                        <Gamepad2 className="h-6 w-6 text-primary" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-foreground">{reg.tournaments?.name}</p>
+                        <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                          <Badge variant="outline" className="text-[10px]">
+                            {reg.tournaments?.games?.name}
+                          </Badge>
+                          <span className="flex items-center gap-1">
+                            <MapPin className="h-3 w-3" />
+                            {reg.tournaments?.venue_name || reg.tournaments?.location || "TBA"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge className="bg-green-500/20 text-green-600 border-green-500/30">
+                        {reg.status === "checked_in" ? "Checked In" : "Registered"}
+                      </Badge>
+                      <Button size="sm" variant="secondary">
+                        Player Controller
+                      </Button>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  </Link>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Upcoming Events */}
+          {upcomingEvents.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5 text-primary" />
+                  Upcoming Events
+                </CardTitle>
+                <CardDescription>Tournaments you're registered for</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {upcomingEvents.map((reg) => (
+                  <Link 
+                    key={reg.id} 
+                    href={`/dashboard/player-portal/${reg.tournaments?.id}`}
+                    className="flex items-center justify-between p-4 rounded-lg border border-border hover:border-primary/30 hover:bg-muted/30 transition-colors"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
+                        <Gamepad2 className="h-6 w-6 text-muted-foreground" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-foreground">{reg.tournaments?.name}</p>
+                        <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                          <Badge variant="outline" className="text-[10px]">
+                            {reg.tournaments?.games?.name}
+                          </Badge>
+                          {reg.tournaments?.start_date && (
+                            <span className="flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              {formatDistanceToNow(new Date(reg.tournaments.start_date), { addSuffix: true })}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline">{reg.status}</Badge>
+                      <Button size="sm" variant="outline">
+                        Player Controller
+                      </Button>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  </Link>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* All Registered Tournaments - Always show this section */}
+          {registrations.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Gamepad2 className="h-5 w-5 text-primary" />
+                  Registered Tournaments
+                </CardTitle>
+                <CardDescription>All tournaments you&apos;re registered for - click to open Player Controller</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {registrations.map((reg) => (
+                  <Link 
+                    key={reg.id} 
+                    href={`/dashboard/player-portal/${reg.tournaments?.id}`}
+                    className="flex items-center justify-between p-4 rounded-lg border border-border hover:border-primary/30 hover:bg-muted/30 transition-colors"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className={cn(
+                        "flex h-12 w-12 items-center justify-center rounded-lg",
+                        reg.tournaments?.status === "in_progress" ? "bg-green-500/10" :
+                        reg.tournaments?.status === "completed" ? "bg-muted" :
+                        "bg-primary/10"
+                      )}>
+                        <Gamepad2 className={cn(
+                          "h-6 w-6",
+                          reg.tournaments?.status === "in_progress" ? "text-green-500" :
+                          reg.tournaments?.status === "completed" ? "text-muted-foreground" :
+                          "text-primary"
+                        )} />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-foreground">{reg.tournaments?.name}</p>
+                        <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                          <Badge variant="outline" className="text-[10px]">
+                            {reg.tournaments?.games?.name}
+                          </Badge>
+                          <Badge variant={
+                            reg.tournaments?.status === "in_progress" ? "default" :
+                            reg.tournaments?.status === "completed" ? "secondary" :
+                            "outline"
+                          } className={cn(
+                            "text-[10px]",
+                            reg.tournaments?.status === "in_progress" && "bg-green-500/20 text-green-600 border-green-500/30"
+                          )}>
+                            {reg.tournaments?.status?.replace("_", " ")}
+                          </Badge>
+                          {reg.tournaments?.start_date && (
+                            <span className="flex items-center gap-1">
+                              <Calendar className="h-3 w-3" />
+                              {format(new Date(reg.tournaments.start_date), "MMM d, yyyy")}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant={reg.status === "checked_in" ? "default" : "outline"} className={cn(
+                        reg.status === "checked_in" && "bg-green-500/20 text-green-600 border-green-500/30"
+                      )}>
+                        {reg.status?.replace("_", " ")}
+                      </Badge>
+                      <Button size="sm" variant="secondary">
+                        Player Controller
+                      </Button>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  </Link>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Recent Matches */}
+          {matches.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Swords className="h-5 w-5 text-primary" />
+                  Recent Matches
+                </CardTitle>
+                <CardDescription>Your latest match results</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {matches.slice(0, 10).map((match) => {
+                    const isPlayer1 = match.player1_id === user.id
+                    const opponent = isPlayer1 ? match.player2 : match.player1
+                    const opponentName = opponent 
+                      ? `${opponent.first_name || ''} ${opponent.last_name || ''}`.trim() || 'Unknown'
+                      : 'BYE'
+                    const isWinner = match.winner_id === user.id
+                    const isDraw = match.status === "confirmed" && !match.winner_id
+
+                    return (
+                      <div 
+                        key={match.id}
+                        className="flex items-center justify-between p-3 rounded-lg border border-border"
+                      >
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-8 w-8">
+                            <AvatarImage src={opponent?.avatar_url ?? undefined} />
+                            <AvatarFallback className="text-xs">
+                              {opponentName[0]?.toUpperCase() ?? "?"}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <p className="text-sm font-medium">vs {opponentName}</p>
+                            <p className="text-xs text-muted-foreground">
+                              Round {(match.tournament_rounds as unknown as { round_number: number } | null)?.round_number}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {match.status === "confirmed" || match.status === "completed" ? (
+                            <Badge className={
+                              match.is_bye ? "bg-blue-500/20 text-blue-600" :
+                              isWinner ? "bg-green-500/20 text-green-600" :
+                              isDraw ? "bg-yellow-500/20 text-yellow-600" :
+                              "bg-red-500/20 text-red-600"
+                            }>
+                              {match.is_bye ? "BYE" : isWinner ? "WIN" : isDraw ? "DRAW" : "LOSS"}
+                            </Badge>
+                          ) : match.status === "disputed" ? (
+                            <Badge variant="destructive">DISPUTED</Badge>
+                          ) : match.status === "player1_reported" || match.status === "player2_reported" ? (
+                            <Badge variant="outline" className="border-yellow-500/50 text-yellow-600">
+                              {(match.status === "player1_reported" && isPlayer1) || 
+                               (match.status === "player2_reported" && !isPlayer1) 
+                                ? "Awaiting Opponent" 
+                                : "Your Report Needed"}
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline">Pending</Badge>
+                          )}
+                          {(match.player1_wins !== null || match.player2_wins !== null) && match.status === "confirmed" && (
+                            <span className="text-sm font-mono">
+                              {isPlayer1 ? match.player1_wins : match.player2_wins}
+                              {" - "}
+                              {isPlayer1 ? match.player2_wins : match.player1_wins}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* No Events State */}
+          {activeEvents.length === 0 && upcomingEvents.length === 0 && matches.length === 0 && (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted mb-4">
+                  <Gamepad2 className="h-8 w-8 text-muted-foreground" />
+                </div>
+                <h3 className="text-lg font-semibold text-foreground mb-2">No active events</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  You're not currently registered for any tournaments.
+                </p>
+                <Button asChild>
+                  <Link href="/esports/tournaments">Browse Tournaments</Link>
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        {/* Sidebar */}
+        <div className="space-y-6">
+          {/* Game Rankings */}
+          {leaderboardEntries.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Star className="h-5 w-5 text-primary" />
+                  Game Rankings
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {leaderboardEntries.map((entry) => (
+                  <div 
+                    key={entry.id}
+                    className="flex items-center justify-between p-3 rounded-lg border border-border"
+                  >
+                    <div>
+                      <p className="font-medium text-sm">{entry.games?.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {entry.total_wins}W - {entry.total_losses}L
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold text-primary">{entry.ranking_points}</p>
+                      <p className="text-[10px] text-muted-foreground">points</p>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Recent Results */}
+          {results.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Medal className="h-5 w-5 text-primary" />
+                  Recent Results
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {results.slice(0, 5).map((result) => (
+                  <Link 
+                    key={result.id}
+                    href={`/esports/tournaments/${result.tournaments?.slug}`}
+                    className="flex items-center justify-between p-3 rounded-lg border border-border hover:border-primary/30 transition-colors"
+                  >
+                    <div>
+                      <p className="font-medium text-sm line-clamp-1">{result.tournaments?.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {result.tournaments?.start_date && format(new Date(result.tournaments.start_date), "MMM d, yyyy")}
+                      </p>
+                    </div>
+                    {result.placement === 1 ? (
+                      <Badge className="bg-yellow-500/20 text-yellow-600 border-yellow-500/30">
+                        <Trophy className="mr-1 h-3 w-3" />
+                        1st
+                      </Badge>
+                    ) : result.placement === 2 ? (
+                      <Badge variant="secondary">2nd</Badge>
+                    ) : result.placement === 3 ? (
+                      <Badge className="bg-amber-700/20 text-amber-700">3rd</Badge>
+                    ) : (
+                      <Badge variant="outline">{result.placement}th</Badge>
+                    )}
+                  </Link>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Quick Links */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Quick Links</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <Button variant="outline" className="w-full justify-start" asChild>
+                <Link href="/esports/tournaments">
+                  <Gamepad2 className="mr-2 h-4 w-4" />
+                  Browse Tournaments
+                </Link>
+              </Button>
+              <Button variant="outline" className="w-full justify-start" asChild>
+                <Link href="/esports/leaderboards">
+                  <TrendingUp className="mr-2 h-4 w-4" />
+                  Leaderboards
+                </Link>
+              </Button>
+              <Button variant="outline" className="w-full justify-start" asChild>
+                <Link href={`/esports/players/${user.id}`}>
+                  <Users className="mr-2 h-4 w-4" />
+                  My Public Profile
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  )
+}

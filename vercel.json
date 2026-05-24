@@ -1,0 +1,36 @@
+{
+  "crons": [
+    {
+      "path": "/api/moderation/process",
+      "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/reconcile-intents",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/cleanup-stale-intents",
+      "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/cron/process-payouts",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/deliver-alerts",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/auto-payouts",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/booking-emails",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/dispatch-notifications",
+      "schedule": "* * * * *"
+    }
+  ]
+}

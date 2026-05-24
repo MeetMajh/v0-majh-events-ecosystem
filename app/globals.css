@@ -1,0 +1,341 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* MAJH EVENTS Brand: Royal Purple + Gold */
+  --background: oklch(0.13 0.02 290);
+  --foreground: oklch(0.95 0.01 90);
+  --card: oklch(0.17 0.025 290);
+  --card-foreground: oklch(0.95 0.01 90);
+  --popover: oklch(0.17 0.025 290);
+  --popover-foreground: oklch(0.95 0.01 90);
+  --primary: oklch(0.78 0.15 85);
+  --primary-foreground: oklch(0.15 0.02 290);
+  --secondary: oklch(0.22 0.03 290);
+  --secondary-foreground: oklch(0.90 0.01 90);
+  --muted: oklch(0.20 0.025 290);
+  --muted-foreground: oklch(0.65 0.02 290);
+  --accent: oklch(0.45 0.18 300);
+  --accent-foreground: oklch(0.95 0.01 90);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.95 0.005 0);
+  --border: oklch(0.28 0.035 290);
+  --input: oklch(0.22 0.03 290);
+  --ring: oklch(0.78 0.15 85);
+  --chart-1: oklch(0.78 0.15 85);
+  --chart-2: oklch(0.55 0.20 300);
+  --chart-3: oklch(0.72 0.19 160);
+  --chart-4: oklch(0.65 0.18 200);
+  --chart-5: oklch(0.70 0.22 30);
+  --radius: 0.5rem;
+  --sidebar: oklch(0.11 0.02 290);
+  --sidebar-foreground: oklch(0.95 0.01 90);
+  --sidebar-primary: oklch(0.78 0.15 85);
+  --sidebar-primary-foreground: oklch(0.15 0.02 290);
+  --sidebar-accent: oklch(0.20 0.03 290);
+  --sidebar-accent-foreground: oklch(0.95 0.01 90);
+  --sidebar-border: oklch(0.28 0.035 290);
+  --sidebar-ring: oklch(0.78 0.15 85);
+}
+
+@theme inline {
+  --font-sans: 'Geist', 'Geist Fallback';
+  --font-mono: 'Geist Mono', 'Geist Mono Fallback';
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+  @apply border-border outline-ring/50;
+  }
+  body {
+  @apply bg-background text-foreground;
+  }
+}
+
+/* Reaction floating animation */
+@keyframes float-up {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: translateY(-50px) scale(1.2);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-100px) scale(0.8);
+  }
+}
+
+.animate-float-up {
+  animation: float-up 2s ease-out forwards;
+}
+
+/* ==========================================
+   MAJH ESPORTS DESIGN SYSTEM
+   Premium broadcast-ready aesthetic
+   ========================================== */
+
+/* Esports State Colors */
+:root {
+  --live: oklch(0.65 0.25 25);        /* Red - Live broadcasts */
+  --featured: oklch(0.78 0.15 85);    /* Gold - Featured content */
+  --trending: oklch(0.70 0.20 50);    /* Orange - Trending/Hot */
+  --success: oklch(0.72 0.19 160);    /* Green - Success states */
+  --esports-blue: oklch(0.65 0.20 250); /* Blue - Normal accent */
+  --esports-purple: oklch(0.55 0.22 300); /* Purple - Secondary accent */
+}
+
+@theme inline {
+  --color-live: var(--live);
+  --color-featured: var(--featured);
+  --color-trending: var(--trending);
+  --color-success: var(--success);
+  --color-esports-blue: var(--esports-blue);
+  --color-esports-purple: var(--esports-purple);
+}
+
+/* Glass Panel Effect */
+.glass-panel {
+  background: linear-gradient(
+    135deg,
+    oklch(0.17 0.025 290 / 0.8),
+    oklch(0.13 0.02 290 / 0.6)
+  );
+  backdrop-filter: blur(12px);
+  border: 1px solid oklch(0.35 0.04 290 / 0.4);
+}
+
+.glass-panel-darker {
+  background: linear-gradient(
+    135deg,
+    oklch(0.12 0.02 290 / 0.9),
+    oklch(0.08 0.015 290 / 0.7)
+  );
+  backdrop-filter: blur(16px);
+  border: 1px solid oklch(0.30 0.035 290 / 0.3);
+}
+
+/* Glow Effects */
+.glow-live {
+  box-shadow: 0 0 20px oklch(0.65 0.25 25 / 0.4),
+              0 0 40px oklch(0.65 0.25 25 / 0.2);
+}
+
+.glow-featured {
+  box-shadow: 0 0 20px oklch(0.78 0.15 85 / 0.4),
+              0 0 40px oklch(0.78 0.15 85 / 0.2);
+}
+
+.glow-trending {
+  box-shadow: 0 0 20px oklch(0.70 0.20 50 / 0.4),
+              0 0 40px oklch(0.70 0.20 50 / 0.2);
+}
+
+/* Pulse Animations */
+@keyframes pulse-live {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 oklch(0.65 0.25 25 / 0.7); }
+  50% { opacity: 0.8; box-shadow: 0 0 0 8px oklch(0.65 0.25 25 / 0); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-pulse-live {
+  animation: pulse-live 2s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    oklch(1 0 0 / 0.1),
+    transparent
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+
+/* Hover Effects */
+.esports-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.esports-card:hover {
+  transform: translateY(-2px) scale(1.01);
+  box-shadow: 0 8px 30px oklch(0 0 0 / 0.3),
+              0 0 0 1px oklch(0.78 0.15 85 / 0.2);
+}
+
+/* Badge Styles */
+.badge-live {
+  background: oklch(0.65 0.25 25);
+  color: white;
+  animation: pulse-live 2s ease-in-out infinite;
+}
+
+.badge-featured {
+  background: linear-gradient(135deg, oklch(0.78 0.15 85), oklch(0.70 0.18 70));
+  color: oklch(0.15 0.02 290);
+}
+
+.badge-trending {
+  background: linear-gradient(135deg, oklch(0.70 0.20 50), oklch(0.65 0.22 40));
+  color: white;
+}
+
+/* Score Display */
+.score-display {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* Mobile Safe Area for iOS */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.safe-area-top {
+  padding-top: env(safe-area-inset-top, 0);
+}
+
+/* Mobile-first touch targets */
+@media (max-width: 768px) {
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* Esports Typography */
+.esports-heading {
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  text-transform: uppercase;
+}
+
+.esports-subheading {
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+}
+
+/* Stat Bar */
+.stat-bar {
+  display: flex;
+  gap: 1.5rem;
+  padding: 1rem 0;
+  border-top: 1px solid oklch(0.28 0.035 290 / 0.5);
+  border-bottom: 1px solid oklch(0.28 0.035 290 / 0.5);
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.stat-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: oklch(0.65 0.02 290);
+}
+
+/* Video Player Container */
+.video-container {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: oklch(0.08 0.01 290);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.video-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to top,
+    oklch(0 0 0 / 0.8) 0%,
+    transparent 40%
+  );
+  pointer-events: none;
+}
+
+/* Scrollbar Styling */
+.esports-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.esports-scrollbar::-webkit-scrollbar-track {
+  background: oklch(0.15 0.02 290);
+  border-radius: 3px;
+}
+
+.esports-scrollbar::-webkit-scrollbar-thumb {
+  background: oklch(0.35 0.04 290);
+  border-radius: 3px;
+}
+
+.esports-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.45 0.05 290);
+}

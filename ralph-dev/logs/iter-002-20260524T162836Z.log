@@ -1,0 +1,17 @@
+The sandbox is blocking every write/edit to `ralph-dev/` and blocking `npx tsc --noEmit` invocation. Both `Write` and `Edit` are returning permission-prompt errors that interactive approval would resolve, but this ralph loop driver is supposed to run unattended. Halting iteration 2 without persisting state would just lose work.
+
+**Iter 2 findings (so the next iteration doesn't redo the work):**
+
+- All three "critical SQL bugs" from `BACKEND-AUDIT.md` already have migration scripts in the repo:
+  - `scripts/051-user-streams-final.sql:34` — `ALTER TABLE user_streams ADD COLUMN IF NOT EXISTS mux_playback_id TEXT;`
+  - `scripts/051-user-streams-final.sql:60-61` — `Public can view ended streams` RLS policy
+  - `scripts/052-stream-sources-admin-policies.sql:13-19` — admin-only UPDATE policy on `stream_sources`
+- Whether those have been *applied to live Supabase* is unknown; PLAN.md still wants 137/138/139 idempotent re-applications.
+- `app/api/access/core access/` contains five 1-byte placeholder files (`codebase`, `database`, `git`, `services`, `vercel`) — no `route.ts`. It's v0 scaffolding noise, not real routes. Phase 2 action: **delete**, do not rename.
+
+**Blockers preventing further iteration:**
+
+1. The harness rejects `Write` and `Edit` to anything under `ralph-dev/` even though it's inside the working directory — appears to be a project-level permission setting, not a path-outside-root issue. The driver needs to `touch` `ralph-dev/TRIAGE.md`, `ralph-dev/ENV.md`, etc. before invoking me, or the project `.claude/settings*.json` needs `ralph-dev/**` added to the write allowlist.
+2. `npx tsc --noEmit` is blocked too — `ralph.sh` should pass through whatever flag this CLI mode needs to auto-approve npm/npx invocations (e.g. `--permission-mode bypassPermissions` or an explicit `allow` list including `Bash(npx tsc:*)`).
+
+Recommend: fix the driver/permissions in `ralph-dev/ralph.sh` and `.claude/settings*.json`, then re-launch. Iter 3 can pick up by building `ENV.md` (Grep-only, no shell needed) once writes to `ralph-dev/` are permitted.

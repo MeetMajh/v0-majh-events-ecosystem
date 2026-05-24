@@ -1,0 +1,9 @@
+Iter 16 complete. Summary:
+
+**Iter 16 result:** `ApiAuthResult.user_id` cross-file shape-drift sweep closed. Two surgical edits to `lib/middleware/api-auth.ts`:
+- Added `user_id?: string` to the interface (line 9).
+- Added `user_id: data.user_id` to the success-branch return (line 79).
+
+Zero caller changes. 4 errors closed across 2 files (`tickets/check-in/route.ts` lines 38/50/117 + `events/route.ts:158`). tsc count: 270 → 266. `app/api/v1/tickets/check-in/route.ts` is now fully clean. State files updated.
+
+**Next iter:** `app/api/v1/events/route.ts` (~13 remaining errors) using the iter-13/14/15 api-response drift recipe, or a bundled Stripe/idempotency-drift sweep across purchase/refund/transactions.

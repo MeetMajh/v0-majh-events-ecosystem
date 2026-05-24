@@ -1,0 +1,7 @@
+Iter 7 complete. Phase 3 started: 1 of 4 TRIAGE §3 broken imports fixed.
+
+**Summary:**
+- Fixed `components/providers/analytics-provider.tsx:4` — replaced the non-existent `useUser` from `@/hooks/use-user` with the codebase's canonical inline pattern: `createClient()` + `supabase.auth.getUser()` + `onAuthStateChange()` subscription.
+- tsc error count: 331 → 330 (single TS2307 line removed, zero collateral, clean single-line diff between iter7 before/after captures).
+- STATE.md and PROGRESS.md updated with full reasoning. No ACCEPTANCE boxes flipped (Phase 3 criteria are aggregate).
+- Next iter (8) target: `lib/refund-actions.ts:5` — `@/lib/supabase/service` → likely `@/lib/supabase/server`.

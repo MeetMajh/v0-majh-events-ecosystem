@@ -1,0 +1,9 @@
+Iter 20 complete. Driver should now invoke iter 21.
+
+**Summary:**
+- `app/api/v1/orders/[orderId]/refund/route.ts`: api-response drift fully closed via 5 surgical Edits
+- 8 errors eliminated (4 × TS2559 + 4 × TS2345); tsc count 245 → 237
+- Canonical-name remap: `permission_denied` → `authorization_error`, `not_found` → `resource_not_found`, `payment_error` + `refund_error` → `internal_error` with `code` preservation (`stripe_refund_failed`, `refund_failed`)
+- Cleanest possible diff: 8 lines deleted, 0 added, zero shift artifacts
+- STATE.md and PROGRESS.md updated; ACCEPTANCE.md unchanged (all Phase 3 boxes still aggregate, 237 errors to go)
+- iter-21 target confirmed: `ticket-types/route.ts` (12 errors, last dense v1 cluster file)

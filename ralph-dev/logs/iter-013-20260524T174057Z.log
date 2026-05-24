@@ -1,0 +1,8 @@
+Iter 14 complete. Done in one iter, exit.
+
+**Summary:**
+- **Fixed:** `app/api/v1/tickets/purchase/route.ts` — applied the iter-13 caller-alignment recipe to the api-response helper drift portion of this file (12 of 16 errors). Canonical-name remap on 4 `apiError` calls (`permission_denied`/`not_found`/`inventory_error`/`order_error`), dropped all 11 redundant 3rd-arg status codes, rewrote two `apiSuccess(_, {}, 201)` as `apiSuccess(_, { status: 201 })`, added `{ rateLimit: rateLimitResult }` to the rate-limit-exceeded response (correctness improvement), and dropped the `Idempotent-Replayed` headers-bag site to raw `NextResponse.json` since the helper has no equivalent option.
+- **Verified:** tsc 295 → 283. 12 lines deleted from tsc diff, zero added.
+- **Deferred (different root causes, same file):** Stripe `apiVersion` drift at line 10 (iter-11 recipe applies), and 3 idempotency helper signature errors at lines 32/118/184 (needs `lib/middleware/idempotency.ts` to be read first).
+- **Surfaced finding:** iter-11's "§2c complete" claim was premature — `purchase/route.ts` and `orders/[orderId]/refund/route.ts` both still have the Stripe drift. Recommend a re-grep sweep before flipping the TRIAGE box.
+- **Surfaced convention:** when a helper has no equivalent option for a legacy use case (`Idempotent-Replayed` header), caller-level workaround (raw `NextResponse.json`) beats extending the helper API. Also: `Edit` with `replace_all: true` is not 100% reliable — always verify post-Edit. State files updated.

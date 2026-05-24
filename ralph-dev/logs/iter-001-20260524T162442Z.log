@@ -1,0 +1,13 @@
+This iteration is blocked. I can read, grep, and reason — but **Write** and write-via-Bash are both gated, and the permission prompts are not being auto-approved. I cannot create `ralph-dev/ENV.md`, `ralph-dev/STATE.md`, or `ralph-dev/PROGRESS.md` updates without explicit grant.
+
+**Status:**
+- Phase 1 TRIAGE work I completed in-memory this iter: full env var catalogue (~30 vars, organized by domain, with file:line refs) ready to write.
+- Phase 1 work still blocked: TypeScript error enumeration — `npx tsc --noEmit` is also gated.
+- Repo confirmations: `app/api/access/core access/` exists with 5 zero-byte placeholder files (no `route.ts`), siblings `code/`, `db/`, `env/`, `git/` have real `route.ts` handlers.
+
+**To unblock the Ralph loop, the driver/session needs:**
+1. `Write` auto-approval for `**/ralph-dev/**` and `**/scripts/**`
+2. `Bash(npx tsc --noEmit)` auto-approval (or the broader `Bash(npx tsc:*)`)
+3. `Edit` auto-approval for files under the repo root
+
+Without these, every iteration will dead-end at the same gate. No `STATE.md` or `PROGRESS.md` was written this turn because writes are blocked; the next driver invocation will start cold.

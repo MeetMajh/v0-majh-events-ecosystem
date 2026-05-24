@@ -1,0 +1,280 @@
+app/(public)/checkout/cancel/page.tsx(16,27): error TS2339: Property 'logo' does not exist on type '{ readonly brand: { readonly logo: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/1000353043-6OkUWfgAoPEswsRJaNs4QB1vH4haCV.mp4"; readonly graphic: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/1000353047-Blh8c6Fn6hAxEqcyDR6LHqeIkdRXbB.jpg"; readonly instagram: "https://hebbkx1anhila5yf.public.b...'.
+app/(public)/checkout/success/page.tsx(68,27): error TS2339: Property 'logo' does not exist on type '{ readonly brand: { readonly logo: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/1000353043-6OkUWfgAoPEswsRJaNs4QB1vH4haCV.mp4"; readonly graphic: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/1000353047-Blh8c6Fn6hAxEqcyDR6LHqeIkdRXbB.jpg"; readonly instagram: "https://hebbkx1anhila5yf.public.b...'.
+app/(public)/create/page.tsx(171,9): error TS2353: Object literal may only specify known properties, and 'tags' does not exist in type '{ title: string; description?: string | undefined; mediaType: MediaType; sourceType: SourceType; videoUrl?: string | undefined; storagePath?: string | undefined; ... 5 more ...; visibility?: Visibility | undefined; }'.
+app/(public)/invoice/[token]/page.tsx(50,27): error TS2339: Property 'logo' does not exist on type '{ readonly brand: { readonly logo: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/1000353043-6OkUWfgAoPEswsRJaNs4QB1vH4haCV.mp4"; readonly graphic: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/1000353047-Blh8c6Fn6hAxEqcyDR6LHqeIkdRXbB.jpg"; readonly instagram: "https://hebbkx1anhila5yf.public.b...'.
+app/(public)/match/[id]/watch/page.tsx(528,15): error TS2322: Type '{ id: string; first_name?: string | undefined; last_name?: string | undefined; avatar_url?: string | undefined; match_record?: { wins: number; losses: number; draws: number; } | undefined; } | undefined' is not assignable to type 'Player | null'.
+  Type 'undefined' is not assignable to type 'Player | null'.
+app/(public)/match/[id]/watch/page.tsx(529,15): error TS2322: Type '{ id: string; first_name?: string | undefined; last_name?: string | undefined; avatar_url?: string | undefined; match_record?: { wins: number; losses: number; draws: number; } | undefined; } | undefined' is not assignable to type 'Player | null'.
+  Type 'undefined' is not assignable to type 'Player | null'.
+app/(public)/match/[id]/watch/page.tsx(578,23): error TS2322: Type '{ player1Id: string; player2Id: string; player1Wins: number; player2Wins: number; player1Name: string; player2Name: string; }' is not assignable to type 'IntrinsicAttributes & GameHistoryBarProps'.
+  Property 'player1Wins' does not exist on type 'IntrinsicAttributes & GameHistoryBarProps'. Did you mean 'player1Id'?
+app/(public)/proposal/[token]/page.tsx(51,27): error TS2339: Property 'logo' does not exist on type '{ readonly brand: { readonly logo: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/1000353043-6OkUWfgAoPEswsRJaNs4QB1vH4haCV.mp4"; readonly graphic: "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/1000353047-Blh8c6Fn6hAxEqcyDR6LHqeIkdRXbB.jpg"; readonly instagram: "https://hebbkx1anhila5yf.public.b...'.
+app/(public)/watch/[sessionId]/page.tsx(175,34): error TS2339: Property 'viewer_count' does not exist on type 'StreamSession'.
+app/(public)/watch/[sessionId]/page.tsx(211,59): error TS2339: Property 'host_id' does not exist on type 'StreamSession'.
+app/(public)/watch/[sessionId]/page.tsx(233,30): error TS2339: Property 'allow_clips' does not exist on type 'StreamSession'.
+app/(public)/watch/[sessionId]/page.tsx(258,29): error TS2339: Property 'allow_chat' does not exist on type 'StreamSession'.
+app/(public)/watch/[sessionId]/page.tsx(264,24): error TS2339: Property 'allow_chat' does not exist on type 'StreamSession'.
+app/actions/financial.ts(179,31): error TS2339: Property 'sql' does not exist on type 'SupabaseClient<any, "public", any, any, any>'.
+app/api/admin/reconciliation/route.ts(182,26): error TS2352: Conversion of type '{ title: any; }[]' to type '{ title: string; }' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Property 'title' is missing in type '{ title: any; }[]' but required in type '{ title: string; }'.
+app/api/cron/booking-emails/route.ts(65,53): error TS2339: Property 'name' does not exist on type '{ name: any; }[]'.
+app/api/cron/booking-emails/route.ts(127,53): error TS2339: Property 'name' does not exist on type '{ name: any; }[]'.
+app/api/run/route.ts(40,16): error TS1378: Top-level 'await' expressions are only allowed when the 'module' option is set to 'es2022', 'esnext', 'system', 'node16', 'nodenext', or 'preserve', and the 'target' option is set to 'es2017' or higher.
+app/api/run/route.ts(41,13): error TS1378: Top-level 'await' expressions are only allowed when the 'module' option is set to 'es2022', 'esnext', 'system', 'node16', 'nodenext', or 'preserve', and the 'target' option is set to 'es2017' or higher.
+app/api/stripe/webhook/route.ts(120,10): error TS2678: Type '"transfer.paid"' is not comparable to type '"account.application.authorized" | "account.application.deauthorized" | "account.external_account.created" | "account.external_account.deleted" | "account.external_account.updated" | ... 233 more ... | "treasury.received_debit.created"'.
+app/api/stripe/webhook/route.ts(121,30): error TS2339: Property 'data' does not exist on type 'never'.
+app/api/stripe/webhook/route.ts(126,10): error TS2678: Type '"transfer.failed"' is not comparable to type '"account.application.authorized" | "account.application.deauthorized" | "account.external_account.created" | "account.external_account.deleted" | "account.external_account.updated" | ... 233 more ... | "treasury.received_debit.created"'.
+app/api/stripe/webhook/route.ts(127,30): error TS2339: Property 'data' does not exist on type 'never'.
+app/api/v1/features/route.ts(15,86): error TS2559: Type '401' has no properties in common with type '{ code?: string | undefined; param?: string | undefined; rateLimit?: RateLimitResult | undefined; }'.
+app/api/v1/features/route.ts(20,69): error TS2559: Type '429' has no properties in common with type '{ code?: string | undefined; param?: string | undefined; rateLimit?: RateLimitResult | undefined; }'.
+app/api/v1/features/route.ts(30,23): error TS2345: Argument of type '"database_error"' is not assignable to parameter of type 'ApiErrorType'.
+app/api/v1/features/route.ts(39,71): error TS2559: Type '500' has no properties in common with type '{ code?: string | undefined; param?: string | undefined; rateLimit?: RateLimitResult | undefined; }'.
+app/api/v1/features/route.ts(52,86): error TS2559: Type '401' has no properties in common with type '{ code?: string | undefined; param?: string | undefined; rateLimit?: RateLimitResult | undefined; }'.
+app/api/v1/features/route.ts(61,69): error TS2559: Type '400' has no properties in common with type '{ code?: string | undefined; param?: string | undefined; rateLimit?: RateLimitResult | undefined; }'.
+app/api/v1/features/route.ts(70,23): error TS2345: Argument of type '"database_error"' is not assignable to parameter of type 'ApiErrorType'.
+app/api/v1/features/route.ts(80,71): error TS2559: Type '500' has no properties in common with type '{ code?: string | undefined; param?: string | undefined; rateLimit?: RateLimitResult | undefined; }'.
+app/api/v1/orders/route.ts(11,86): error TS2559: Type '401' has no properties in common with type '{ code?: string | undefined; param?: string | undefined; rateLimit?: RateLimitResult | undefined; }'.
+app/api/v1/orders/route.ts(16,69): error TS2559: Type '429' has no properties in common with type '{ code?: string | undefined; param?: string | undefined; rateLimit?: RateLimitResult | undefined; }'.
+app/api/v1/orders/route.ts(71,23): error TS2345: Argument of type '"database_error"' is not assignable to parameter of type 'ApiErrorType'.
+app/api/v1/orders/route.ts(82,71): error TS2559: Type '500' has no properties in common with type '{ code?: string | undefined; param?: string | undefined; rateLimit?: RateLimitResult | undefined; }'.
+app/api/v1/tickets/route.ts(11,86): error TS2559: Type '401' has no properties in common with type '{ code?: string | undefined; param?: string | undefined; rateLimit?: RateLimitResult | undefined; }'.
+app/api/v1/tickets/route.ts(16,69): error TS2559: Type '429' has no properties in common with type '{ code?: string | undefined; param?: string | undefined; rateLimit?: RateLimitResult | undefined; }'.
+app/api/v1/tickets/route.ts(65,23): error TS2345: Argument of type '"database_error"' is not assignable to parameter of type 'ApiErrorType'.
+app/api/v1/tickets/route.ts(76,71): error TS2559: Type '500' has no properties in common with type '{ code?: string | undefined; param?: string | undefined; rateLimit?: RateLimitResult | undefined; }'.
+app/dashboard/admin/media/page.tsx(93,49): error TS2345: Argument of type '"approved" | "rejected"' is not assignable to parameter of type '"approve" | "reject"'.
+  Type '"approved"' is not assignable to type '"approve" | "reject"'. Did you mean '"approve"'?
+app/dashboard/admin/ops/page.tsx(196,11): error TS2322: Type 'boolean | 0 | undefined' is not assignable to type 'boolean | undefined'.
+  Type '0' is not assignable to type 'boolean | undefined'.
+app/dashboard/admin/ops/page.tsx(209,11): error TS2322: Type 'boolean | 0 | undefined' is not assignable to type 'boolean | undefined'.
+  Type '0' is not assignable to type 'boolean | undefined'.
+app/dashboard/admin/ops/page.tsx(417,23): error TS2367: This comparison appears to be unintentional because the types '"healthy"' and '"degraded"' have no overlap.
+app/dashboard/admin/ops/page.tsx(418,23): error TS2367: This comparison appears to be unintentional because the types '"healthy"' and '"down"' have no overlap.
+app/dashboard/carbardmv/inventory/page.tsx(26,34): error TS2554: Expected 0 arguments, but got 1.
+app/dashboard/carbardmv/inventory/page.tsx(27,7): error TS2367: This comparison appears to be unintentional because the types 'UserRole | null' and '"admin"' have no overlap.
+app/dashboard/carbardmv/inventory/page.tsx(42,9): error TS2322: Type '{ title: string; description: string; }' is not assignable to type 'IntrinsicAttributes & { displayName: string; }'.
+  Property 'title' does not exist on type 'IntrinsicAttributes & { displayName: string; }'.
+app/dashboard/carbardmv/prep/page.tsx(86,26): error TS2322: Type '{ user_id: any; role: any; profiles: { first_name: any; last_name: any; }[]; }[]' is not assignable to type '{ user_id: string; role: string; profiles: { first_name: string; last_name: string; } | null; }[]'.
+  Type '{ user_id: any; role: any; profiles: { first_name: any; last_name: any; }[]; }' is not assignable to type '{ user_id: string; role: string; profiles: { first_name: string; last_name: string; } | null; }'.
+    Types of property 'profiles' are incompatible.
+      Type '{ first_name: any; last_name: any; }[]' is missing the following properties from type '{ first_name: string; last_name: string; }': first_name, last_name
+app/dashboard/carbardmv/reports/page.tsx(31,34): error TS2554: Expected 0 arguments, but got 1.
+app/dashboard/carbardmv/reports/page.tsx(32,7): error TS2367: This comparison appears to be unintentional because the types 'UserRole | null' and '"admin"' have no overlap.
+app/dashboard/carbardmv/reports/page.tsx(321,49): error TS18046: 'count' is of type 'unknown'.
+app/dashboard/carbardmv/reports/page.tsx(324,72): error TS2322: Type 'unknown' is not assignable to type 'ReactNode'.
+app/dashboard/carbardmv/staff/page.tsx(43,23): error TS2322: Type '{ user_id: any; role: any; profiles: { first_name: any; last_name: any; }[]; }[]' is not assignable to type 'StaffMember[]'.
+  Type '{ user_id: any; role: any; profiles: { first_name: any; last_name: any; }[]; }' is not assignable to type 'StaffMember'.
+    Types of property 'profiles' are incompatible.
+      Type '{ first_name: any; last_name: any; }[]' is missing the following properties from type '{ first_name: string; last_name: string; }': first_name, last_name
+app/dashboard/events/page.tsx(54,9): error TS2322: Type '{ title: string; description: string; }' is not assignable to type 'IntrinsicAttributes & { displayName: string; }'.
+  Property 'title' does not exist on type 'IntrinsicAttributes & { displayName: string; }'.
+app/dashboard/financial/page.tsx(91,7): error TS2322: Type '{ id: any; transaction_type: any; description: any; status: any; created_at: any; posted_at: any; ledger_entries: { id: any; account_id: any; direction: any; amount_cents: any; ledger_accounts: { account_type: any; name: any; reference_id: any; }[]; }[]; }[]' is not assignable to type 'Transaction[]'.
+  Type '{ id: any; transaction_type: any; description: any; status: any; created_at: any; posted_at: any; ledger_entries: { id: any; account_id: any; direction: any; amount_cents: any; ledger_accounts: { account_type: any; name: any; reference_id: any; }[]; }[]; }' is not assignable to type 'Transaction'.
+    Types of property 'ledger_entries' are incompatible.
+      Type '{ id: any; account_id: any; direction: any; amount_cents: any; ledger_accounts: { account_type: any; name: any; reference_id: any; }[]; }[]' is not assignable to type 'LedgerEntry[]'.
+        Type '{ id: any; account_id: any; direction: any; amount_cents: any; ledger_accounts: { account_type: any; name: any; reference_id: any; }[]; }' is not assignable to type 'LedgerEntry'.
+          Types of property 'ledger_accounts' are incompatible.
+            Type '{ account_type: any; name: any; reference_id: any; }[]' is missing the following properties from type '{ account_type: string; name: string; reference_id: string | null; }': account_type, name, reference_id
+app/dashboard/financial/payouts/page.tsx(69,7): error TS2322: Type '{ id: any; transaction_type: any; description: any; status: any; created_at: any; ledger_entries: { amount_cents: any; direction: any; ledger_accounts: { account_type: any; reference_id: any; }[]; }[]; }[]' is not assignable to type 'Withdrawal[]'.
+  Type '{ id: any; transaction_type: any; description: any; status: any; created_at: any; ledger_entries: { amount_cents: any; direction: any; ledger_accounts: { account_type: any; reference_id: any; }[]; }[]; }' is not assignable to type 'Withdrawal'.
+    Types of property 'ledger_entries' are incompatible.
+      Type '{ amount_cents: any; direction: any; ledger_accounts: { account_type: any; reference_id: any; }[]; }[]' is not assignable to type '{ amount_cents: number; direction: string; ledger_accounts: { account_type: string; reference_id: string | null; }; }[]'.
+        Type '{ amount_cents: any; direction: any; ledger_accounts: { account_type: any; reference_id: any; }[]; }' is not assignable to type '{ amount_cents: number; direction: string; ledger_accounts: { account_type: string; reference_id: string | null; }; }'.
+          Types of property 'ledger_accounts' are incompatible.
+            Type '{ account_type: any; reference_id: any; }[]' is missing the following properties from type '{ account_type: string; reference_id: string | null; }': account_type, reference_id
+app/dashboard/financial/transactions/page.tsx(60,7): error TS2322: Type '{ id: any; transaction_type: any; description: any; status: any; reference_id: any; reference_type: any; idempotency_key: any; created_at: any; posted_at: any; ledger_entries: { id: any; account_id: any; direction: any; amount_cents: any; created_at: any; ledger_accounts: { ...; }[]; }[]; }[]' is not assignable to type 'Transaction[]'.
+  Type '{ id: any; transaction_type: any; description: any; status: any; reference_id: any; reference_type: any; idempotency_key: any; created_at: any; posted_at: any; ledger_entries: { id: any; account_id: any; direction: any; amount_cents: any; created_at: any; ledger_accounts: { ...; }[]; }[]; }' is not assignable to type 'Transaction'.
+    Types of property 'ledger_entries' are incompatible.
+      Type '{ id: any; account_id: any; direction: any; amount_cents: any; created_at: any; ledger_accounts: { id: any; account_type: any; name: any; reference_id: any; }[]; }[]' is not assignable to type 'LedgerEntry[]'.
+        Type '{ id: any; account_id: any; direction: any; amount_cents: any; created_at: any; ledger_accounts: { id: any; account_type: any; name: any; reference_id: any; }[]; }' is not assignable to type 'LedgerEntry'.
+          Types of property 'ledger_accounts' are incompatible.
+            Type '{ id: any; account_type: any; name: any; reference_id: any; }[]' is missing the following properties from type 'LedgerAccount': id, account_type, name, reference_id
+app/dashboard/my-events/page.tsx(518,63): error TS2339: Property 'round_number' does not exist on type '{ round_number: any; status: any; }[]'.
+app/dashboard/organizer/financials/page.tsx(95,7): error TS2322: Type '{ id: any; tournament_id: any; amount_cents: any; net_amount_cents: any; status: any; placement: any; is_on_hold: any; hold_reason: any; stripe_transfer_id: any; processed_at: any; created_at: any; tournaments: { ...; }[]; }[]' is not assignable to type 'PayoutRequest[]'.
+  Type '{ id: any; tournament_id: any; amount_cents: any; net_amount_cents: any; status: any; placement: any; is_on_hold: any; hold_reason: any; stripe_transfer_id: any; processed_at: any; created_at: any; tournaments: { ...; }[]; }' is not assignable to type 'PayoutRequest'.
+    Types of property 'tournaments' are incompatible.
+      Type '{ name: any; slug: any; }[]' is missing the following properties from type '{ name: string; slug: string; }': name, slug
+app/dashboard/player-controller/page.tsx(429,59): error TS2339: Property 'player2' does not exist on type '{ id: any; tournament_id: any; round_id: any; status: any; result: any; player1_id: any; player2_id: any; player1_wins: any; player2_wins: any; winner_id: any; table_number: any; created_at: any; tournament_rounds: { ...; }[]; }'.
+app/dashboard/player-controller/page.tsx(429,107): error TS2339: Property 'player2' does not exist on type '{ id: any; tournament_id: any; round_id: any; status: any; result: any; player1_id: any; player2_id: any; player1_wins: any; player2_wins: any; winner_id: any; table_number: any; created_at: any; tournament_rounds: { ...; }[]; }'.
+app/dashboard/player-controller/page.tsx(430,59): error TS2339: Property 'player1' does not exist on type '{ id: any; tournament_id: any; round_id: any; status: any; result: any; player1_id: any; player2_id: any; player1_wins: any; player2_wins: any; winner_id: any; table_number: any; created_at: any; tournament_rounds: { ...; }[]; }'.
+app/dashboard/player-controller/page.tsx(430,107): error TS2339: Property 'player1' does not exist on type '{ id: any; tournament_id: any; round_id: any; status: any; result: any; player1_id: any; player2_id: any; player1_wins: any; player2_wins: any; winner_id: any; table_number: any; created_at: any; tournament_rounds: { ...; }[]; }'.
+app/dashboard/player-controller/page.tsx(618,66): error TS2339: Property 'player2' does not exist on type '{ id: any; tournament_id: any; round_id: any; status: any; result: any; player1_id: any; player2_id: any; player1_wins: any; player2_wins: any; winner_id: any; table_number: any; created_at: any; tournament_rounds: { ...; }[]; }'.
+app/dashboard/player-controller/page.tsx(618,82): error TS2339: Property 'player1' does not exist on type '{ id: any; tournament_id: any; round_id: any; status: any; result: any; player1_id: any; player2_id: any; player1_wins: any; player2_wins: any; winner_id: any; table_number: any; created_at: any; tournament_rounds: { ...; }[]; }'.
+app/dashboard/player-controller/page.tsx(630,73): error TS2339: Property 'round_number' does not exist on type '{ id: any; round_number: any; status: any; }[]'.
+app/dashboard/rentals/page.tsx(51,9): error TS2322: Type '{ title: string; description: string; }' is not assignable to type 'IntrinsicAttributes & { displayName: string; }'.
+  Property 'title' does not exist on type 'IntrinsicAttributes & { displayName: string; }'.
+app/dashboard/stream/page.tsx(229,13): error TS18048: 'status' is possibly 'undefined'.
+app/dashboard/stream/page.tsx(232,20): error TS18048: 'status' is possibly 'undefined'.
+app/dashboard/studio/page.tsx(429,22): error TS18049: 'currentSession' is possibly 'null' or 'undefined'.
+app/dashboard/studio/page.tsx(948,20): error TS2322: Type '({ error, resetErrorBoundary }: { error: Error; resetErrorBoundary: () => void; }) => Element' is not assignable to type 'ComponentType<FallbackProps> | undefined'.
+  Type '({ error, resetErrorBoundary }: { error: Error; resetErrorBoundary: () => void; }) => Element' is not assignable to type 'FunctionComponent<FallbackProps>'.
+    Types of parameters '__0' and 'props' are incompatible.
+      Type 'FallbackProps' is not assignable to type '{ error: Error; resetErrorBoundary: () => void; }'.
+        Types of property 'error' are incompatible.
+          Type 'unknown' is not assignable to type 'Error'.
+app/dashboard/ticketing/[eventId]/page.tsx(113,9): error TS2322: Type '{ id: any; action: any; created_at: any; ticket: { ticket_number: any; attendee_first_name: any; attendee_last_name: any; }[]; }[]' is not assignable to type 'CheckIn[]'.
+  Type '{ id: any; action: any; created_at: any; ticket: { ticket_number: any; attendee_first_name: any; attendee_last_name: any; }[]; }' is not assignable to type 'CheckIn'.
+    Types of property 'ticket' are incompatible.
+      Type '{ ticket_number: any; attendee_first_name: any; attendee_last_name: any; }[]' is missing the following properties from type '{ ticket_number: string; attendee_first_name: string | null; attendee_last_name: string | null; }': ticket_number, attendee_first_name, attendee_last_name
+app/dashboard/tournaments/[id]/page.tsx(104,7): error TS2322: Type 'boolean | null' is not assignable to type 'boolean'.
+  Type 'null' is not assignable to type 'boolean'.
+components/admin/article-form.tsx(118,16): error TS2339: Property 'error' does not exist on type '{ success: boolean; }'.
+components/admin/article-form.tsx(119,26): error TS2339: Property 'error' does not exist on type '{ success: boolean; }'.
+components/ads/ads-data-table.tsx(129,32): error TS2345: Argument of type '"ads" | "campaigns" | "adsets"' is not assignable to parameter of type '"ad_sets" | "ads" | "campaigns"'.
+  Type '"adsets"' is not assignable to type '"ad_sets" | "ads" | "campaigns"'. Did you mean '"ad_sets"'?
+components/ads/ads-data-table.tsx(131,32): error TS2345: Argument of type '"ads" | "campaigns" | "adsets"' is not assignable to parameter of type '"ad_sets" | "ads" | "campaigns"'.
+  Type '"adsets"' is not assignable to type '"ad_sets" | "ads" | "campaigns"'. Did you mean '"ad_sets"'?
+components/ads/ads-data-table.tsx(133,26): error TS2345: Argument of type '"ads" | "campaigns" | "adsets"' is not assignable to parameter of type '"ad_sets" | "ads" | "campaigns"'.
+  Type '"adsets"' is not assignable to type '"ad_sets" | "ads" | "campaigns"'. Did you mean '"ad_sets"'?
+components/carbardmv/inventory-adjustment.tsx(58,26): error TS2554: Expected 3-4 arguments, but got 1.
+components/carbardmv/new-inventory-item-form.tsx(67,49): error TS2345: Argument of type '{ name: string; category: string; unit: string; current_stock: number; min_stock: number; cost_per_unit_cents: number; supplier: string | undefined; }' is not assignable to parameter of type 'FormData'.
+  Type '{ name: string; category: string; unit: string; current_stock: number; min_stock: number; cost_per_unit_cents: number; supplier: string | undefined; }' is missing the following properties from type 'FormData': append, delete, get, getAll, and 7 more.
+components/dashboard/sidebar.tsx(188,26): error TS2339: Property 'disabled' does not exist on type '{ label: string; href: string; icon: ForwardRefExoticComponent<Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>>; }'.
+components/dashboard/sidebar.tsx(194,22): error TS2339: Property 'disabled' does not exist on type '{ label: string; href: string; icon: ForwardRefExoticComponent<Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>>; }'.
+components/dashboard/sidebar.tsx(197,35): error TS2339: Property 'disabled' does not exist on type '{ label: string; href: string; icon: ForwardRefExoticComponent<Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>>; }'.
+components/dashboard/sidebar.tsx(201,21): error TS2339: Property 'disabled' does not exist on type '{ label: string; href: string; icon: ForwardRefExoticComponent<Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>>; }'.
+components/esports/stream-manager.tsx(554,54): error TS2345: Argument of type 'StreamConfig | undefined' is not assignable to parameter of type 'SetStateAction<StreamConfig>'.
+  Type 'undefined' is not assignable to type 'SetStateAction<StreamConfig>'.
+components/financial/usage-billing-dashboard.tsx(113,60): error TS2339: Property 'max_api_calls' does not exist on type 'Plan | { name: string; slug: string; price: number; features: string[]; popular?: undefined; } | { name: string; slug: string; price: number; popular: boolean; features: string[]; } | { name: string; slug: string; price: null; features: string[]; popular?: undefined; }'.
+  Property 'max_api_calls' does not exist on type '{ name: string; slug: string; price: number; features: string[]; popular?: undefined; }'.
+components/financial/usage-billing-dashboard.tsx(114,55): error TS2339: Property 'max_events' does not exist on type 'Plan | { name: string; slug: string; price: number; features: string[]; popular?: undefined; } | { name: string; slug: string; price: number; popular: boolean; features: string[]; } | { name: string; slug: string; price: null; features: string[]; popular?: undefined; }'.
+  Property 'max_events' does not exist on type '{ name: string; slug: string; price: number; features: string[]; popular?: undefined; }'.
+components/financial/usage-billing-dashboard.tsx(115,53): error TS2339: Property 'max_users' does not exist on type 'Plan | { name: string; slug: string; price: number; features: string[]; popular?: undefined; } | { name: string; slug: string; price: number; popular: boolean; features: string[]; } | { name: string; slug: string; price: null; features: string[]; popular?: undefined; }'.
+  Property 'max_users' does not exist on type '{ name: string; slug: string; price: number; features: string[]; popular?: undefined; }'.
+components/financial/usage-billing-dashboard.tsx(174,30): error TS2339: Property 'price' does not exist on type 'Plan | { name: string; slug: string; price: number; features: string[]; popular?: undefined; } | { name: string; slug: string; price: number; popular: boolean; features: string[]; } | { name: string; slug: string; price: null; features: string[]; popular?: undefined; }'.
+  Property 'price' does not exist on type 'Plan'.
+components/financial/usage-billing-dashboard.tsx(174,65): error TS2339: Property 'price' does not exist on type 'Plan | { name: string; slug: string; price: number; features: string[]; popular?: undefined; } | { name: string; slug: string; price: number; popular: boolean; features: string[]; } | { name: string; slug: string; price: null; features: string[]; popular?: undefined; }'.
+  Property 'price' does not exist on type 'Plan'.
+components/financial/usage-billing-dashboard.tsx(174,89): error TS2339: Property 'price' does not exist on type 'Plan | { name: string; slug: string; price: number; features: string[]; popular?: undefined; } | { name: string; slug: string; price: number; popular: boolean; features: string[]; } | { name: string; slug: string; price: null; features: string[]; popular?: undefined; }'.
+  Property 'price' does not exist on type 'Plan'.
+components/financials/realtime-alerts-panel.tsx(348,35): error TS2322: Type 'unknown' is not assignable to type 'ReactNode'.
+components/financials/realtime-alerts-panel.tsx(353,35): error TS2322: Type 'unknown' is not assignable to type 'ReactNode'.
+components/media/media-card.tsx(83,41): error TS2345: Argument of type 'string' is not assignable to parameter of type 'MediaType'.
+components/notifications/notification-bell.tsx(47,7): error TS2741: Property 'tournament_registration' is missing in type '{ match_ready: ForwardRefExoticComponent<Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>>; ... 9 more ...; system: ForwardRefExoticComponent<...>; }' but required in type 'Record<NotificationType, ForwardRefExoticComponent<Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>>>'.
+components/notifications/notification-bell.tsx(61,7): error TS2741: Property 'tournament_registration' is missing in type '{ match_ready: string; match_starting: string; match_result: string; tournament_starting: string; round_starting: string; followed_player_live: string; followed_player_match: string; trending_match: string; achievement_earned: string; staff_alert: string; system: string; }' but required in type 'Record<NotificationType, string>'.
+components/tournaments/tournament-controller.tsx(612,24): error TS2339: Property 'message' does not exist on type '({ supabase: SupabaseClient<any, "public", any, any, any>; userId: string; role: any; error?: undefined; } | { success: boolean; playerName: string; }) & Record<"isPreregistration", unknown>'.
+  Property 'message' does not exist on type '{ supabase: SupabaseClient<any, "public", any, any, any>; userId: string; role: any; error?: undefined; } & Record<"isPreregistration", unknown>'.
+components/tournaments/tournament-controller.tsx(617,27): error TS2339: Property 'playerName' does not exist on type '{ supabase: SupabaseClient<any, "public", any, any, any>; userId: string; role: any; error?: undefined; } | { success: boolean; playerName: string; }'.
+  Property 'playerName' does not exist on type '{ supabase: SupabaseClient<any, "public", any, any, any>; userId: string; role: any; error?: undefined; }'.
+components/tournaments/tournament-controller.tsx(773,65): error TS2345: Argument of type '"registration"' is not assignable to parameter of type 'TournamentStatus'.
+components/tournaments/tournament-controller.tsx(792,65): error TS2345: Argument of type '"completed"' is not assignable to parameter of type 'TournamentStatus'.
+components/tournaments/tournament-controller.tsx(826,84): error TS2345: Argument of type '"registration"' is not assignable to parameter of type 'TournamentStatus'.
+components/tournaments/tournament-controller.tsx(858,63): error TS2339: Property 'pairingsCount' does not exist on type '{ supabase: SupabaseClient<any, "public", any, any, any>; userId: string; role: any; error?: undefined; } | { success: boolean; pairingsCount: number; }'.
+  Property 'pairingsCount' does not exist on type '{ supabase: SupabaseClient<any, "public", any, any, any>; userId: string; role: any; error?: undefined; }'.
+components/tournaments/tournament-controller.tsx(884,65): error TS2339: Property 'pairingsCount' does not exist on type '{ supabase: SupabaseClient<any, "public", any, any, any>; userId: string; role: any; error?: undefined; } | { success: boolean; pairingsCount: number; }'.
+  Property 'pairingsCount' does not exist on type '{ supabase: SupabaseClient<any, "public", any, any, any>; userId: string; role: any; error?: undefined; }'.
+components/tournaments/tournament-controller.tsx(1520,74): error TS2339: Property 'minutes' does not exist on type '{ supabase: SupabaseClient<any, "public", "public", any, any>; userId: string; error?: undefined; } | { success: boolean; minutes: any; }'.
+  Property 'minutes' does not exist on type '{ supabase: SupabaseClient<any, "public", "public", any, any>; userId: string; error?: undefined; }'.
+components/tournaments/tournament-controller.tsx(1606,50): error TS2339: Property 'is_feature_match' does not exist on type '{ id: string; table_number: number; status: string; is_bye: boolean; player1_wins: number | null; player2_wins: number | null; winner_id: string | null; player1: { id: string; display_name: string; avatar_url: string | null; } | null; player2: { ...; } | null; }'.
+components/tournaments/tournament-controller.tsx(1609,43): error TS2339: Property 'is_feature_match' does not exist on type '{ id: string; table_number: number; status: string; is_bye: boolean; player1_wins: number | null; player2_wins: number | null; winner_id: string | null; player1: { id: string; display_name: string; avatar_url: string | null; } | null; player2: { ...; } | null; }'.
+components/tournaments/tournament-controller.tsx(1614,46): error TS2339: Property 'is_feature_match' does not exist on type '{ id: string; table_number: number; status: string; is_bye: boolean; player1_wins: number | null; player2_wins: number | null; winner_id: string | null; player1: { id: string; display_name: string; avatar_url: string | null; } | null; player2: { ...; } | null; }'.
+components/tournaments/tournament-controller.tsx(1620,47): error TS2339: Property 'is_feature_match' does not exist on type '{ id: string; table_number: number; status: string; is_bye: boolean; player1_wins: number | null; player2_wins: number | null; winner_id: string | null; player1: { id: string; display_name: string; avatar_url: string | null; } | null; player2: { ...; } | null; }'.
+components/tournaments/tournament-controller.tsx(1627,48): error TS2339: Property 'is_feature_match' does not exist on type '{ id: string; table_number: number; status: string; is_bye: boolean; player1_wins: number | null; player2_wins: number | null; winner_id: string | null; player1: { id: string; display_name: string; avatar_url: string | null; } | null; player2: { ...; } | null; }'.
+components/tournaments/tournament-controller.tsx(1631,43): error TS2339: Property 'is_feature_match' does not exist on type '{ id: string; table_number: number; status: string; is_bye: boolean; player1_wins: number | null; player2_wins: number | null; winner_id: string | null; player1: { id: string; display_name: string; avatar_url: string | null; } | null; player2: { ...; } | null; }'.
+components/tournaments/tournament-controller.tsx(1846,64): error TS2339: Property 'draws' does not exist on type '{ id: string; table_number: number; status: string; is_bye: boolean; player1_wins: number | null; player2_wins: number | null; winner_id: string | null; loser_id: string | null; reported_player1_wins: number | null; ... 4 more ...; player2: { ...; } | null; }'.
+components/tournaments/tournament-controller.tsx(1877,87): error TS2339: Property 'dispute_reason' does not exist on type '{ id: string; table_number: number; status: string; is_bye: boolean; player1_wins: number | null; player2_wins: number | null; winner_id: string | null; loser_id: string | null; reported_player1_wins: number | null; ... 4 more ...; player2: { ...; } | null; }'.
+components/tournaments/tournament-controller.tsx(1879,60): error TS2339: Property 'dispute_reason' does not exist on type '{ id: string; table_number: number; status: string; is_bye: boolean; player1_wins: number | null; player2_wins: number | null; winner_id: string | null; loser_id: string | null; reported_player1_wins: number | null; ... 4 more ...; player2: { ...; } | null; }'.
+lib/auth/require-admin.ts(25,16): error TS7006: Parameter 'cookiesToSet' implicitly has an 'any' type.
+lib/auth/require-admin.ts(27,37): error TS7031: Binding element 'name' implicitly has an 'any' type.
+lib/auth/require-admin.ts(27,43): error TS7031: Binding element 'value' implicitly has an 'any' type.
+lib/auth/require-admin.ts(27,50): error TS7031: Binding element 'options' implicitly has an 'any' type.
+lib/auto-clip-service.ts(317,31): error TS2339: Property 'display_name' does not exist on type '{ id: any; display_name: any; }[]'.
+lib/auto-clip-service.ts(318,31): error TS2339: Property 'display_name' does not exist on type '{ id: any; display_name: any; }[]'.
+lib/auto-clip-service.ts(339,34): error TS2339: Property 'id' does not exist on type '{ id: any; display_name: any; }[]'.
+lib/auto-clip-service.ts(372,52): error TS2339: Property 'id' does not exist on type '{ id: any; display_name: any; }[]'.
+lib/capacitor.ts(152,7): error TS2322: Type 'PermissionState' is not assignable to type '"denied" | "granted" | "prompt"'.
+  Type '"prompt-with-rationale"' is not assignable to type '"denied" | "granted" | "prompt"'.
+lib/cold-start-service.ts(118,23): error TS2339: Property 'id' does not exist on type '{ id: any; gamertag: any; avatar_url: any; }[]'.
+lib/cold-start-service.ts(119,33): error TS2339: Property 'gamertag' does not exist on type '{ id: any; gamertag: any; avatar_url: any; }[]'.
+lib/cold-start-service.ts(120,31): error TS2339: Property 'avatar_url' does not exist on type '{ id: any; gamertag: any; avatar_url: any; }[]'.
+lib/cold-start-service.ts(154,25): error TS2339: Property 'id' does not exist on type '{ id: any; gamertag: any; avatar_url: any; }[]'.
+lib/cold-start-service.ts(155,35): error TS2339: Property 'gamertag' does not exist on type '{ id: any; gamertag: any; avatar_url: any; }[]'.
+lib/cold-start-service.ts(156,33): error TS2339: Property 'avatar_url' does not exist on type '{ id: any; gamertag: any; avatar_url: any; }[]'.
+lib/cold-start-service.ts(189,25): error TS2339: Property 'id' does not exist on type '{ id: any; gamertag: any; avatar_url: any; }[]'.
+lib/cold-start-service.ts(190,35): error TS2339: Property 'gamertag' does not exist on type '{ id: any; gamertag: any; avatar_url: any; }[]'.
+lib/cold-start-service.ts(191,33): error TS2339: Property 'avatar_url' does not exist on type '{ id: any; gamertag: any; avatar_url: any; }[]'.
+lib/cold-start-service.ts(219,25): error TS2339: Property 'id' does not exist on type '{ id: any; gamertag: any; avatar_url: any; }[]'.
+lib/cold-start-service.ts(220,35): error TS2339: Property 'gamertag' does not exist on type '{ id: any; gamertag: any; avatar_url: any; }[]'.
+lib/cold-start-service.ts(221,33): error TS2339: Property 'avatar_url' does not exist on type '{ id: any; gamertag: any; avatar_url: any; }[]'.
+lib/content-moderation.ts(74,19): error TS2339: Property 'object' does not exist on type 'GenerateTextResult<ToolSet, Output<{ safe: boolean; category: "safe" | "adult" | "violence" | "hate" | "spam" | "copyright" | "off_topic"; confidence: number; reason: string | null; flags: string[]; }, PartialObject<...>, never>>'.
+lib/engagement-triggers.ts(418,41): error TS2339: Property 'first_name' does not exist on type '{ first_name: any; }[]'.
+lib/engagement-triggers.ts(418,87): error TS2339: Property 'first_name' does not exist on type '{ first_name: any; }[]'.
+lib/engagement-triggers.ts(419,35): error TS2339: Property 'name' does not exist on type '{ name: any; }[]'.
+lib/esports-actions.ts(422,49): error TS18047: 'tournament' is possibly 'null'.
+lib/esports-actions.ts(433,25): error TS18047: 'tournament' is possibly 'null'.
+lib/esports-actions.ts(435,55): error TS18047: 'tournament' is possibly 'null'.
+lib/esports-actions.ts(437,25): error TS18047: 'tournament' is possibly 'null'.
+lib/highlight-detection.ts(112,28): error TS2339: Property 'games' does not exist on type '{ name: any; games: { name: any; category: any; }[]; }[]'.
+lib/highlight-detection.ts(114,34): error TS2339: Property 'name' does not exist on type '{ name: any; games: { name: any; category: any; }[]; }[]'.
+lib/highlight-detection.ts(188,29): error TS2339: Property 'object' does not exist on type 'GenerateTextResult<ToolSet, Output<{ has_highlights: boolean; highlights: { type: "clutch_play" | "comeback" | "upset" | "skill_display" | "crowd_moment" | "hype_moment" | "close_finish"; timestamp: number; description: string; duration: number; confidence: number; title_suggestion: string; }[]; overall_match_excite...'.
+lib/highlight-detection.ts(189,54): error TS7006: Parameter 'h' implicitly has an 'any' type.
+lib/revenue-splits-service.ts(145,73): error TS2339: Property 'creator' does not exist on type '{ platform: number; creator: number; } | { platform: number; streamer: number; } | { platform: number; organizer: number; featured_players: number; } | { platform: number; organizer: number; caster: number; players: number; } | { ...; } | { ...; }'.
+  Property 'creator' does not exist on type '{ platform: number; streamer: number; }'.
+lib/revenue-splits-service.ts(156,73): error TS2339: Property 'streamer' does not exist on type '{ platform: number; creator: number; } | { platform: number; streamer: number; } | { platform: number; organizer: number; featured_players: number; } | { platform: number; organizer: number; caster: number; players: number; } | { ...; } | { ...; }'.
+  Property 'streamer' does not exist on type '{ platform: number; creator: number; }'.
+lib/revenue-splits-service.ts(167,73): error TS2339: Property 'organizer' does not exist on type '{ platform: number; creator: number; } | { platform: number; streamer: number; } | { platform: number; organizer: number; featured_players: number; } | { platform: number; organizer: number; caster: number; players: number; } | { ...; } | { ...; }'.
+  Property 'organizer' does not exist on type '{ platform: number; creator: number; }'.
+lib/revenue-splits-service.ts(174,49): error TS2339: Property 'featured_players' does not exist on type '{ platform: number; creator: number; } | { platform: number; streamer: number; } | { platform: number; organizer: number; featured_players: number; } | { platform: number; organizer: number; caster: number; players: number; } | { ...; } | { ...; }'.
+  Property 'featured_players' does not exist on type '{ platform: number; creator: number; }'.
+lib/revenue-splits-service.ts(192,73): error TS2339: Property 'organizer' does not exist on type '{ platform: number; creator: number; } | { platform: number; streamer: number; } | { platform: number; organizer: number; featured_players: number; } | { platform: number; organizer: number; caster: number; players: number; } | { ...; } | { ...; }'.
+  Property 'organizer' does not exist on type '{ platform: number; creator: number; }'.
+lib/revenue-splits-service.ts(200,73): error TS2339: Property 'caster' does not exist on type '{ platform: number; creator: number; } | { platform: number; streamer: number; } | { platform: number; organizer: number; featured_players: number; } | { platform: number; organizer: number; caster: number; players: number; } | { ...; } | { ...; }'.
+  Property 'caster' does not exist on type '{ platform: number; creator: number; }'.
+lib/revenue-splits-service.ts(207,49): error TS2339: Property 'players' does not exist on type '{ platform: number; creator: number; } | { platform: number; streamer: number; } | { platform: number; organizer: number; featured_players: number; } | { platform: number; organizer: number; caster: number; players: number; } | { ...; } | { ...; }'.
+  Property 'players' does not exist on type '{ platform: number; creator: number; }'.
+lib/revenue-splits-service.ts(225,73): error TS2339: Property 'organizer' does not exist on type '{ platform: number; creator: number; } | { platform: number; streamer: number; } | { platform: number; organizer: number; featured_players: number; } | { platform: number; organizer: number; caster: number; players: number; } | { ...; } | { ...; }'.
+  Property 'organizer' does not exist on type '{ platform: number; creator: number; }'.
+lib/revenue-splits-service.ts(237,73): error TS2339: Property 'creator' does not exist on type '{ platform: number; creator: number; } | { platform: number; streamer: number; } | { platform: number; organizer: number; featured_players: number; } | { platform: number; organizer: number; caster: number; players: number; } | { ...; } | { ...; }'.
+  Property 'creator' does not exist on type '{ platform: number; streamer: number; }'.
+lib/revenue-splits-service.ts(249,7): error TS2322: Type '"subscription" | "tournament_entry" | "sponsorship" | "tip" | "ad_revenue"' is not assignable to type '"prize" | "subscription" | "sponsorship" | "tip" | "ad_revenue"'.
+  Type '"tournament_entry"' is not assignable to type '"prize" | "subscription" | "sponsorship" | "tip" | "ad_revenue"'.
+lib/role-actions.ts(8,33): error TS2554: Expected 0 arguments, but got 1.
+lib/role-actions.ts(13,22): error TS2339: Property 'auth' does not exist on type 'Promise<SupabaseClient<any, "public", any, any, any>>'.
+lib/role-actions.ts(21,6): error TS2339: Property 'from' does not exist on type 'Promise<SupabaseClient<any, "public", any, any, any>>'.
+lib/role-actions.ts(28,6): error TS2339: Property 'from' does not exist on type 'Promise<SupabaseClient<any, "public", any, any, any>>'.
+lib/role-actions.ts(40,6): error TS2339: Property 'from' does not exist on type 'Promise<SupabaseClient<any, "public", any, any, any>>'.
+lib/role-actions.ts(60,33): error TS2554: Expected 0 arguments, but got 1.
+lib/role-actions.ts(63,6): error TS2339: Property 'from' does not exist on type 'Promise<SupabaseClient<any, "public", any, any, any>>'.
+lib/role-actions.ts(81,33): error TS2554: Expected 0 arguments, but got 1.
+lib/role-actions.ts(84,6): error TS2339: Property 'from' does not exist on type 'Promise<SupabaseClient<any, "public", any, any, any>>'.
+lib/role-actions.ts(98,33): error TS2554: Expected 0 arguments, but got 1.
+lib/role-actions.ts(103,22): error TS2339: Property 'auth' does not exist on type 'Promise<SupabaseClient<any, "public", any, any, any>>'.
+lib/role-actions.ts(110,6): error TS2339: Property 'from' does not exist on type 'Promise<SupabaseClient<any, "public", any, any, any>>'.
+lib/role-actions.ts(121,6): error TS2339: Property 'from' does not exist on type 'Promise<SupabaseClient<any, "public", any, any, any>>'.
+lib/role-actions.ts(132,6): error TS2339: Property 'from' does not exist on type 'Promise<SupabaseClient<any, "public", any, any, any>>'.
+lib/role-actions.ts(146,6): error TS2339: Property 'from' does not exist on type 'Promise<SupabaseClient<any, "public", any, any, any>>'.
+lib/role-actions.ts(159,33): error TS2554: Expected 0 arguments, but got 1.
+lib/role-actions.ts(164,22): error TS2339: Property 'auth' does not exist on type 'Promise<SupabaseClient<any, "public", any, any, any>>'.
+lib/role-actions.ts(171,6): error TS2339: Property 'from' does not exist on type 'Promise<SupabaseClient<any, "public", any, any, any>>'.
+lib/role-actions.ts(182,6): error TS2339: Property 'from' does not exist on type 'Promise<SupabaseClient<any, "public", any, any, any>>'.
+lib/role-actions.ts(201,33): error TS2554: Expected 0 arguments, but got 1.
+lib/role-actions.ts(206,22): error TS2339: Property 'auth' does not exist on type 'Promise<SupabaseClient<any, "public", any, any, any>>'.
+lib/role-actions.ts(214,6): error TS2339: Property 'from' does not exist on type 'Promise<SupabaseClient<any, "public", any, any, any>>'.
+lib/role-actions.ts(220,6): error TS2339: Property 'from' does not exist on type 'Promise<SupabaseClient<any, "public", any, any, any>>'.
+lib/role-actions.ts(234,6): error TS2339: Property 'from' does not exist on type 'Promise<SupabaseClient<any, "public", any, any, any>>'.
+lib/role-actions.ts(247,6): error TS2339: Property 'from' does not exist on type 'Promise<SupabaseClient<any, "public", any, any, any>>'.
+lib/role-actions.ts(257,20): error TS2339: Property 'from' does not exist on type 'Promise<SupabaseClient<any, "public", any, any, any>>'.
+lib/streaming-config.ts(50,7): error TS2322: Type 'string | false | null' is not assignable to type 'boolean'.
+  Type 'null' is not assignable to type 'boolean'.
+lib/stripe-payout-service.ts(380,16): error TS2339: Property 'success' does not exist on type '{ success: boolean; message: string; error?: undefined; } | { error: string; }'.
+  Property 'success' does not exist on type '{ error: string; }'.
+lib/supabase/middleware.ts(26,16): error TS7006: Parameter 'cookiesToSet' implicitly has an 'any' type.
+lib/supabase/middleware.ts(27,35): error TS7031: Binding element 'name' implicitly has an 'any' type.
+lib/supabase/middleware.ts(27,41): error TS7031: Binding element 'value' implicitly has an 'any' type.
+lib/supabase/middleware.ts(33,35): error TS7031: Binding element 'name' implicitly has an 'any' type.
+lib/supabase/middleware.ts(33,41): error TS7031: Binding element 'value' implicitly has an 'any' type.
+lib/supabase/middleware.ts(33,48): error TS7031: Binding element 'options' implicitly has an 'any' type.
+lib/supabase/server.ts(21,16): error TS7006: Parameter 'cookiesToSet' implicitly has an 'any' type.
+lib/supabase/server.ts(23,37): error TS7031: Binding element 'name' implicitly has an 'any' type.
+lib/supabase/server.ts(23,43): error TS7031: Binding element 'value' implicitly has an 'any' type.
+lib/supabase/server.ts(23,50): error TS7031: Binding element 'options' implicitly has an 'any' type.
+lib/tournament-controller-actions.ts(3259,22): error TS2352: Conversion of type '{ round_number: any; }[]' to type '{ round_number: number; }' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Property 'round_number' is missing in type '{ round_number: any; }[]' but required in type '{ round_number: number; }'.
+lib/tournament-payment-actions.ts(87,79): error TS2339: Property 'name' does not exist on type '{ name: any; }[]'.
+lib/tournament-payment-actions.ts(87,108): error TS2339: Property 'name' does not exist on type '{ name: any; }[]'.
+lib/tournament-payment-actions.ts(97,24): error TS18047: 'registration' is possibly 'null'.
+lib/tournament-payment-actions.ts(112,15): error TS18047: 'registration' is possibly 'null'.
+lib/tournament-payment-actions.ts(352,47): error TS2339: Property 'created_by' does not exist on type '{ created_by: any; }[]'.
+lib/unified-feed-service.ts(151,18): error TS7006: Parameter 'c' implicitly has an 'any' type.
+lib/unified-feed-service.ts(152,24): error TS7006: Parameter 'm' implicitly has an 'any' type.
+lib/unified-feed-service.ts(153,17): error TS7006: Parameter 'v' implicitly has an 'any' type.
+lib/wallet-actions.ts(890,24): error TS2774: This condition will always return true since this function is always defined. Did you mean to call it instead?

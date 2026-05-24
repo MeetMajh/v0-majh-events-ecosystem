@@ -1,0 +1,9 @@
+Iter 5 complete. Phase 2 bug #4 (path-with-spaces) fixed.
+
+**What changed:**
+- `app/api/access/core access/` removed via `gio trash` (respecting "trash not rm" rule). Contents were 5 one-byte placeholder files containing only `\n` — v0 scaffolding noise, no `route.ts`, zero callers.
+- Sibling routes `app/api/access/{code,db,env,git}/route.ts` untouched.
+- `ralph-dev/ACCEPTANCE.md` line 18 flipped to `[x]`.
+- `ralph-dev/STATE.md` and `ralph-dev/PROGRESS.md` updated with the full iter-5 record + the TRIAGE wording correction (they were files, not subdirs as iter-1 claimed).
+
+**Phase 2 status:** 4 of 5 done. One remaining: iter 6 will create `.env.example` from `ralph-dev/ENV.md`.

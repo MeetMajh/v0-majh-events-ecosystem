@@ -1,0 +1,9 @@
+Iteration complete.
+
+**Fixed this iter:** Wrote `scripts/137_add_mux_playback_id.sql` — additive, idempotent migration adding `mux_playback_id` and `mux_asset_id` to `user_streams`, plus two partial indexes backed by verified `.eq()` lookups in `app/api/webhooks/mux/route.ts:158` and `app/api/admin/import-mux-assets/route.ts:51`.
+
+**Scope note:** Acceptance text only mentioned `mux_playback_id`, but `lib/go-live-actions.ts:309-311` writes both columns in one `.update()` and `043-user-streams.sql` (the original create) ships neither — splitting the fix would still 42703. Single migration covers both.
+
+**Acceptance:** Phase 2 line 15 flipped. Phase 1 boxes were already flipped by prior iter.
+
+**Next iter:** `scripts/138_vod_rls_ended_streams.sql` — idempotent SELECT policy for `status='ended' AND is_public=true` on `user_streams`. Must use a DO block + `pg_policies` lookup (no `CREATE POLICY IF NOT EXISTS` before Postgres 15.4).
