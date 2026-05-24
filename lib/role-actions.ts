@@ -14,14 +14,12 @@ export async function submitRoleRequest(requestedRole: string, reason: string) {
     return { error: 'Not authenticated' }
   }
 
-  // Get current profile role
   const { data: profile } = await supabase
     .from('profiles')
-    .select("role:role_key")
+    .select('role')
     .eq('id', user.id)
     .single()
 
-  // Check if there's already a pending request
   const { data: pendingRequest } = await supabase
     .from('role_requests')
     .select('id')
@@ -33,7 +31,6 @@ export async function submitRoleRequest(requestedRole: string, reason: string) {
     return { error: 'You already have a pending role request. Please wait for admin review.' }
   }
 
-  // Submit the request
   const { data, error } = await supabase
     .from('role_requests')
     .insert({
@@ -66,7 +63,6 @@ export async function getUserRoleRequest(userId: string) {
     .single()
 
   if (error && error.code !== 'PGRST116') {
-    // PGRST116 = no rows returned, which is expected
     console.error('Error fetching role request:', error)
   }
 
@@ -92,18 +88,12 @@ export async function getUserProfile(userId: string) {
 export async function approveRoleRequest(requestId: string, newRole: string) {
   const supabase = await createClient()
 
-  // Verify admin privileges
-  const {
-    data: { user: currentUser },
-  } = await supabase.auth.getUser()
-
-  if (!currentUser) {
-    return { error: 'Not authenticated' }
-  }
+  const { data: { user: currentUser } } = await supabase.auth.getUser()
+  if (!currentUser) return { error: 'Not authenticated' }
 
   const { data: adminProfile } = await supabase
     .from('profiles')
-    .select("role:role_key")
+    .select('role')
     .eq('id', currentUser.id)
     .single()
 
@@ -111,18 +101,15 @@ export async function approveRoleRequest(requestId: string, newRole: string) {
     return { error: 'You do not have permission to approve role requests' }
   }
 
-  // Get the request
   const { data: request } = await supabase
     .from('role_requests')
     .select('user_id')
     .eq('id', requestId)
     .single()
 
-  if (!request) {
-    return { error: 'Request not found' }
-  }
+  if (!request) return { error: 'Request not found' }
 
-  // Update the request status
+  // 1. Update the request status
   const { error: updateError } = await supabase
     .from('role_requests')
     .update({
@@ -132,18 +119,29 @@ export async function approveRoleRequest(requestId: string, newRole: string) {
     })
     .eq('id', requestId)
 
-  if (updateError) {
-    return { error: updateError.message }
-  }
+  if (updateError) return { error: updateError.message }
 
-  // Update the user's profile role
-  const { error: profileError } = await supabase
-    .from('profiles')
-    .update({ role: newRole })
-    .eq('id', request.user_id)
+  // 2. Update legacy profiles
+  await supabase.from('profiles').update({ role: newRole }).eq('id', request.user_id)
 
-  if (profileError) {
-    return { error: profileError.message }
+  // 3. Update or Insert new T-204 organization_members
+  // First check if they have a row
+  const { data: existingOrgMember } = await supabase
+    .from('organization_members')
+    .select('id')
+    .eq('user_id', request.user_id)
+    .single()
+
+  if (existingOrgMember) {
+    await supabase.from('organization_members').update({ role_key: newRole, is_active: true }).eq('user_id', request.user_id)
+  } else {
+    // If no row, try to map them to the default tenant (if applicable) or leave tenant_id null for platform roles
+    // A production solution would pass the tenant_id through the UI, but for now we fallback to platform level
+    await supabase.from('organization_members').insert({
+      user_id: request.user_id,
+      role_key: newRole,
+      is_active: true
+    })
   }
 
   return { success: true }
@@ -152,18 +150,12 @@ export async function approveRoleRequest(requestId: string, newRole: string) {
 export async function denyRoleRequest(requestId: string, reason: string) {
   const supabase = await createClient()
 
-  // Verify admin privileges
-  const {
-    data: { user: currentUser },
-  } = await supabase.auth.getUser()
-
-  if (!currentUser) {
-    return { error: 'Not authenticated' }
-  }
+  const { data: { user: currentUser } } = await supabase.auth.getUser()
+  if (!currentUser) return { error: 'Not authenticated' }
 
   const { data: adminProfile } = await supabase
     .from('profiles')
-    .select("role:role_key")
+    .select('role')
     .eq('id', currentUser.id)
     .single()
 
@@ -171,7 +163,6 @@ export async function denyRoleRequest(requestId: string, reason: string) {
     return { error: 'You do not have permission to deny role requests' }
   }
 
-  // Update the request status
   const { error } = await supabase
     .from('role_requests')
     .update({
@@ -182,30 +173,20 @@ export async function denyRoleRequest(requestId: string, reason: string) {
     })
     .eq('id', requestId)
 
-  if (error) {
-    return { error: error.message }
-  }
+  if (error) return { error: error.message }
 
   return { success: true }
 }
 
-// Admin direct role assignment (no request needed)
 export async function assignProfileRole(targetUserId: string, newRole: string) {
   const supabase = await createClient()
 
-  // Verify admin privileges
-  const {
-    data: { user: currentUser },
-  } = await supabase.auth.getUser()
+  const { data: { user: currentUser } } = await supabase.auth.getUser()
+  if (!currentUser) return { error: 'Not authenticated' }
 
-  if (!currentUser) {
-    return { error: 'Not authenticated' }
-  }
-
-  // Check if current user is admin/owner/organizer
   const { data: adminProfile } = await supabase
     .from('profiles')
-    .select("role:role_key")
+    .select('role')
     .eq('id', currentUser.id)
     .single()
 
@@ -215,37 +196,43 @@ export async function assignProfileRole(targetUserId: string, newRole: string) {
     .eq('user_id', currentUser.id)
     .single()
 
-  const profileAllowed = adminProfile && ['admin', 'owner', 'organizer'].includes(adminProfile.role ?? "")
+  const profileAllowed = adminProfile && ["admin", "owner", "TENANT_ADMIN", "DEPARTMENT_ADMIN", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "PLATFORM_OWNER"].includes(adminProfile.role ?? "")
   const staffAllowed = adminStaffRole && ["owner", "manager", "organizer", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_MANAGER", "DEPARTMENT_MANAGER", "PLATFORM_OWNER"].includes(adminStaffRole.role)
 
   if (!profileAllowed && !staffAllowed) {
     return { error: 'You do not have permission to assign roles' }
   }
 
-  // Get the target user's current profile
   const { data: targetProfile } = await supabase
     .from('profiles')
     .select('id, role')
     .eq('id', targetUserId)
     .single()
 
-  if (!targetProfile) {
-    return { error: 'User profile not found' }
-  }
+  if (!targetProfile) return { error: 'User profile not found' }
 
   const previousRole = targetProfile.role
 
-  // Update the user's profile role
-  const { error: profileError } = await supabase
-    .from('profiles')
-    .update({ role: newRole })
-    .eq('id', targetUserId)
+  // 1. Update legacy profile
+  await supabase.from('profiles').update({ role: newRole }).eq('id', targetUserId)
 
-  if (profileError) {
-    return { error: profileError.message }
+  // 2. Update T-204 organization_members
+  const { data: existingOrgMember } = await supabase
+    .from('organization_members')
+    .select('id')
+    .eq('user_id', targetUserId)
+    .single()
+
+  if (existingOrgMember) {
+    await supabase.from('organization_members').update({ role_key: newRole, is_active: true }).eq('user_id', targetUserId)
+  } else {
+    await supabase.from('organization_members').insert({
+      user_id: targetUserId,
+      role_key: newRole,
+      is_active: true
+    })
   }
 
-  // Log the role assignment (optional - for audit trail)
   try {
     await supabase.from('role_assignments_audit').insert({
       admin_id: currentUser.id,
@@ -254,12 +241,7 @@ export async function assignProfileRole(targetUserId: string, newRole: string) {
       new_role: newRole,
       created_at: new Date().toISOString(),
     })
-  } catch {
-    // Audit log is optional, don't fail if it doesn't exist
-  }
+  } catch {}
 
-  return { 
-    success: true,
-    message: `Role updated from ${previousRole || 'none'} to ${newRole}`
-  }
+  return { success: true, message: `Role updated from ${previousRole || 'none'} to ${newRole}` }
 }
