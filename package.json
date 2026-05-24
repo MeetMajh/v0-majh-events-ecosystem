@@ -95,6 +95,7 @@
     "react-error-boundary": "^6.1.1",
     "react-hook-form": "^7.54.1",
     "react-intersection-observer": "^10.0.3",
+    "react-markdown": "^10.1.0",
     "react-resizable-panels": "^2.1.7",
     "recharts": "2.15.0",
     "resend": "^6.10.0",
