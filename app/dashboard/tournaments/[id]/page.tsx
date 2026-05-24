@@ -32,12 +32,12 @@ export default async function TournamentControllerPage({
 
   // Authorization check
   const { data: staffRole } = await supabase
-    .from("staff_roles")
-    .select("role")
+    .from("organization_members")
+    .select("role:role_key")
     .eq("user_id", user.id)
     .single()
 
-  const isStaff = staffRole && ["owner", "manager", "organizer"].includes(staffRole.role)
+  const isStaff = staffRole && ["owner", "manager", "organizer", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_MANAGER", "DEPARTMENT_MANAGER", "PLATFORM_OWNER"].includes(staffRole.role)
   const isCreator = tournament.created_by === user.id
 
   if (!isStaff && !isCreator) {

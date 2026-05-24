@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { AlertTriangle, Package } from "lucide-react"
 
 export default async function InventoryPage() {
-  await requireRole(["owner", "manager"])
+  await requireRole(["owner", "manager", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_MANAGER", "DEPARTMENT_MANAGER", "PLATFORM_OWNER"])
   const supabase = await createClient()
 
   const { data: inventory } = await supabase

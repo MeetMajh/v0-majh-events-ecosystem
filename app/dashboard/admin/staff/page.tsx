@@ -27,12 +27,12 @@ export default async function StaffAdminPage({
 }: {
   searchParams: Promise<{ error?: string; success?: string }>
 }) {
-  await requireRole(["owner", "manager"])
+  await requireRole(["owner", "manager", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_MANAGER", "DEPARTMENT_MANAGER", "PLATFORM_OWNER"])
   const params = await searchParams
   const supabase = await createClient()
 
   const { data: staffRoles } = await supabase
-    .from("staff_roles")
+    .from("organization_members")
     .select("*, profiles(first_name, last_name)")
     .order("created_at")
 

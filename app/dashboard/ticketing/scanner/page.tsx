@@ -20,7 +20,7 @@ export default async function ScannerSelectPage() {
   // Get user's tenant
   const { data: membership } = await supabase
     .from("tenant_memberships")
-    .select("tenant_id, role")
+    .select("tenant_id, role:role_key")
     .eq("user_id", user.id)
     .single()
 

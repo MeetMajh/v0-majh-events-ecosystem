@@ -65,12 +65,12 @@ export default async function FinancialsPage() {
 
   // Get staff role for organizer features
   const { data: staffRole } = await supabase
-    .from("staff_roles")
-    .select("role")
+    .from("organization_members")
+    .select("role:role_key")
     .eq("user_id", user.id)
     .single()
 
-  const isOrganizer = staffRole && ["owner", "manager", "organizer"].includes(staffRole.role)
+  const isOrganizer = staffRole && ["owner", "manager", "organizer", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_MANAGER", "DEPARTMENT_MANAGER", "PLATFORM_OWNER"].includes(staffRole.role)
 
   // Get organizer earnings if applicable
   let organizerEarnings = null

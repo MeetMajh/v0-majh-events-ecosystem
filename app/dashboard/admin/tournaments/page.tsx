@@ -24,12 +24,12 @@ async function checkAdminAccess() {
   if (!user) redirect("/auth/login")
 
   const { data: role } = await supabase
-    .from("staff_roles")
-    .select("role")
+    .from("organization_members")
+    .select("role:role_key")
     .eq("user_id", user.id)
     .single()
 
-  if (!role || !["owner", "manager"].includes(role.role)) {
+  if (!role || !["owner", "manager", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_MANAGER", "DEPARTMENT_MANAGER", "PLATFORM_OWNER"].includes(role.role)) {
     redirect("/dashboard")
   }
   return user

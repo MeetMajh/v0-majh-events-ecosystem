@@ -17,7 +17,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   const [{ data: profile }, { data: staffRole }] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", user.id).single(),
-    supabase.from("staff_roles").select("role").eq("user_id", user.id).single(),
+    supabase.from("organization_members").select("role:role_key").eq("user_id", user.id).single(),
   ])
 
   const displayName = profile?.first_name

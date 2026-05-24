@@ -12,8 +12,8 @@ export async function POST(request: Request) {
 
     // Check staff role
     const { data: staffRole } = await supabase
-      .from("staff_roles")
-      .select("role")
+      .from("organization_members")
+      .select("role:role_key")
       .eq("user_id", user.id)
       .single()
 

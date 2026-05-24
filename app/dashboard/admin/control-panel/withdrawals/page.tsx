@@ -10,10 +10,10 @@ export default async function WithdrawalsPage() {
 
   // Check admin/staff access
   const { data: staffRole } = await supabase
-    .from("staff_roles")
-    .select("role")
+    .from("organization_members")
+    .select("role:role_key")
     .eq("user_id", user.id)
-    .in("role", ["owner", "manager"])
+    .in("role", ["owner", "manager", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_MANAGER", "DEPARTMENT_MANAGER", "PLATFORM_OWNER"])
     .single()
 
   if (!staffRole) redirect("/dashboard")

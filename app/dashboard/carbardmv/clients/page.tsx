@@ -16,7 +16,7 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 export default async function ClientsCRMPage() {
-  await requireRole(["owner", "manager", "staff"])
+  await requireRole(["owner", "manager", "staff", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_MANAGER", "DEPARTMENT_MANAGER", "DEPARTMENT_STAFF", "PLATFORM_OWNER"])
   const supabase = await createClient()
 
   const { data: clients } = await supabase

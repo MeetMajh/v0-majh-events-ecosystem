@@ -7,7 +7,7 @@ import Link from "next/link"
 import { Plus, Pencil, Trash2, Star } from "lucide-react"
 
 export default async function MenuAdminPage() {
-  await requireRole(["owner", "manager"])
+  await requireRole(["owner", "manager", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_MANAGER", "DEPARTMENT_MANAGER", "PLATFORM_OWNER"])
   const supabase = await createClient()
 
   const { data: categories } = await supabase.from("categories").select("*").order("sort_order")

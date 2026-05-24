@@ -15,11 +15,11 @@ export default async function RoleRequestsPage() {
   // Check if user is admin or owner
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role:role_key")
     .eq("id", user.id)
     .single()
 
-  if (!profile || !["admin", "owner"].includes(profile.role)) {
+  if (!profile || !["admin", "owner", "TENANT_ADMIN", "DEPARTMENT_ADMIN", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "PLATFORM_OWNER"].includes(profile.role)) {
     redirect("/dashboard")
   }
 

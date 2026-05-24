@@ -18,7 +18,7 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 export default async function StaffSchedulePage() {
-  await requireRole(["owner", "manager", "staff"])
+  await requireRole(["owner", "manager", "staff", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_MANAGER", "DEPARTMENT_MANAGER", "DEPARTMENT_STAFF", "PLATFORM_OWNER"])
   const supabase = await createClient()
 
   const [{ data: shifts }, { data: staffMembers }] = await Promise.all([
@@ -28,8 +28,8 @@ export default async function StaffSchedulePage() {
       .order("shift_date", { ascending: false })
       .limit(50),
     supabase
-      .from("staff_roles")
-      .select("user_id, role, profiles(first_name, last_name)")
+      .from("organization_members")
+      .select("user_id, role:role_key, profiles(first_name, last_name)")
       .order("role"),
   ])
 

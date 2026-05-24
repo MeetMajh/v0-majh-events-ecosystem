@@ -45,7 +45,7 @@ const STATUS_ICONS: Record<string, React.ElementType> = {
 }
 
 export default async function PrepListsPage() {
-  await requireRole(["owner", "manager", "staff"])
+  await requireRole(["owner", "manager", "staff", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_MANAGER", "DEPARTMENT_MANAGER", "DEPARTMENT_STAFF", "PLATFORM_OWNER"])
   const supabase = await createClient()
 
   const [{ data: tasks }, { data: staffMembers }, { data: bookings }] = await Promise.all([
@@ -55,7 +55,7 @@ export default async function PrepListsPage() {
       .order("priority", { ascending: true })
       .order("due_date", { ascending: true })
       .limit(100),
-    supabase.from("staff_roles").select("user_id, role, profiles(first_name, last_name)").order("role"),
+    supabase.from("organization_members").select("user_id, role:role_key, profiles(first_name, last_name)").order("role"),
     supabase.from("cb_bookings").select("id, contact_name, event_date").gte("event_date", new Date().toISOString().split("T")[0]).order("event_date").limit(20),
   ])
 

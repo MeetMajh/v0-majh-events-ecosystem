@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
       // Fallback to legacy
       const { data: legacyMembership } = await supabase
         .from("tenant_memberships")
-        .select("tenant_id, role")
+        .select("tenant_id, role:role_key")
         .eq("user_id", user.id)
         .single()
       

@@ -162,7 +162,7 @@ export default async function AdminAnalyticsPage({
 }: {
   searchParams: Promise<{ period?: string }>
 }) {
-  await requireRole(["owner", "manager"])
+  await requireRole(["owner", "manager", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_MANAGER", "DEPARTMENT_MANAGER", "PLATFORM_OWNER"])
   const params = await searchParams
   const period = (params.period as "today" | "7d" | "30d") || "7d"
 

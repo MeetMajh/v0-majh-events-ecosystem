@@ -17,7 +17,7 @@ import { DatabaseSetup } from "@/components/carbardmv/database-setup"
 export const metadata = { title: "CARBARDMV Overview | Dashboard" }
 
 export default async function CarbardmvOverviewPage() {
-  await requireRole(["owner", "manager", "staff"])
+  await requireRole(["owner", "manager", "staff", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_MANAGER", "DEPARTMENT_MANAGER", "DEPARTMENT_STAFF", "PLATFORM_OWNER"])
   const supabase = await createClient()
 
   const now = new Date()
