@@ -17,7 +17,7 @@ export async function submitRoleRequest(requestedRole: string, reason: string) {
   // Get current profile role
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role')
+    .select("role:role_key")
     .eq('id', user.id)
     .single()
 
@@ -103,11 +103,11 @@ export async function approveRoleRequest(requestId: string, newRole: string) {
 
   const { data: adminProfile } = await supabase
     .from('profiles')
-    .select('role')
+    .select("role:role_key")
     .eq('id', currentUser.id)
     .single()
 
-  if (!adminProfile || !['admin', 'owner'].includes(adminProfile.role)) {
+  if (!adminProfile || !["admin", "owner", "TENANT_ADMIN", "DEPARTMENT_ADMIN", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "PLATFORM_OWNER"].includes(adminProfile.role)) {
     return { error: 'You do not have permission to approve role requests' }
   }
 
@@ -163,11 +163,11 @@ export async function denyRoleRequest(requestId: string, reason: string) {
 
   const { data: adminProfile } = await supabase
     .from('profiles')
-    .select('role')
+    .select("role:role_key")
     .eq('id', currentUser.id)
     .single()
 
-  if (!adminProfile || !['admin', 'owner'].includes(adminProfile.role)) {
+  if (!adminProfile || !["admin", "owner", "TENANT_ADMIN", "DEPARTMENT_ADMIN", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "PLATFORM_OWNER"].includes(adminProfile.role)) {
     return { error: 'You do not have permission to deny role requests' }
   }
 
@@ -205,18 +205,18 @@ export async function assignProfileRole(targetUserId: string, newRole: string) {
   // Check if current user is admin/owner/organizer
   const { data: adminProfile } = await supabase
     .from('profiles')
-    .select('role')
+    .select("role:role_key")
     .eq('id', currentUser.id)
     .single()
 
   const { data: adminStaffRole } = await supabase
-    .from('staff_roles')
-    .select('role')
+    .from("organization_members")
+    .select("role:role_key")
     .eq('user_id', currentUser.id)
     .single()
 
   const profileAllowed = adminProfile && ['admin', 'owner', 'organizer'].includes(adminProfile.role ?? "")
-  const staffAllowed = adminStaffRole && ['owner', 'manager', 'organizer'].includes(adminStaffRole.role)
+  const staffAllowed = adminStaffRole && ["owner", "manager", "organizer", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_MANAGER", "DEPARTMENT_MANAGER", "PLATFORM_OWNER"].includes(adminStaffRole.role)
 
   if (!profileAllowed && !staffAllowed) {
     return { error: 'You do not have permission to assign roles' }
