@@ -18,12 +18,12 @@ export default async function SiteSettingsPage() {
   
   // Check if user is owner/manager
   const { data: staffRole } = await supabase
-    .from("organization_members")
-    .select("role:role_key")
+    .from("staff_roles")
+    .select("role")
     .eq("user_id", user.id)
     .single()
   
-  if (!staffRole || !["owner", "manager", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_MANAGER", "DEPARTMENT_MANAGER", "PLATFORM_OWNER"].includes(staffRole.role)) {
+  if (!staffRole || !["owner", "manager"].includes(staffRole.role)) {
     redirect("/dashboard")
   }
   

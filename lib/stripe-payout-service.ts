@@ -377,7 +377,7 @@ export async function processAllTournamentPayouts(tournamentId: string) {
 
   for (const payout of payouts) {
     const result = await executeStripePayout(payout.id)
-    if ("success" in result && result.success) {
+    if (result.success) {
       results.processed++
     } else {
       results.failed++

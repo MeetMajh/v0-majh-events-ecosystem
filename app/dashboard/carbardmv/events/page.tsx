@@ -36,7 +36,7 @@ const STATUS_LABELS: Record<string, string> = {
 }
 
 export default async function EventBookingsPage() {
-  await requireRole(["owner", "manager", "staff", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_MANAGER", "DEPARTMENT_MANAGER", "DEPARTMENT_STAFF", "PLATFORM_OWNER"])
+  await requireRole(["owner", "manager", "staff"])
   const supabase = await createClient()
 
   const { data: bookings } = await supabase

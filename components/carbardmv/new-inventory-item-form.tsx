@@ -54,9 +54,17 @@ export function NewInventoryItemForm() {
     setLoading(true)
 
     const formData = new FormData(e.currentTarget)
-    formData.set("cost_per_unit", formData.get("cost") as string || "0")
+    const data = {
+      name: formData.get("name") as string,
+      category: formData.get("category") as string,
+      unit: formData.get("unit") as string,
+      current_stock: parseFloat(formData.get("current_stock") as string) || 0,
+      min_stock: parseFloat(formData.get("min_stock") as string) || 0,
+      cost_per_unit_cents: Math.round(parseFloat(formData.get("cost") as string || "0") * 100),
+      supplier: formData.get("supplier") as string || undefined,
+    }
 
-    const result = await createInventoryItem_CB(formData)
+    const result = await createInventoryItem_CB(data)
 
     if (result.error) {
       toast.error(result.error)

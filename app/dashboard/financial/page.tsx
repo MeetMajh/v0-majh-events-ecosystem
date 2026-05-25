@@ -16,7 +16,7 @@ export default async function FinancialWalletPage() {
   // Get user's tenant membership
   const { data: membership } = await supabase
     .from("tenant_memberships")
-    .select("tenant_id, role:role_key")
+    .select("tenant_id, role")
     .eq("user_id", user.id)
     .single()
 
@@ -88,7 +88,7 @@ export default async function FinancialWalletPage() {
       balanceCents={Number(walletBalance?.balance_cents || 0)}
       pendingCents={Number(pendingWithdrawals?.balance_cents || 0)}
       escrowCents={totalEscrow}
-      transactions={userTransactions as any}
+      transactions={userTransactions}
       userId={user.id}
       tenantId={membership.tenant_id}
     />

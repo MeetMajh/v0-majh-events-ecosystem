@@ -12,11 +12,11 @@ export async function GET() {
   
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role:role_key")
+    .select("role")
     .eq("id", user.id)
     .single()
     
-  if (!profile || !["admin", "staff", "super_admin", "TENANT_ADMIN", "DEPARTMENT_ADMIN", "DEPARTMENT_STAFF", "TENANT_SUPER_ADMIN", "PLATFORM_OWNER"].includes(profile.role || "")) {
+  if (!profile || !["admin", "staff", "super_admin"].includes(profile.role || "")) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
   }
 

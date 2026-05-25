@@ -2,9 +2,16 @@ import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
 import Stripe from "stripe"
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2025-02-24.acacia",
-})
+// Lazy initialization to avoid build-time errors
+function getStripe() {
+  const key = process.env.STRIPE_SECRET_KEY
+  if (!key) {
+    throw new Error("STRIPE_SECRET_KEY is not configured")
+  }
+  return new Stripe(key, {
+    apiVersion: "2025-02-24.acacia",
+  })
+}
 
 export async function GET() {
   const supabase = await createClient()
@@ -32,6 +39,7 @@ export async function GET() {
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
     
     // 1. Fetch recent Stripe checkout sessions (wallet deposits)
+    const stripe = getStripe()
     const stripeSessions = await stripe.checkout.sessions.list({
       limit: 100,
       created: { gte: Math.floor(thirtyDaysAgo.getTime() / 1000) },
@@ -179,7 +187,7 @@ export async function GET() {
       walletMismatches,
       escrows: escrows?.map(e => ({
         tournamentId: e.tournament_id,
-        tournamentName: (e.tournaments as unknown as { title: string } | null)?.title || "Unknown",
+        tournamentName: (e.tournaments as { title: string } | null)?.title || "Unknown",
         fundedAmount: e.funded_amount_cents,
         participantCount: participantsByTournament[e.tournament_id] || 0,
         status: e.status,

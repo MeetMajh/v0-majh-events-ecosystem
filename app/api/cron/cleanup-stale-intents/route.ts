@@ -2,17 +2,20 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { requireCronAuth } from "@/lib/cron-auth"
 
-// Service role client (bypasses RLS)
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// Lazy initialization for service role client
+function getSupabaseAdmin() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) throw new Error("Supabase env vars not configured")
+  return createClient(url, key)
+}
 
 export async function GET(req: NextRequest) {
   const authError = requireCronAuth(req)
   if (authError) return authError
 
   try {
+    const supabaseAdmin = getSupabaseAdmin()
 
     // Call the cleanup function
     const { data, error } = await supabaseAdmin.rpc("cleanup_stale_intents")

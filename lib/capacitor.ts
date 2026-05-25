@@ -149,9 +149,7 @@ export async function requestPushPermissions(): Promise<'granted' | 'denied' | '
     try {
       const { PushNotifications } = await import('@capacitor/push-notifications')
       const result = await PushNotifications.requestPermissions()
-      return result.receive === "granted" || result.receive === "denied" || result.receive === "prompt"
-        ? result.receive
-        : "prompt"
+      return result.receive
     } catch {
       return 'denied'
     }

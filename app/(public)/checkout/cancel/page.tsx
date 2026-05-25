@@ -13,7 +13,7 @@ export default function CheckoutCancelPage() {
         <div className="container mx-auto flex items-center justify-between px-4 py-4">
           <Link href="/" className="flex items-center gap-3">
             <Image
-              src={IMAGES.brand.graphic}
+              src={IMAGES.logo}
               alt="CARBARDMV"
               width={40}
               height={40}

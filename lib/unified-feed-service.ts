@@ -148,9 +148,9 @@ export async function getUnifiedFeed(options: FeedOptions = {}): Promise<FeedRes
 
   // Merge and score all content
   const allContent: UnifiedFeedItem[] = [
-    ...clips.map((c: any) => transformClip(c)),
-    ...liveMatches.map((m: any) => transformLiveMatch(m)),
-    ...vods.map((v: any) => transformVod(v)),
+    ...clips.map(c => transformClip(c)),
+    ...liveMatches.map(m => transformLiveMatch(m)),
+    ...vods.map(v => transformVod(v)),
   ]
 
   // Score and rank

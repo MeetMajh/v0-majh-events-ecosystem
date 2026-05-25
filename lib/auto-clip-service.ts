@@ -313,11 +313,9 @@ export async function publishClipFromJob(job: ClipJob): Promise<ClipGenerationRe
   
   // Generate title based on highlight type
   let title = "Highlight"
-  const player1 = match?.player1 as unknown as { id: string; display_name: string | null } | null
-  const player2 = match?.player2 as unknown as { id: string; display_name: string | null } | null
   if (match) {
-    const p1 = player1?.display_name || "Player 1"
-    const p2 = player2?.display_name || "Player 2"
+    const p1 = match.player1?.display_name || "Player 1"
+    const p2 = match.player2?.display_name || "Player 2"
     
     switch (job.highlight_type) {
       case "clutch_moment":
@@ -338,7 +336,7 @@ export async function publishClipFromJob(job: ClipJob): Promise<ClipGenerationRe
   const { data: clip, error } = await supabase
     .from("player_media")
     .insert({
-      player_id: player1?.id || null,
+      player_id: match?.player1?.id || null,
       title,
       media_type: "clip",
       media_url: job.output_url,
@@ -371,7 +369,7 @@ export async function publishClipFromJob(job: ClipJob): Promise<ClipGenerationRe
     .eq("id", job.id)
   
   // Send notifications to followers
-  await notifyFollowersOfHighlight(player1?.id ?? null, clip.id, title)
+  await notifyFollowersOfHighlight(match?.player1?.id, clip.id, title)
   
   return { success: true, clipId: clip.id, jobId: job.id }
 }

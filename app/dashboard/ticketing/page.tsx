@@ -16,7 +16,7 @@ export default async function TicketingPage() {
   // Get user's tenant
   const { data: membership } = await supabase
     .from("tenant_memberships")
-    .select("tenant_id, role:role_key")
+    .select("tenant_id, role")
     .eq("user_id", user.id)
     .single()
 

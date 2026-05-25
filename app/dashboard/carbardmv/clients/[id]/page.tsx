@@ -36,7 +36,7 @@ export default async function ClientDetailPage({
 }: {
   params: Promise<{ id: string }>
 }) {
-  await requireRole(["owner", "manager", "staff", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_MANAGER", "DEPARTMENT_MANAGER", "DEPARTMENT_STAFF", "PLATFORM_OWNER"])
+  await requireRole(["owner", "manager", "staff"])
   const { id } = await params
   const supabase = await createClient()
 

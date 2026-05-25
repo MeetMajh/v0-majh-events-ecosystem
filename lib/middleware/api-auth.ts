@@ -6,7 +6,6 @@ export interface ApiAuthResult {
   api_key_id: string
   environment: "test" | "live"
   scopes: string[]
-  user_id?: string
   error?: string
 }
 
@@ -76,7 +75,6 @@ export async function validateApiKey(req: Request): Promise<ApiAuthResult> {
     api_key_id: data.api_key_id,
     environment: data.environment,
     scopes: data.scopes || ["read", "write"],
-    user_id: data.user_id,
   }
 }
 

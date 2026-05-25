@@ -41,7 +41,7 @@ export default async function UsersAdminPage({
 }: {
   searchParams: Promise<{ error?: string; success?: string; search?: string }>
 }) {
-  await requireRole(["owner", "manager", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_MANAGER", "DEPARTMENT_MANAGER", "PLATFORM_OWNER"])
+  await requireRole(["owner", "manager"])
   const params = await searchParams
   const supabase = await createClient()
   
@@ -66,8 +66,8 @@ export default async function UsersAdminPage({
   
   // Get staff roles
   const { data: staffRoles } = await supabase
-    .from("organization_members")
-    .select("user_id, role:role_key")
+    .from("staff_roles")
+    .select("user_id, role")
   
   const staffMap = new Map(staffRoles?.map(sr => [sr.user_id, sr.role]) ?? [])
   const profileMap = new Map(profiles?.map(p => [p.id, p]) ?? [])

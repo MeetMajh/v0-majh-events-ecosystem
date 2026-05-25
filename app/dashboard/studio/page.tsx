@@ -78,13 +78,12 @@ const fetcher = (url: string) => fetch(url).then(res => res.json())
 type StreamSource = "screen" | "camera" | "both"
 type LayoutType = "fullscreen" | "picture_in_picture" | "side_by_side"
 
-function StudioErrorFallback({ error, resetErrorBoundary }: { error: unknown; resetErrorBoundary: () => void }) {
-  const message = error instanceof Error ? error.message : "An error occurred loading MAJH Studio"
+function StudioErrorFallback({ error, resetErrorBoundary }: { error: Error; resetErrorBoundary: () => void }) {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center">
       <div className="text-center max-w-md mx-auto p-6">
         <h2 className="text-2xl font-bold mb-4">Something went wrong</h2>
-        <p className="text-muted-foreground mb-4">{message}</p>
+        <p className="text-muted-foreground mb-4">{error.message || "An error occurred loading MAJH Studio"}</p>
         <Button onClick={resetErrorBoundary}>Try Again</Button>
       </div>
     </div>
@@ -427,7 +426,7 @@ function MajhStudioContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "start",
-          sessionId: currentSession!.id,
+          sessionId: currentSession.id,
         }),
       })
 

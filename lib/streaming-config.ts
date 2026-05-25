@@ -37,7 +37,7 @@ export async function getStreamingConfig(): Promise<StreamingConfig> {
   const rtmpPlaybackUrl = process.env.RTMP_PLAYBACK_URL || null
   
   // RTMP is only enabled if all required vars are set
-  const rtmpFullyConfigured = Boolean(rtmpEnabled && rtmpIngestUrl && rtmpPlaybackUrl)
+  const rtmpFullyConfigured = rtmpEnabled && rtmpIngestUrl && rtmpPlaybackUrl
 
   return {
     // Default to Mux unless RTMP is explicitly enabled and configured

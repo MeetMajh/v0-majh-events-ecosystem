@@ -1,35 +1,21 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { createClient } from "@/lib/supabase/client"
+import { useEffect } from "react"
+import { useUser } from "@/hooks/use-user"
 import { analytics } from "@/lib/analytics-client"
 
 export function AnalyticsProvider({ children }: { children: React.ReactNode }) {
-  const [userId, setUserId] = useState<string | null>(null)
-
+  const { user } = useUser()
+  
   useEffect(() => {
-    const supabase = createClient()
-
-    supabase.auth.getUser().then(({ data }) => {
-      const id = data.user?.id ?? null
-      setUserId(id)
-      analytics.init({ userId: id ?? undefined })
-    })
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      const id = session?.user?.id ?? null
-      setUserId(id)
-      analytics.setUserId(id)
-    })
-
-    return () => {
-      subscription.unsubscribe()
-    }
-  }, [])
-
+    // Initialize analytics
+    analytics.init({ userId: user?.id })
+  }, [user?.id])
+  
   useEffect(() => {
-    analytics.setUserId(userId)
-  }, [userId])
-
+    // Update user ID when auth changes
+    analytics.setUserId(user?.id || null)
+  }, [user?.id])
+  
   return <>{children}</>
 }

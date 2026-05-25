@@ -551,10 +551,7 @@ export function MultiStreamViewer({
             {streams.length > 1 && (
               <Select
                 value={chatStream?.id}
-                onValueChange={(id) => {
-                  const selectedStream = streams.find((s) => s.id === id)
-                  if (selectedStream) setChatStream(selectedStream)
-                }}
+                onValueChange={(id) => setChatStream(streams.find((s) => s.id === id))}
               >
                 <SelectTrigger className="h-7 w-32 text-xs">
                   <SelectValue />

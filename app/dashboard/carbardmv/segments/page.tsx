@@ -9,7 +9,7 @@ import { NewSegmentForm } from "@/components/carbardmv/new-segment-form"
 export const metadata = { title: "Customer Segments | CARBARDMV" }
 
 export default async function SegmentsPage() {
-  await requireRole(["owner", "manager", "staff", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_MANAGER", "DEPARTMENT_MANAGER", "DEPARTMENT_STAFF", "PLATFORM_OWNER"])
+  await requireRole(["owner", "manager", "staff"])
   const supabase = await createClient()
 
   // Fetch segments with member counts

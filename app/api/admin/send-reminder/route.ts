@@ -3,7 +3,13 @@
 import { NextResponse } from "next/server"
 import { Resend } from "resend"
 
-const resend = new Resend(process.env.RESEND_API_KEY!)
+// Lazy initialization to avoid build-time errors
+function getResend(): Resend {
+  const key = process.env.RESEND_API_KEY
+  if (!key) throw new Error("RESEND_API_KEY not configured")
+  return new Resend(key)
+}
+
 const FROM_EMAIL = "events@majhevents.com"
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://majhevents.com"
 
@@ -125,7 +131,7 @@ export async function POST(req: Request) {
 </html>
   `
 
-  const { data, error } = await resend.emails.send({
+  const { data, error } = await getResend().emails.send({
     from: `MAJH Events <${FROM_EMAIL}>`,
     to,
     subject: `Reminder: You have ${events.length} upcoming tournament${events.length > 1 ? "s" : ""} on MAJH Events`,

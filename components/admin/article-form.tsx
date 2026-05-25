@@ -115,8 +115,8 @@ export function ArticleForm({
     
     const result = await deleteArticle(article.id)
     
-    if ("error" in result && result.error) {
-      toast.error(typeof result.error === "string" ? result.error : "Failed to delete article")
+    if (result.error) {
+      toast.error(result.error)
       setIsDeleting(false)
     } else {
       toast.success("Article deleted")

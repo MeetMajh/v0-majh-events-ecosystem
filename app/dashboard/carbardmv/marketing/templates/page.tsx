@@ -11,7 +11,7 @@ import { NewTemplateForm } from "@/components/carbardmv/new-template-form"
 export const metadata = { title: "Email Templates | CARBARDMV" }
 
 export default async function TemplatesPage() {
-  await requireRole(["owner", "manager", "staff", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_MANAGER", "DEPARTMENT_MANAGER", "DEPARTMENT_STAFF", "PLATFORM_OWNER"])
+  await requireRole(["owner", "manager", "staff"])
   const supabase = await createClient()
 
   const { data: templates } = await supabase

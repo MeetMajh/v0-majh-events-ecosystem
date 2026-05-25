@@ -5,7 +5,7 @@ import { PosTerminal } from "@/components/pos/pos-terminal"
 export const metadata = { title: "POS Terminal - MAJH EVENTS" }
 
 export default async function PosPage() {
-  await requireRole(["owner", "manager", "staff", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_MANAGER", "DEPARTMENT_MANAGER", "DEPARTMENT_STAFF", "PLATFORM_OWNER"])
+  await requireRole(["owner", "manager", "staff"])
   const supabase = await createClient()
 
   const { data: categories } = await supabase

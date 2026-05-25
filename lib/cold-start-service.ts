@@ -112,17 +112,14 @@ export async function getColdStartFeed(
   const { data: trendingClips } = await trendingQuery
   
   if (trendingClips) {
-    feed.push(...trendingClips.map(c => {
-      const player = c.player as unknown as { id: string; gamertag: string; avatar_url: string | null } | null
-      return {
-        ...c,
-        creator: {
-          id: player?.id || "",
-          display_name: player?.gamertag || "Unknown",
-          avatar_url: player?.avatar_url || null,
-        }
+    feed.push(...trendingClips.map(c => ({
+      ...c,
+      creator: {
+        id: c.player?.id || "",
+        display_name: c.player?.gamertag || "Unknown",
+        avatar_url: c.player?.avatar_url || null,
       }
-    }))
+    })))
   }
   
   // Strategy 2: High quality clips (30%)
@@ -151,17 +148,14 @@ export async function getColdStartFeed(
     const existingIds = new Set(feed.map(c => c.id))
     feed.push(...qualityClips
       .filter(c => !existingIds.has(c.id))
-      .map(c => {
-        const player = c.player as unknown as { id: string; gamertag: string; avatar_url: string | null } | null
-        return {
-          ...c,
-          creator: {
-            id: player?.id || "",
-            display_name: player?.gamertag || "Unknown",
-            avatar_url: player?.avatar_url || null,
-          }
+      .map(c => ({
+        ...c,
+        creator: {
+          id: c.player?.id || "",
+          display_name: c.player?.gamertag || "Unknown",
+          avatar_url: c.player?.avatar_url || null,
         }
-      }))
+      })))
   }
   
   // Strategy 3: Diverse mix from other games (20%)
@@ -189,17 +183,14 @@ export async function getColdStartFeed(
     const existingIds = new Set(feed.map(c => c.id))
     feed.push(...diverseClips
       .filter(c => !existingIds.has(c.id))
-      .map(c => {
-        const player = c.player as unknown as { id: string; gamertag: string; avatar_url: string | null } | null
-        return {
-          ...c,
-          creator: {
-            id: player?.id || "",
-            display_name: player?.gamertag || "Unknown",
-            avatar_url: player?.avatar_url || null,
-          }
+      .map(c => ({
+        ...c,
+        creator: {
+          id: c.player?.id || "",
+          display_name: c.player?.gamertag || "Unknown",
+          avatar_url: c.player?.avatar_url || null,
         }
-      }))
+      })))
   }
   
   // Strategy 4: Random fresh content (10%)
@@ -222,17 +213,14 @@ export async function getColdStartFeed(
       .filter(c => !existingIds.has(c.id))
       .sort(() => Math.random() - 0.5)
       .slice(0, randomCount)
-      .map(c => {
-        const player = c.player as unknown as { id: string; gamertag: string; avatar_url: string | null } | null
-        return {
-          ...c,
-          creator: {
-            id: player?.id || "",
-            display_name: player?.gamertag || "Unknown",
-            avatar_url: player?.avatar_url || null,
-          }
+      .map(c => ({
+        ...c,
+        creator: {
+          id: c.player?.id || "",
+          display_name: c.player?.gamertag || "Unknown",
+          avatar_url: c.player?.avatar_url || null,
         }
-      })
+      }))
     feed.push(...shuffled)
   }
   

@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { requireCronAuth } from "@/lib/cron-auth"
-import { stripe } from "@/lib/stripe"
+import { getStripe } from "@/lib/stripe"
 
-// Service role client for reconciliation (bypasses RLS)
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// Lazy initialization for service role client
+function getSupabaseAdmin() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) throw new Error("Supabase env vars not configured")
+  return createClient(url, key)
+}
 
 interface FinancialIntent {
   id: string
@@ -34,6 +36,8 @@ export async function GET(req: NextRequest) {
   if (authError) return authError
 
   try {
+    const supabaseAdmin = getSupabaseAdmin()
+    const stripe = getStripe()
 
     // 1. Fetch stale intents that need reconciliation
     const { data: intents, error: fetchError } = await supabaseAdmin.rpc(

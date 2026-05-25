@@ -174,7 +174,7 @@ export async function approveContent(contentId: string, contentType: string = "m
     moderator_id: user.id,
     action_taken: "approved",
     automated: false,
-  }).then(undefined, () => {})
+  }).catch(() => {})
   
   revalidatePath("/admin/moderation")
   return { success: true }
@@ -213,7 +213,7 @@ export async function rejectContent(
     action_taken: "rejected",
     automated: false,
     notes: reason,
-  }).then(undefined, () => {})
+  }).catch(() => {})
   
   revalidatePath("/admin/moderation")
   return { success: true }

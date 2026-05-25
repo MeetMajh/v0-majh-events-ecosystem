@@ -23,8 +23,8 @@ export default async function InventoryPage() {
 
   if (!user) redirect("/sign-in")
 
-  const role = await getUserRole()
-  if (role !== "owner" && role !== "manager" && role !== "staff") redirect("/dashboard")
+  const role = await getUserRole(user.id)
+  if (role !== "admin" && role !== "staff") redirect("/dashboard")
 
   const { data: items } = await supabase
     .from("cb_inventory_items")
@@ -39,7 +39,8 @@ export default async function InventoryPage() {
   return (
     <div className="flex flex-col gap-6">
       <DashboardHeader
-        displayName="CARBARDMV Inventory"
+        title="CARBARDMV Inventory"
+        description="Track supplies, equipment, and stock levels"
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

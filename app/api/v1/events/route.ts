@@ -9,13 +9,17 @@ export async function GET(req: NextRequest) {
     // Validate API key
     const authResult = await validateApiKey(req)
     if (!authResult.valid) {
-      return apiError("authentication_error", authResult.error || "Invalid API key")
+      return apiError("authentication_error", authResult.error || "Invalid API key", 401)
     }
 
     // Rate limit
     const rateLimitResult = await checkRateLimit(authResult.api_key_id, 60)
     if (!rateLimitResult.allowed) {
-      return apiError("rate_limit_exceeded", "Rate limit exceeded", { rateLimit: rateLimitResult })
+      return apiError("rate_limit_exceeded", "Rate limit exceeded", 429, {
+        "X-RateLimit-Limit": rateLimitResult.limit.toString(),
+        "X-RateLimit-Remaining": "0",
+        "X-RateLimit-Reset": rateLimitResult.reset.toString(),
+      })
     }
 
     const supabase = await createClient()
@@ -61,7 +65,7 @@ export async function GET(req: NextRequest) {
       .range(offset, offset + limit - 1)
 
     if (error) {
-      return apiError("internal_error", error.message)
+      return apiError("database_error", error.message, 500)
     }
 
     return apiSuccess({
@@ -69,10 +73,13 @@ export async function GET(req: NextRequest) {
       data: events,
       has_more: (count || 0) > offset + limit,
       total_count: count,
-    }, { rateLimit: rateLimitResult })
+    }, {
+      "X-RateLimit-Limit": rateLimitResult.limit.toString(),
+      "X-RateLimit-Remaining": rateLimitResult.remaining.toString(),
+    })
   } catch (error) {
     console.error("[API] Events GET error:", error)
-    return apiError("internal_error", "An unexpected error occurred")
+    return apiError("internal_error", "An unexpected error occurred", 500)
   }
 }
 
@@ -80,16 +87,16 @@ export async function POST(req: NextRequest) {
   try {
     const authResult = await validateApiKey(req)
     if (!authResult.valid) {
-      return apiError("authentication_error", authResult.error || "Invalid API key")
+      return apiError("authentication_error", authResult.error || "Invalid API key", 401)
     }
 
     if (!authResult.scopes?.includes("write")) {
-      return apiError("authorization_error", "API key does not have write permission")
+      return apiError("permission_denied", "API key does not have write permission", 403)
     }
 
     const rateLimitResult = await checkRateLimit(authResult.api_key_id, 60)
     if (!rateLimitResult.allowed) {
-      return apiError("rate_limit_exceeded", "Rate limit exceeded", { rateLimit: rateLimitResult })
+      return apiError("rate_limit_exceeded", "Rate limit exceeded", 429)
     }
 
     const supabase = await createClient()
@@ -118,7 +125,7 @@ export async function POST(req: NextRequest) {
     } = body
 
     if (!name || !starts_at || !ends_at) {
-      return apiError("invalid_request", "name, starts_at, and ends_at are required")
+      return apiError("invalid_request", "name, starts_at, and ends_at are required", 400)
     }
 
     // Generate slug if not provided
@@ -155,14 +162,14 @@ export async function POST(req: NextRequest) {
 
     if (error) {
       if (error.code === "23505") {
-        return apiError("idempotency_error", "An event with this slug already exists", { code: "duplicate_slug" })
+        return apiError("duplicate_error", "An event with this slug already exists", 409)
       }
-      return apiError("internal_error", error.message)
+      return apiError("database_error", error.message, 500)
     }
 
-    return apiSuccess(event, { status: 201 })
+    return apiSuccess(event, {}, 201)
   } catch (error) {
     console.error("[API] Events POST error:", error)
-    return apiError("internal_error", "An unexpected error occurred")
+    return apiError("internal_error", "An unexpected error occurred", 500)
   }
 }

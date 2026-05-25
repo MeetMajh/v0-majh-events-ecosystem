@@ -145,7 +145,7 @@ export async function updateOrderStatus(formData: FormData) {
           description: `Earned from order ${order.order_number}`,
         })
 
-        await supabase.rpc("increment_points", { uid: order.customer_id, pts: pointsToAward }).then(undefined, () => {
+        await supabase.rpc("increment_points", { uid: order.customer_id, pts: pointsToAward }).catch(() => {
           // Fallback: manual update
           supabase.from("profiles")
             .select("points_balance")
@@ -616,7 +616,7 @@ export async function createPosOrder(formData: FormData) {
 
   // Decrement inventory
   for (const item of items) {
-    await supabase.rpc("decrement_inventory", { item_id: item.id, qty: item.quantity }).then(undefined, async () => {
+    await supabase.rpc("decrement_inventory", { item_id: item.id, qty: item.quantity }).catch(async () => {
       const { data: inv } = await supabase
         .from("inventory")
         .select("quantity_on_hand")

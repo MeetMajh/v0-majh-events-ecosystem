@@ -4,10 +4,13 @@ import { requireCronAuth } from "@/lib/cron-auth"
 import { sendEmail } from "@/lib/email/send"
 import { getEmailTemplate } from "@/lib/email/templates"
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// Lazy initialization for service role client
+function getSupabaseAdmin() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) throw new Error("Supabase env vars not configured")
+  return createClient(url, key)
+}
 
 const MAX_ATTEMPTS = 3
 const BATCH_SIZE = 50
@@ -17,6 +20,8 @@ export async function GET(req: Request) {
   if (authError) return authError
 
   try {
+    const supabaseAdmin = getSupabaseAdmin()
+    
     // Fetch pending queue items with their notifications and user emails
     const { data: jobs, error } = await supabaseAdmin
       .from("notification_queue")

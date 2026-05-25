@@ -8,12 +8,12 @@ export async function GET(req: NextRequest) {
   try {
     const authResult = await validateApiKey(req)
     if (!authResult.valid) {
-      return apiError("authentication_error", authResult.error || "Invalid API key")
+      return apiError("authentication_error", authResult.error || "Invalid API key", 401)
     }
 
     const rateLimitResult = await checkRateLimit(authResult.api_key_id, 60)
     if (!rateLimitResult.allowed) {
-      return apiError("rate_limit_exceeded", "Rate limit exceeded", { rateLimit: rateLimitResult })
+      return apiError("rate_limit_exceeded", "Rate limit exceeded", 429)
     }
 
     const supabase = await createClient()
@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
     const eventId = searchParams.get("event_id")
 
     if (!eventId) {
-      return apiError("invalid_request", "event_id is required")
+      return apiError("invalid_request", "event_id is required", 400)
     }
 
     const { data: ticketTypes, error } = await supabase
@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
       .order("sort_order", { ascending: true })
 
     if (error) {
-      return apiError("internal_error", error.message)
+      return apiError("database_error", error.message, 500)
     }
 
     // Calculate availability for each type
@@ -59,7 +59,7 @@ export async function GET(req: NextRequest) {
     })
   } catch (error) {
     console.error("[API] Ticket Types GET error:", error)
-    return apiError("internal_error", "An unexpected error occurred")
+    return apiError("internal_error", "An unexpected error occurred", 500)
   }
 }
 
@@ -67,11 +67,11 @@ export async function POST(req: NextRequest) {
   try {
     const authResult = await validateApiKey(req)
     if (!authResult.valid) {
-      return apiError("authentication_error", authResult.error || "Invalid API key")
+      return apiError("authentication_error", authResult.error || "Invalid API key", 401)
     }
 
     if (!authResult.scopes?.includes("write")) {
-      return apiError("authorization_error", "API key does not have write permission")
+      return apiError("permission_denied", "API key does not have write permission", 403)
     }
 
     const supabase = await createClient()
@@ -94,7 +94,7 @@ export async function POST(req: NextRequest) {
     } = body
 
     if (!event_id || !name || quantity_total === undefined) {
-      return apiError("invalid_request", "event_id, name, and quantity_total are required")
+      return apiError("invalid_request", "event_id, name, and quantity_total are required", 400)
     }
 
     // Verify event belongs to tenant
@@ -106,7 +106,7 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (!event) {
-      return apiError("resource_not_found", "Event not found")
+      return apiError("not_found", "Event not found", 404)
     }
 
     const { data: ticketType, error } = await supabase
@@ -131,12 +131,12 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (error) {
-      return apiError("internal_error", error.message)
+      return apiError("database_error", error.message, 500)
     }
 
-    return apiSuccess(ticketType, { status: 201 })
+    return apiSuccess(ticketType, {}, 201)
   } catch (error) {
     console.error("[API] Ticket Types POST error:", error)
-    return apiError("internal_error", "An unexpected error occurred")
+    return apiError("internal_error", "An unexpected error occurred", 500)
   }
 }

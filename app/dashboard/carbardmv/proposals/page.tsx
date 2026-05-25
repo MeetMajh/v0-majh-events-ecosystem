@@ -34,7 +34,7 @@ const STATUS_ACTIONS: Record<string, Array<{ status: string; label: string; vari
 }
 
 export default async function ProposalsPage() {
-  await requireRole(["owner", "manager", "staff", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_MANAGER", "DEPARTMENT_MANAGER", "DEPARTMENT_STAFF", "PLATFORM_OWNER"])
+  await requireRole(["owner", "manager", "staff"])
   const supabase = await createClient()
 
   const [{ data: proposals }, { data: clients }] = await Promise.all([

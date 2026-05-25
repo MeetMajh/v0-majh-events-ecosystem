@@ -23,7 +23,7 @@ export async function GET() {
     // Get user's tenant
     const { data: membership } = await supabase
       .from("tenant_memberships")
-      .select("tenant_id, role:role_key")
+      .select("tenant_id, role")
       .eq("user_id", user.id)
       .single()
 
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
     // Verify user has permission (owner or admin)
     const { data: membership } = await supabase
       .from("tenant_memberships")
-      .select("tenant_id, role:role_key")
+      .select("tenant_id, role")
       .eq("user_id", user.id)
       .eq("tenant_id", tenant_id)
       .single()
@@ -139,7 +139,7 @@ export async function DELETE(req: NextRequest) {
     // Verify user has permission
     const { data: membership } = await supabase
       .from("tenant_memberships")
-      .select("role:role_key")
+      .select("role")
       .eq("user_id", user.id)
       .eq("tenant_id", apiKey.tenant_id)
       .single()

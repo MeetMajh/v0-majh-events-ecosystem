@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { validateApiKey } from "@/lib/middleware/api-auth"
 import { checkRateLimit } from "@/lib/middleware/rate-limit"
@@ -8,16 +8,16 @@ export async function POST(req: NextRequest) {
   try {
     const authResult = await validateApiKey(req)
     if (!authResult.valid) {
-      return apiError("authentication_error", authResult.error || "Invalid API key")
+      return apiError("authentication_error", authResult.error || "Invalid API key", 401)
     }
 
     if (!authResult.scopes?.includes("write")) {
-      return apiError("authorization_error", "API key does not have write permission")
+      return apiError("permission_denied", "API key does not have write permission", 403)
     }
 
     const rateLimitResult = await checkRateLimit(authResult.api_key_id, 120) // Higher limit for check-ins
     if (!rateLimitResult.allowed) {
-      return apiError("rate_limit_exceeded", "Rate limit exceeded", { rateLimit: rateLimitResult })
+      return apiError("rate_limit_exceeded", "Rate limit exceeded", 429)
     }
 
     const supabase = await createClient()
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     const { ticket_id, qr_code, location, performed_by } = body
 
     if (!ticket_id && !qr_code) {
-      return apiError("invalid_request", "ticket_id or qr_code is required")
+      return apiError("invalid_request", "ticket_id or qr_code is required", 400)
     }
 
     let result
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
       })
 
       if (error) {
-        return apiError("internal_error", error.message)
+        return apiError("database_error", error.message, 500)
       }
       result = data
     } else {
@@ -52,23 +52,15 @@ export async function POST(req: NextRequest) {
       })
 
       if (error) {
-        return apiError("internal_error", error.message)
+        return apiError("database_error", error.message, 500)
       }
       result = data
     }
 
     if (!result?.success) {
-      return NextResponse.json(
-        {
-          error: {
-            type: "invalid_request",
-            message: result?.error || "Check-in failed",
-            code: "check_in_failed",
-            checked_in_at: result?.checked_in_at,
-          },
-        },
-        { status: 400 }
-      )
+      return apiError("check_in_failed", result?.error || "Check-in failed", 400, {}, {
+        checked_in_at: result?.checked_in_at,
+      })
     }
 
     return apiSuccess({
@@ -81,7 +73,7 @@ export async function POST(req: NextRequest) {
     })
   } catch (error) {
     console.error("[API] Ticket Check-in error:", error)
-    return apiError("internal_error", "An unexpected error occurred")
+    return apiError("internal_error", "An unexpected error occurred", 500)
   }
 }
 
@@ -90,11 +82,11 @@ export async function PUT(req: NextRequest) {
   try {
     const authResult = await validateApiKey(req)
     if (!authResult.valid) {
-      return apiError("authentication_error", authResult.error || "Invalid API key")
+      return apiError("authentication_error", authResult.error || "Invalid API key", 401)
     }
 
     if (!authResult.scopes?.includes("write")) {
-      return apiError("authorization_error", "API key does not have write permission")
+      return apiError("permission_denied", "API key does not have write permission", 403)
     }
 
     const supabase = await createClient()
@@ -103,11 +95,11 @@ export async function PUT(req: NextRequest) {
     const { ticket_ids, location, performed_by } = body
 
     if (!Array.isArray(ticket_ids) || ticket_ids.length === 0) {
-      return apiError("invalid_request", "ticket_ids array is required")
+      return apiError("invalid_request", "ticket_ids array is required", 400)
     }
 
     if (ticket_ids.length > 100) {
-      return apiError("invalid_request", "Maximum 100 tickets per batch")
+      return apiError("invalid_request", "Maximum 100 tickets per batch", 400)
     }
 
     const results = await Promise.all(
@@ -132,6 +124,6 @@ export async function PUT(req: NextRequest) {
     })
   } catch (error) {
     console.error("[API] Bulk Check-in error:", error)
-    return apiError("internal_error", "An unexpected error occurred")
+    return apiError("internal_error", "An unexpected error occurred", 500)
   }
 }

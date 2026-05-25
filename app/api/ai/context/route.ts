@@ -3,10 +3,13 @@ import { getSchema, getRLS } from "@/lib/supabase/introspection"
 import { createClient } from "@supabase/supabase-js"
 import { requireAdmin } from "@/lib/auth/require-admin"
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// Lazy initialization for service role client
+function getSupabaseAdmin() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) throw new Error("Supabase env vars not configured")
+  return createClient(url, key)
+}
 
 export async function POST(req: Request) {
   const auth = await requireAdmin()

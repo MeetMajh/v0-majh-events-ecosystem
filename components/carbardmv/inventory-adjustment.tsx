@@ -55,12 +55,12 @@ export function InventoryAdjustment({ item }: { item: InventoryItem }) {
       qty = -qty
     }
 
-    const result = await adjustInventoryStock(
-      item.id,
-      qty,
-      reason as "restock" | "used" | "waste" | "adjustment" | "returned",
-      notes || undefined,
-    )
+    const result = await adjustInventoryStock({
+      item_id: item.id,
+      change_qty: qty,
+      reason: reason as "restock" | "used" | "waste" | "adjustment" | "returned",
+      notes: notes || undefined,
+    })
 
     if (result.error) {
       toast.error(result.error)

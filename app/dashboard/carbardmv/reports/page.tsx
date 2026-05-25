@@ -28,8 +28,8 @@ export default async function ReportsPage() {
 
   if (!user) redirect("/sign-in")
 
-  const role = await getUserRole()
-  if (role !== "staff" && role !== "owner" && role !== "manager") {
+  const role = await getUserRole(user.id)
+  if (role !== "admin" && role !== "staff" && role !== "owner" && role !== "manager") {
     redirect("/dashboard")
   }
 
@@ -303,9 +303,7 @@ export default async function ReportsPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {Object.entries(bookingsByStatus).map(([status, count]) => {
-                    const statusCount = Number(count)
-                    return (
+                  {Object.entries(bookingsByStatus).map(([status, count]) => (
                     <div key={status} className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <Badge variant={
@@ -320,14 +318,13 @@ export default async function ReportsPage() {
                         <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">
                           <div 
                             className="h-full bg-primary" 
-                            style={{ width: `${(statusCount / bookings.length) * 100}%` }}
+                            style={{ width: `${(count / bookings.length) * 100}%` }}
                           />
                         </div>
-                        <span className="font-semibold w-8 text-right">{statusCount}</span>
+                        <span className="font-semibold w-8 text-right">{count}</span>
                       </div>
                     </div>
-                    )
-                  })}
+                  ))}
                   {Object.keys(bookingsByStatus).length === 0 && (
                     <p className="text-muted-foreground">No bookings yet</p>
                   )}

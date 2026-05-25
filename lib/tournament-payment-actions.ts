@@ -61,7 +61,6 @@ export async function createTournamentCheckoutSession(
     if (regError) return { error: regError.message }
     registration = newReg
   }
-  if (!registration) return { error: "Failed to create registration" }
 
   // Get user profile for prefilling
   const { data: profile } = await supabase
@@ -73,7 +72,6 @@ export async function createTournamentCheckoutSession(
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
   const successUrl = options?.successUrl || `${baseUrl}/esports/tournaments/${tournament.slug}?payment=success`
   const cancelUrl = options?.cancelUrl || `${baseUrl}/esports/tournaments/${tournament.slug}?payment=cancelled`
-  const game = tournament.games as unknown as { name: string | null } | null
 
   // Create Stripe checkout session
   const session = await stripe.checkout.sessions.create({
@@ -86,7 +84,7 @@ export async function createTournamentCheckoutSession(
           currency: "usd",
           product_data: {
             name: `${tournament.name} - Tournament Entry`,
-            description: `Entry fee for ${tournament.name}${game?.name ? ` (${game.name})` : ""}`,
+            description: `Entry fee for ${tournament.name}${tournament.games?.name ? ` (${tournament.games.name})` : ""}`,
           },
           unit_amount: tournament.entry_fee_cents,
         },
@@ -211,8 +209,7 @@ export async function refundTournamentRegistration(
     .single()
 
   const isStaff = staffRole && ["owner", "manager"].includes(staffRole.role)
-  const tournament = registration.tournaments as unknown as { created_by: string | null } | null
-  const isCreator = tournament?.created_by === user.id
+  const isCreator = registration.tournaments?.created_by === user.id
 
   if (!isStaff && !isCreator) {
     return { error: "Not authorized to process refunds" }
@@ -352,8 +349,7 @@ export async function markPaymentManually(
     .single()
 
   const isStaff = staffRole && ["owner", "manager", "organizer"].includes(staffRole.role)
-  const tournament = registration.tournaments as unknown as { created_by: string | null } | null
-  const isCreator = tournament?.created_by === user.id
+  const isCreator = registration.tournaments?.created_by === user.id
 
   if (!isStaff && !isCreator) {
     return { error: "Not authorized" }

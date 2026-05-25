@@ -5,7 +5,7 @@ import Link from "next/link"
 import { Package, ShoppingCart, AlertTriangle, Users, Trophy, Play, Calendar, DollarSign, Scale, Video } from "lucide-react"
 
 export default async function AdminOverviewPage() {
-  const { role } = await requireRole(["owner", "manager", "staff", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_MANAGER", "DEPARTMENT_MANAGER", "DEPARTMENT_STAFF", "PLATFORM_OWNER"])
+  const { role } = await requireRole(["owner", "manager", "staff"])
   const supabase = await createClient()
 
   const [

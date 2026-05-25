@@ -339,18 +339,18 @@ export function RealtimeAlertsPanel({ tenantId }: RealtimeAlertsPanelProps) {
                                 {alert.resource_type && (
                                   <span className="flex items-center gap-1">
                                     <ExternalLink className="h-3 w-3" />
-                                    {String(alert.resource_type)}
+                                    {alert.resource_type}
                                   </span>
                                 )}
                               </div>
                               {alert.metadata && Object.keys(alert.metadata).length > 0 && (
                                 <div className="mt-2 p-2 bg-background/50 rounded text-xs font-mono">
-                                  {Boolean(alert.metadata.amount_cents) && (
+                                  {alert.metadata.amount_cents && (
                                     <span className="mr-3">
                                       Amount: ${(Number(alert.metadata.amount_cents) / 100).toFixed(2)}
                                     </span>
                                   )}
-                                  {Boolean(alert.metadata.fraud_score) && (
+                                  {alert.metadata.fraud_score && (
                                     <span className="mr-3">
                                       Fraud Score: {String(alert.metadata.fraud_score)}
                                     </span>

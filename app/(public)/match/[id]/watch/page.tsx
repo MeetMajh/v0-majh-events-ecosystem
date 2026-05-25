@@ -525,8 +525,8 @@ export default function MatchWatchPage({ params }: { params: Promise<{ id: strin
             {/* Predictions */}
             <MatchPredictions
               matchId={matchId}
-              player1={match.player1 ?? null}
-              player2={match.player2 ?? null}
+              player1={match.player1}
+              player2={match.player2}
               matchStatus={match.status}
             />
             
@@ -573,22 +573,12 @@ export default function MatchWatchPage({ params }: { params: Promise<{ id: strin
                   <TabsContent value="games" className="mt-0 space-y-3">
                     {/* Game-by-game history */}
                     <GameHistoryBar
-                      games={[
-                        ...Array.from({ length: match.player1_wins }, (_, index) => ({
-                          game_number: index + 1,
-                          winner_id: match.player1_id,
-                          player1_score: 1,
-                          player2_score: 0,
-                        })),
-                        ...Array.from({ length: match.player2_wins }, (_, index) => ({
-                          game_number: match.player1_wins + index + 1,
-                          winner_id: match.player2_id,
-                          player1_score: 0,
-                          player2_score: 1,
-                        })),
-                      ]}
                       player1Id={match.player1_id}
                       player2Id={match.player2_id}
+                      player1Wins={match.player1_wins}
+                      player2Wins={match.player2_wins}
+                      player1Name={getPlayerName(match.player1)}
+                      player2Name={getPlayerName(match.player2)}
                     />
                     <div className="text-center text-sm text-muted-foreground">
                       {match.player1_wins + match.player2_wins === 0 

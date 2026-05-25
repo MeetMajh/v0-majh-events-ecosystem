@@ -71,7 +71,7 @@ Respond with your analysis.`
       }),
     })
 
-    return (result as unknown as { object: ModerationResult }).object
+    return result.object
   } catch (error) {
     console.error("[Content Moderation] AI analysis error:", error)
     // Default to requiring manual review on error
@@ -186,7 +186,7 @@ export async function moderateMedia(
     result: finalResult,
     action_taken: newStatus,
     automated: true,
-  }).then(undefined, () => {
+  }).catch(() => {
     // Table might not exist yet, ignore
   })
   

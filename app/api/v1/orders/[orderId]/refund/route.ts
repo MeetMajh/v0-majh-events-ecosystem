@@ -1,35 +1,32 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { validateApiKey } from "@/lib/middleware/api-auth"
 import { checkIdempotency, storeIdempotentResponse } from "@/lib/middleware/idempotency"
 import { apiError, apiSuccess } from "@/lib/middleware/api-response"
-import { stripe } from "@/lib/stripe"
+import { getStripe } from "@/lib/stripe"
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ orderId: string }> }
 ) {
-  const startTime = Date.now()
   try {
+    const stripe = getStripe()
     const { orderId } = await params
     const authResult = await validateApiKey(req)
     if (!authResult.valid) {
-      return apiError("authentication_error", authResult.error || "Invalid API key")
+      return apiError("authentication_error", authResult.error || "Invalid API key", 401)
     }
 
     if (!authResult.scopes?.includes("write")) {
-      return apiError("authorization_error", "API key does not have write permission")
+      return apiError("permission_denied", "API key does not have write permission", 403)
     }
 
     // Check idempotency
     const idempotencyKey = req.headers.get("idempotency-key")
     if (idempotencyKey) {
-      const cached = await checkIdempotency(req, authResult.tenant_id)
-      if (cached.found && cached.response) {
-        return NextResponse.json(cached.response.body, {
-          status: cached.response.status,
-          headers: { "Idempotent-Replayed": "true" },
-        })
+      const cached = await checkIdempotency(authResult.tenant_id, idempotencyKey)
+      if (cached) {
+        return apiSuccess(cached, { "Idempotent-Replayed": "true" })
       }
     }
 
@@ -47,18 +44,18 @@ export async function POST(
       .single()
 
     if (!order) {
-      return apiError("resource_not_found", "Order not found")
+      return apiError("not_found", "Order not found", 404)
     }
 
     if (!["paid", "partially_refunded"].includes(order.status)) {
-      return apiError("invalid_request", "Order cannot be refunded")
+      return apiError("invalid_request", "Order cannot be refunded", 400)
     }
 
     const refundAmount = amount_cents || (order.total_cents - order.amount_refunded_cents)
     const maxRefundable = order.total_cents - order.amount_refunded_cents
 
     if (refundAmount > maxRefundable) {
-      return apiError("invalid_request", `Maximum refundable amount is ${maxRefundable} cents`)
+      return apiError("invalid_request", `Maximum refundable amount is ${maxRefundable} cents`, 400)
     }
 
     // Process Stripe refund if there's a payment intent
@@ -71,7 +68,7 @@ export async function POST(
         })
       } catch (stripeError) {
         console.error("[API] Stripe refund error:", stripeError)
-        return apiError("internal_error", "Failed to process refund with Stripe", { code: "stripe_refund_failed" })
+        return apiError("payment_error", "Failed to process refund with Stripe", 500)
       }
     }
 
@@ -83,7 +80,7 @@ export async function POST(
     })
 
     if (refundError || !refundResult?.success) {
-      return apiError("internal_error", refundResult?.error || refundError?.message || "Refund failed", { code: "refund_failed" })
+      return apiError("refund_error", refundResult?.error || refundError?.message || "Refund failed", 500)
     }
 
     const response = {
@@ -94,18 +91,12 @@ export async function POST(
     }
 
     if (idempotencyKey) {
-      await storeIdempotentResponse(
-        req,
-        authResult.tenant_id,
-        authResult.api_key_id,
-        { status: 200, body: response },
-        Date.now() - startTime
-      )
+      await storeIdempotentResponse(authResult.tenant_id, idempotencyKey, response)
     }
 
     return apiSuccess(response)
   } catch (error) {
     console.error("[API] Order Refund error:", error)
-    return apiError("internal_error", "An unexpected error occurred")
+    return apiError("internal_error", "An unexpected error occurred", 500)
   }
 }

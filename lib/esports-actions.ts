@@ -388,10 +388,6 @@ export async function withdrawFromTournament(tournamentId: string) {
     .eq("id", tournamentId)
     .single()
 
-  if (!tournament) {
-    return { error: "Tournament not found" }
-  }
-
   // Don't allow withdrawal if tournament already started
   if (tournament?.status === "in_progress" || tournament?.status === "completed") {
     return { error: "Cannot withdraw from a tournament that has already started" }

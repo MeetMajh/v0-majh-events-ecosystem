@@ -12,12 +12,12 @@ export async function GET(
     const { eventId } = await params
     const authResult = await validateApiKey(req)
     if (!authResult.valid) {
-      return apiError("authentication_error", authResult.error || "Invalid API key")
+      return apiError("authentication_error", authResult.error || "Invalid API key", 401)
     }
 
     const rateLimitResult = await checkRateLimit(authResult.api_key_id, 60)
     if (!rateLimitResult.allowed) {
-      return apiError("rate_limit_exceeded", "Rate limit exceeded", { rateLimit: rateLimitResult })
+      return apiError("rate_limit_exceeded", "Rate limit exceeded", 429)
     }
 
     const supabase = await createClient()
@@ -48,7 +48,7 @@ export async function GET(
       .single()
 
     if (error || !event) {
-      return apiError("resource_not_found", "Event not found")
+      return apiError("not_found", "Event not found", 404)
     }
 
     // Get event stats
@@ -58,11 +58,11 @@ export async function GET(
       ...event,
       stats,
     }, {
-      rateLimit: rateLimitResult,
+      "X-RateLimit-Remaining": rateLimitResult.remaining.toString(),
     })
   } catch (error) {
     console.error("[API] Event GET error:", error)
-    return apiError("internal_error", "An unexpected error occurred")
+    return apiError("internal_error", "An unexpected error occurred", 500)
   }
 }
 
@@ -74,11 +74,11 @@ export async function PATCH(
     const { eventId } = await params
     const authResult = await validateApiKey(req)
     if (!authResult.valid) {
-      return apiError("authentication_error", authResult.error || "Invalid API key")
+      return apiError("authentication_error", authResult.error || "Invalid API key", 401)
     }
 
     if (!authResult.scopes?.includes("write")) {
-      return apiError("authorization_error", "API key does not have write permission")
+      return apiError("permission_denied", "API key does not have write permission", 403)
     }
 
     const supabase = await createClient()
@@ -93,7 +93,7 @@ export async function PATCH(
       .single()
 
     if (!existing) {
-      return apiError("resource_not_found", "Event not found")
+      return apiError("not_found", "Event not found", 404)
     }
 
     const updateData: Record<string, unknown> = { updated_at: new Date().toISOString() }
@@ -124,13 +124,13 @@ export async function PATCH(
       .single()
 
     if (error) {
-      return apiError("internal_error", error.message)
+      return apiError("database_error", error.message, 500)
     }
 
     return apiSuccess(event)
   } catch (error) {
     console.error("[API] Event PATCH error:", error)
-    return apiError("internal_error", "An unexpected error occurred")
+    return apiError("internal_error", "An unexpected error occurred", 500)
   }
 }
 
@@ -142,11 +142,11 @@ export async function DELETE(
     const { eventId } = await params
     const authResult = await validateApiKey(req)
     if (!authResult.valid) {
-      return apiError("authentication_error", authResult.error || "Invalid API key")
+      return apiError("authentication_error", authResult.error || "Invalid API key", 401)
     }
 
     if (!authResult.scopes?.includes("write")) {
-      return apiError("authorization_error", "API key does not have write permission")
+      return apiError("permission_denied", "API key does not have write permission", 403)
     }
 
     const supabase = await createClient()
@@ -159,7 +159,7 @@ export async function DELETE(
       .in("status", ["valid", "checked_in"])
 
     if (soldTickets && soldTickets > 0) {
-      return apiError("idempotency_error", "Cannot delete event with sold tickets. Cancel tickets first.")
+      return apiError("conflict", "Cannot delete event with sold tickets. Cancel tickets first.", 409)
     }
 
     const { error } = await supabase
@@ -169,12 +169,12 @@ export async function DELETE(
       .eq("tenant_id", authResult.tenant_id)
 
     if (error) {
-      return apiError("internal_error", error.message)
+      return apiError("database_error", error.message, 500)
     }
 
     return apiSuccess({ deleted: true, id: eventId })
   } catch (error) {
     console.error("[API] Event DELETE error:", error)
-    return apiError("internal_error", "An unexpected error occurred")
+    return apiError("internal_error", "An unexpected error occurred", 500)
   }
 }

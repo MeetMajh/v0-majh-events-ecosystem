@@ -1,9 +1,10 @@
 import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
-import { stripe } from "@/lib/stripe"
+import { getStripe } from "@/lib/stripe"
 
 export async function POST(request: Request) {
   try {
+    const stripe = getStripe()
     const supabase = await createClient()
     const supabaseAdmin = createAdminClient()
 
@@ -14,10 +15,10 @@ export async function POST(request: Request) {
 
     // Check admin access
     const { data: staffRole } = await supabase
-      .from("organization_members")
-      .select("role:role_key")
+      .from("staff_roles")
+      .select("role")
       .eq("user_id", user.id)
-      .in("role", ["owner", "manager", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_MANAGER", "DEPARTMENT_MANAGER", "PLATFORM_OWNER"])
+      .in("role", ["owner", "manager"])
       .single()
 
     if (!staffRole) {

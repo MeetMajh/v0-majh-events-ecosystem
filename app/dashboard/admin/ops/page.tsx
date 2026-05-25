@@ -50,13 +50,6 @@ interface OpsMetrics {
   recentAlerts: any[]
 }
 
-type ServiceHealth = {
-  service: string
-  status: "healthy" | "degraded" | "down"
-  latency: number
-  uptime: number
-}
-
 const fetcher = (url: string) => fetch(url).then(res => res.json())
 
 // ══════════════════════════════════════════
@@ -93,7 +86,7 @@ export default function OpsPage() {
   }
   
   // System health is simulated but realistic
-  const systemHealth: ServiceHealth[] = [
+  const systemHealth = [
     { service: "Database", status: "healthy" as const, latency: 12, uptime: 99.97 },
     { service: "API", status: "healthy" as const, latency: 45, uptime: 99.99 },
     { service: "Auth", status: "healthy" as const, latency: 23, uptime: 99.95 },
@@ -200,7 +193,7 @@ export default function OpsPage() {
           icon={DollarSign}
           label="Today Rev"
           value={`$${((metrics?.todayRevenue || 0) / 100).toFixed(2)}`}
-          highlight={Boolean(metrics?.todayRevenue && metrics.todayRevenue > 0)}
+          highlight={metrics?.todayRevenue && metrics.todayRevenue > 0}
           loading={isLoading && !metrics}
         />
         <MetricCard
@@ -213,7 +206,7 @@ export default function OpsPage() {
           icon={Shield}
           label="Mod Queue"
           value={metrics?.moderationQueue?.toString() || "0"}
-          alert={Boolean(metrics?.moderationQueue && metrics.moderationQueue > 10)}
+          alert={metrics?.moderationQueue && metrics.moderationQueue > 10}
           loading={isLoading && !metrics}
         />
       </div>
@@ -411,7 +404,7 @@ export default function OpsPage() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {(systemHealth as ServiceHealth[]).map((service) => (
+              {systemHealth.map((service) => (
                 <div
                   key={service.service}
                   className="p-3 rounded-lg bg-muted/50"

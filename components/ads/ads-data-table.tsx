@@ -124,14 +124,13 @@ export function AdsDataTable({ type, data, parentFilter }: AdsDataTableProps) {
 
     startTransition(async () => {
       const ids = Array.from(selectedIds)
-      const actionType = type === "adsets" ? "ad_sets" : type
       
       if (action === "pause") {
-        await bulkUpdateStatus(actionType, ids, "paused")
+        await bulkUpdateStatus(type, ids, "paused")
       } else if (action === "activate") {
-        await bulkUpdateStatus(actionType, ids, "active")
+        await bulkUpdateStatus(type, ids, "active")
       } else if (action === "delete") {
-        await bulkDelete(actionType, ids)
+        await bulkDelete(type, ids)
       }
       
       setSelectedIds(new Set())

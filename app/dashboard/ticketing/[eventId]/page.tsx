@@ -27,7 +27,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
   // Get user's tenant
   const { data: membership } = await supabase
     .from("tenant_memberships")
-    .select("tenant_id, role:role_key")
+    .select("tenant_id, role")
     .eq("user_id", user.id)
     .single()
 
@@ -110,7 +110,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
         event={event}
         stats={stats}
         recentOrders={recentOrders || []}
-        checkIns={(checkIns || []) as any}
+        checkIns={checkIns || []}
         tenantId={membership.tenant_id}
         userRole={membership.role}
       />

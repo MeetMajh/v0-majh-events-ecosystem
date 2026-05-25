@@ -45,10 +45,6 @@ export interface StreamSession {
   // Computed properties for compatibility
   is_live?: boolean
   is_public?: boolean
-  viewer_count?: number
-  host_id?: string
-  allow_chat?: boolean
-  allow_clips?: boolean
 }
 
 export interface StreamLayout {

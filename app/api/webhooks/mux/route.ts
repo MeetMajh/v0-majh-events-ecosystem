@@ -2,11 +2,13 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import crypto from "crypto"
 
-// Use service role for webhook (no user context)
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// Lazy initialization for service role client
+function getSupabaseAdmin() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) throw new Error("Supabase env vars not configured")
+  return createClient(url, key)
+}
 
 interface MuxWebhookEvent {
   type: string
@@ -68,6 +70,7 @@ export async function POST(request: NextRequest) {
     }
 
     const event: MuxWebhookEvent = JSON.parse(body)
+    const supabase = getSupabaseAdmin()
 
     console.log("[v0] Mux webhook received:", event.type)
 

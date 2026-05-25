@@ -31,10 +31,10 @@ export default async function ComplianceDashboardPage() {
 
   // Check admin access
   const { data: staffRole } = await supabase
-    .from("organization_members")
-    .select("role:role_key")
+    .from("staff_roles")
+    .select("role")
     .eq("user_id", user.id)
-    .in("role", ["owner", "manager", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_MANAGER", "DEPARTMENT_MANAGER", "PLATFORM_OWNER"])
+    .in("role", ["owner", "manager"])
     .single()
 
   if (!staffRole) redirect("/dashboard")

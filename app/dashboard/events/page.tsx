@@ -51,7 +51,8 @@ export default async function MyEventsPage() {
   return (
     <div className="flex flex-col gap-6">
       <DashboardHeader
-        displayName="My Events"
+        title="My Events"
+        description="View and manage your event bookings"
       />
 
       {bookings?.length === 0 && (

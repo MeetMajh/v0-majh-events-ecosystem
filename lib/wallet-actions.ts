@@ -884,11 +884,19 @@ export async function reverseTransaction(transactionId: string, reason: string) 
 
   // Update wallet balance (subtract the original amount)
   if (transaction.user_id) {
+    const { error: walletError } = await supabase
+      .from("wallets")
+      .update({ 
+        balance_cents: supabase.rpc ? undefined : undefined, // Will use raw SQL below
+        updated_at: new Date().toISOString()
+      })
+      .eq("user_id", transaction.user_id)
+
     // Use RPC or direct update for atomic balance change
     await supabase.rpc("adjust_wallet_balance", {
       p_user_id: transaction.user_id,
       p_amount: reversalAmount
-    }).then(undefined, () => {
+    }).catch(() => {
       // Fallback: manual update if RPC doesn't exist
       return supabase
         .from("wallets")

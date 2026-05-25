@@ -226,10 +226,6 @@ export default function GoLivePage() {
         console.error("[v0] Error checking status:", result.error)
       } else {
         const status = result.data
-        if (!status) {
-          toast.info("No stream status returned yet. Try again shortly.")
-          return
-        }
         if (status.autoDetected) {
           toast.success("Stream detected and marked as live!")
           console.log("[v0] Stream auto-detected:", status)

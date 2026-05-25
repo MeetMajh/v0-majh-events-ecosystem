@@ -9,7 +9,7 @@ import { notifyTournamentRegistration } from "@/lib/notification-actions"
 // ── Types ──
 
 export type PhaseType = "swiss" | "single_elimination" | "double_elimination" | "round_robin"
-export type TournamentStatus = "draft" | "published" | "registration" | "registration_closed" | "in_progress" | "complete" | "completed" | "cancelled"
+export type TournamentStatus = "draft" | "published" | "registration_closed" | "in_progress" | "complete" | "cancelled"
 export type MatchStatus = "pending" | "in_progress" | "player1_reported" | "player2_reported" | "confirmed" | "disputed"
 export type RoundStatus = "pending" | "active" | "paused" | "complete"
 
@@ -3256,7 +3256,7 @@ export async function getDisputedMatches(tournamentId: string): Promise<{
   return {
     matches: matches?.map(m => ({
       id: m.id,
-      round_number: (m.tournament_rounds as unknown as { round_number: number } | null)?.round_number ?? 0,
+      round_number: (m.tournament_rounds as { round_number: number })?.round_number ?? 0,
       table_number: m.table_number ?? 0,
       player1_id: m.player1_id,
       player2_id: m.player2_id,

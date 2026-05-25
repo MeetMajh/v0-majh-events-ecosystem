@@ -90,8 +90,7 @@ export default function MediaModerationPage() {
 
   const handleModerate = async (mediaId: string, action: "approved" | "rejected") => {
     setActionLoading(mediaId)
-    const moderationAction = action === "approved" ? "approve" : "reject"
-    const result = await moderateMedia(mediaId, moderationAction)
+    const result = await moderateMedia(mediaId, action)
     if (result.success) {
       // Remove from list or update status
       setMedia(prev => 

@@ -172,7 +172,6 @@ currentRound: {
       player1_wins: number | null
       player2_wins: number | null
       winner_id: string | null
-      is_feature_match?: boolean | null
       player1: { id: string; display_name: string; avatar_url: string | null } | null
       player2: { id: string; display_name: string; avatar_url: string | null } | null
     }>
@@ -197,11 +196,6 @@ currentRound: {
       loser_id: string | null
       reported_player1_wins: number | null
       reported_player2_wins: number | null
-      reported_player1_draws?: number | null
-      reported_player2_draws?: number | null
-      draws?: number | null
-      is_feature_match?: boolean | null
-      dispute_reason?: string | null
       player1: { id: string; display_name: string; avatar_url: string | null } | null
       player2: { id: string; display_name: string; avatar_url: string | null } | null
     }>
@@ -613,11 +607,11 @@ const handleAddPlayer = () => {
   toast.error(result.error)
   // Don't close dialog on error so user can retry
   } else if ("isPreregistration" in result && result.isPreregistration) {
-  toast.success("message" in result && typeof result.message === "string" ? result.message : `Preregistration created for ${newPlayerEmail}`)
+  toast.success(result.message || `Preregistration created for ${newPlayerEmail}`)
   setNewPlayerEmail("")
   setShowAddPlayerDialog(false)
   router.refresh()
-  } else if ("playerName" in result) {
+  } else {
   toast.success(`${result.playerName} added to tournament!`)
   setNewPlayerEmail("")
   setShowAddPlayerDialog(false)
@@ -858,7 +852,7 @@ const handleAddPlayer = () => {
                           const result = await regeneratePairings(tournament.id, currentRound.id)
                           if ("error" in result) {
                             toast.error(result.error)
-                          } else if ("pairingsCount" in result) {
+                          } else {
                             toast.success(`Generated ${result.pairingsCount} pairings`)
                             router.refresh()
                           }
@@ -884,7 +878,7 @@ const handleAddPlayer = () => {
                           const result = await regeneratePairings(tournament.id, currentRound.id)
                           if ("error" in result) {
                             toast.error(result.error)
-                          } else if ("pairingsCount" in result) {
+                          } else {
                             toast.success(`Regenerated ${result.pairingsCount} pairings`)
                             router.refresh()
                           }
@@ -1520,7 +1514,7 @@ const handleAddPlayer = () => {
                                 const result = await resetRoundTimer(tournament.id, currentRound.id)
                                 if ("error" in result) {
                                   toast.error(result.error)
-                                } else if ("minutes" in result) {
+                                } else {
                                   toast.success(`Timer reset to ${result.minutes} minutes`)
                                   router.refresh()
                                 }

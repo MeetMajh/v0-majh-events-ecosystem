@@ -59,10 +59,10 @@ export async function reverseTransaction({
 
   // Check admin access
   const { data: staffRole } = await supabase
-    .from("organization_members")
-    .select("role:role_key")
+    .from("staff_roles")
+    .select("role")
     .eq("user_id", user.id)
-    .in("role", ["owner", "manager", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_MANAGER", "DEPARTMENT_MANAGER", "PLATFORM_OWNER"])
+    .in("role", ["owner", "manager"])
     .single()
 
   if (!staffRole) throw new Error("Not authorized")
@@ -109,10 +109,10 @@ export async function approveWithdrawal(withdrawalId: string) {
 
   // Check admin access
   const { data: staffRole } = await supabase
-    .from("organization_members")
-    .select("role:role_key")
+    .from("staff_roles")
+    .select("role")
     .eq("user_id", user.id)
-    .in("role", ["owner", "manager", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_MANAGER", "DEPARTMENT_MANAGER", "PLATFORM_OWNER"])
+    .in("role", ["owner", "manager"])
     .single()
 
   if (!staffRole) throw new Error("Not authorized")
@@ -144,10 +144,10 @@ export async function rejectWithdrawal(withdrawalId: string, reason: string) {
 
   // Check admin access
   const { data: staffRole } = await supabase
-    .from("organization_members")
-    .select("role:role_key")
+    .from("staff_roles")
+    .select("role")
     .eq("user_id", user.id)
-    .in("role", ["owner", "manager", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_MANAGER", "DEPARTMENT_MANAGER", "PLATFORM_OWNER"])
+    .in("role", ["owner", "manager"])
     .single()
 
   if (!staffRole) throw new Error("Not authorized")
@@ -172,18 +172,11 @@ export async function rejectWithdrawal(withdrawalId: string, reason: string) {
     })
     .eq("id", withdrawalId)
 
-  const refundAmount = Math.abs(withdrawal.amount_cents)
-  const { data: wallet } = await supabase
-    .from("wallets")
-    .select("balance_cents")
-    .eq("user_id", withdrawal.user_id)
-    .single()
-
   // Return funds to wallet
   await supabase
     .from("wallets")
     .update({ 
-      balance_cents: (wallet?.balance_cents || 0) + refundAmount,
+      balance_cents: supabase.sql`balance_cents + ${Math.abs(withdrawal.amount_cents)}`
     })
     .eq("user_id", withdrawal.user_id)
 
@@ -214,10 +207,10 @@ export async function releaseEscrow(escrowId: string) {
 
   // Check admin access
   const { data: staffRole } = await supabase
-    .from("organization_members")
-    .select("role:role_key")
+    .from("staff_roles")
+    .select("role")
     .eq("user_id", user.id)
-    .in("role", ["owner", "manager", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_MANAGER", "DEPARTMENT_MANAGER", "PLATFORM_OWNER"])
+    .in("role", ["owner", "manager"])
     .single()
 
   if (!staffRole) throw new Error("Not authorized")

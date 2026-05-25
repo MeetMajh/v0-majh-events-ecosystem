@@ -20,8 +20,6 @@
     "cap:run:android": "cap run android"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.79",
-    "@ai-sdk/react": "^3.0.193",
     "@capacitor/browser": "^8.0.3",
     "@capacitor/cli": "^8.3.0",
     "@capacitor/device": "^8.0.2",
@@ -73,7 +71,7 @@
     "@supabase/supabase-js": "^2.49.4",
     "@vercel/analytics": "1.6.1",
     "@vercel/blob": "^2.3.3",
-    "ai": "^6.0.191",
+    "ai": "^6.0.146",
     "autoprefixer": "^10.4.20",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -97,7 +95,6 @@
     "react-error-boundary": "^6.1.1",
     "react-hook-form": "^7.54.1",
     "react-intersection-observer": "^10.0.3",
-    "react-markdown": "^10.1.0",
     "react-resizable-panels": "^2.1.7",
     "recharts": "2.15.0",
     "resend": "^6.10.0",

@@ -4,7 +4,7 @@ import { createMenuItem } from "@/lib/admin-actions"
 import { MenuItemForm } from "@/components/admin/menu-item-form"
 
 export default async function NewMenuItemPage() {
-  await requireRole(["owner", "manager", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_MANAGER", "DEPARTMENT_MANAGER", "PLATFORM_OWNER"])
+  await requireRole(["owner", "manager"])
   const supabase = await createClient()
   const { data: categories } = await supabase.from("categories").select("id, name, slug").order("sort_order")
 

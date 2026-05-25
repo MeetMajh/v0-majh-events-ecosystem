@@ -141,7 +141,6 @@ export async function createMedia(data: {
   tournamentId?: string
   matchId?: string
   visibility?: Visibility
-  tags?: string[]
 }): Promise<{ media?: PlayerMedia; error?: string }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -208,7 +207,6 @@ export async function createMedia(data: {
       game_id: data.gameId || null,
       tournament_id: data.tournamentId || null,
       match_id: data.matchId || null,
-      tags: data.tags || [],
       visibility: data.visibility || "public",
       moderation_status: autoApprove ? "approved" : "pending",
       published_at: autoApprove ? new Date().toISOString() : null,
@@ -219,7 +217,7 @@ export async function createMedia(data: {
   if (error) return { error: error.message }
   
   // Increment user's upload count atomically
-  await supabase.rpc("increment_upload_count", { user_id: user.id }).then(undefined, () => {
+  await supabase.rpc("increment_upload_count", { user_id: user.id }).catch(() => {
     // Fallback if RPC doesn't exist - just increment
     supabase
       .from("profiles")

@@ -15,12 +15,12 @@ export default async function OrganizerFinancialsPage() {
 
   // Check if user is an organizer
   const { data: staffRole } = await supabase
-    .from("organization_members")
-    .select("role:role_key, tenant_id")
+    .from("staff_roles")
+    .select("role, tenant_id")
     .eq("user_id", user.id)
     .single()
 
-  const isOrganizer = staffRole && ["owner", "manager", "organizer", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_MANAGER", "DEPARTMENT_MANAGER", "PLATFORM_OWNER"].includes(staffRole.role)
+  const isOrganizer = staffRole && ["owner", "manager", "organizer"].includes(staffRole.role)
 
   if (!isOrganizer) {
     redirect("/dashboard")
@@ -92,7 +92,7 @@ export default async function OrganizerFinancialsPage() {
     <OrganizerFinancialDashboard
       dashboardData={dashboardData}
       liabilityData={liabilityData}
-      payoutRequests={(payoutRequests ?? []) as any}
+      payoutRequests={payoutRequests ?? []}
       disputes={disputes ?? []}
       profile={profile}
       dashboardError={dashboardError?.message}

@@ -1,14 +1,16 @@
 import { headers } from "next/headers"
 import { NextResponse } from "next/server"
-import { stripe } from "@/lib/stripe"
+import { getStripe } from "@/lib/stripe"
 import { createClient } from "@supabase/supabase-js"
 import type Stripe from "stripe"
 
-// We need a service role client for webhook (no auth context)
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// Lazy initialization for service role client
+function getSupabaseAdmin() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) throw new Error("Supabase env vars not configured")
+  return createClient(url, key)
+}
 
 export async function POST(req: Request) {
   const body = await req.text()
@@ -20,6 +22,8 @@ export async function POST(req: Request) {
   }
 
   let event: Stripe.Event
+  const stripe = getStripe()
+  const supabaseAdmin = getSupabaseAdmin()
 
   try {
     event = stripe.webhooks.constructEvent(
@@ -36,7 +40,7 @@ export async function POST(req: Request) {
   }
 
   // Handle the event
-  switch (event.type as string) {
+  switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object as Stripe.Checkout.Session
       // Reconcile financial intent first (if exists)
@@ -459,7 +463,7 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
       }
     }
 
-    // ══════════════════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════��═══════════════════════════════
     // TICKET REFUND
     // ══════════════════════════════════════════════════════════════════════════════
     if (type === "ticket_refund" && order_id) {
@@ -886,7 +890,7 @@ async function handleTransferFailed(transfer: Stripe.Transfer) {
   }
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
+// ═════════════════���════════════════════════════════════════════════════════════
 // Financial Intent Reconciliation
 // ══════════════════════════════════════════════════════════════════════════════
 

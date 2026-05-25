@@ -16,7 +16,7 @@ export default async function ApiKeysPage() {
   // Get user's tenant membership
   const { data: membership } = await supabase
     .from("tenant_memberships")
-    .select("tenant_id, role:role_key")
+    .select("tenant_id, role")
     .eq("user_id", user.id)
     .single()
 

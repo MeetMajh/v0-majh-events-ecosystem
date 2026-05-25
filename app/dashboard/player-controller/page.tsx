@@ -70,14 +70,12 @@ export default async function PlayerControllerPage() {
       winner_id,
       table_number,
       created_at,
-      tournament_rounds (id, round_number, status),
-      player1:profiles!tournament_matches_player1_id_fkey(id, first_name, last_name, avatar_url),
-      player2:profiles!tournament_matches_player2_id_fkey(id, first_name, last_name, avatar_url)
+      tournament_rounds (id, round_number, status)
     `)
     .or(`player1_id.eq.${user.id},player2_id.eq.${user.id}`)
     .order("created_at", { ascending: false })
   
-  const userMatches = (matchData || []) as any[]
+  const userMatches = matchData || []
 
   // Step 2: Get registrations for additional context
   const { data: registrationRecords, error: registrationsError } = await adminClient

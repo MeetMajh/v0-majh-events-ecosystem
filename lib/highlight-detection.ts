@@ -108,10 +108,7 @@ export async function analyzeMatchForHighlights(
   )
   
   // Build match context
-  const tournament = match.tournament_rounds?.[0]?.tournament_phases?.[0]?.tournaments as unknown as {
-    name: string | null
-    games: { name: string | null; category: string | null } | null
-  } | null
+  const tournament = match.tournament_rounds?.[0]?.tournament_phases?.[0]?.tournaments
   const game = tournament?.games
   const matchContext = {
     tournament_name: tournament?.name || "Unknown Tournament",
@@ -188,8 +185,8 @@ Identify highlight-worthy moments and rate overall match excitement.`
     })
     
     // Filter by confidence
-    const analysis = (result as unknown as { object: HighlightAnalysis }).object
-    analysis.highlights = analysis.highlights.filter((h: HighlightAnalysis["highlights"][number]) => h.confidence >= minConfidence)
+    const analysis = result.object
+    analysis.highlights = analysis.highlights.filter(h => h.confidence >= minConfidence)
     analysis.has_highlights = analysis.highlights.length > 0
     
     return analysis

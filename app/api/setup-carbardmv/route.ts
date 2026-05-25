@@ -142,10 +142,10 @@ export async function POST() {
 
   const results = []
   for (const sql of statements) {
-    const { error } = await supabase.rpc('exec_sql', { sql_query: sql }).then(undefined, () => ({ error: null }))
+    const { error } = await supabase.rpc('exec_sql', { sql_query: sql }).catch(() => ({ error: null }))
     // Try direct query if rpc doesn't work
     if (error) {
-      const { error: directError } = await supabase.from('_migrations').select().limit(0).then(undefined, () => ({ error: null }))
+      const { error: directError } = await supabase.from('_migrations').select().limit(0).catch(() => ({ error: null }))
       results.push({ sql: sql.substring(0, 50), error: error?.message || directError?.message || 'unknown' })
     } else {
       results.push({ sql: sql.substring(0, 50), success: true })

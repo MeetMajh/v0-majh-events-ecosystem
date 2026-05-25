@@ -18,7 +18,7 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 export default async function StaffSchedulePage() {
-  await requireRole(["owner", "manager", "staff", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_MANAGER", "DEPARTMENT_MANAGER", "DEPARTMENT_STAFF", "PLATFORM_OWNER"])
+  await requireRole(["owner", "manager", "staff"])
   const supabase = await createClient()
 
   const [{ data: shifts }, { data: staffMembers }] = await Promise.all([
@@ -28,8 +28,8 @@ export default async function StaffSchedulePage() {
       .order("shift_date", { ascending: false })
       .limit(50),
     supabase
-      .from("organization_members")
-      .select("user_id, role:role_key, profiles(first_name, last_name)")
+      .from("staff_roles")
+      .select("user_id, role, profiles(first_name, last_name)")
       .order("role"),
   ])
 
@@ -40,7 +40,7 @@ export default async function StaffSchedulePage() {
           <h1 className="text-2xl font-bold text-foreground">Staff Schedule</h1>
           <p className="text-sm text-muted-foreground">Manage shifts for events and operations</p>
         </div>
-        <NewShiftForm staffMembers={(staffMembers ?? []) as any} />
+        <NewShiftForm staffMembers={staffMembers ?? []} />
       </div>
 
       <div className="space-y-3">

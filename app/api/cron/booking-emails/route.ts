@@ -3,11 +3,13 @@ import { createClient } from "@supabase/supabase-js"
 import { sendEventReminderEmail, sendPostEventFollowUpEmail } from "@/lib/booking-emails"
 import { requireCronAuth } from "@/lib/cron-auth"
 
-// Service role client for cron job (no auth context)
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// Lazy initialization for service role client
+function getSupabaseAdmin() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) throw new Error("Supabase env vars not configured")
+  return createClient(url, key)
+}
 
 // Vercel Cron: Run daily at 9:00 AM UTC
 // Add to vercel.json: { "crons": [{ "path": "/api/cron/booking-emails", "schedule": "0 9 * * *" }] }
@@ -16,6 +18,7 @@ export async function GET(req: Request) {
   const authError = requireCronAuth(req)
   if (authError) return authError
 
+  const supabaseAdmin = getSupabaseAdmin()
   const results = {
     reminders: { sent: 0, failed: 0 },
     followups: { sent: 0, failed: 0 },
@@ -57,13 +60,12 @@ export async function GET(req: Request) {
     } else if (upcomingBookings && upcomingBookings.length > 0) {
       for (const booking of upcomingBookings) {
         try {
-          const eventPackage = booking.cb_event_packages as unknown as { name: string } | null
           await sendEventReminderEmail({
             bookingId: booking.id,
             contactName: booking.contact_name,
             contactEmail: booking.contact_email,
             contactPhone: booking.contact_phone || undefined,
-            packageName: eventPackage?.name || "Event",
+            packageName: booking.cb_event_packages?.name || "Event",
             eventDate: booking.event_date,
             startTime: booking.start_time || undefined,
             guestCount: booking.guest_count,
@@ -120,13 +122,12 @@ export async function GET(req: Request) {
     } else if (completedBookings && completedBookings.length > 0) {
       for (const booking of completedBookings) {
         try {
-          const eventPackage = booking.cb_event_packages as unknown as { name: string } | null
           await sendPostEventFollowUpEmail({
             bookingId: booking.id,
             contactName: booking.contact_name,
             contactEmail: booking.contact_email,
             contactPhone: booking.contact_phone || undefined,
-            packageName: eventPackage?.name || "Event",
+            packageName: booking.cb_event_packages?.name || "Event",
             eventDate: booking.event_date,
             startTime: booking.start_time || undefined,
             guestCount: booking.guest_count,

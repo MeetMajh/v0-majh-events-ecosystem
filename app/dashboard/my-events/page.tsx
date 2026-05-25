@@ -32,10 +32,7 @@ async function getMyEvents(userId: string) {
       result,
       player1_id,
       player2_id,
-      player1_wins,
-      player2_wins,
       winner_id,
-      is_bye,
       tournament_rounds (round_number, status)
     `)
     .or(`player1_id.eq.${userId},player2_id.eq.${userId}`)
@@ -515,7 +512,7 @@ export default async function MyEventsPage() {
                           <div>
                             <p className="text-sm font-medium">vs {opponentName}</p>
                             <p className="text-xs text-muted-foreground">
-                              Round {(match.tournament_rounds as unknown as { round_number: number } | null)?.round_number}
+                              Round {match.tournament_rounds?.round_number}
                             </p>
                           </div>
                         </div>

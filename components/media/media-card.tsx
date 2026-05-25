@@ -80,7 +80,7 @@ export function MediaCard({
   onEdit,
 }: MediaCardProps) {
   const [isHovered, setIsHovered] = useState(false)
-  const typeConfig = getMediaTypeConfig(media.media_type as MediaType)
+  const typeConfig = getMediaTypeConfig(media.media_type)
   const TypeIcon = typeConfig.icon
 
   // Mobile variant - horizontal compact layout

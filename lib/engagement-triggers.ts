@@ -415,11 +415,8 @@ export async function notifyRelevantUsersOfLiveContent(
 
   if (!match) return
 
-  const player1 = match.player1 as unknown as { first_name: string | null } | null
-  const player2 = match.player2 as unknown as { first_name: string | null } | null
-  const tournament = match.tournaments as unknown as { name: string | null } | null
-  const title = `Live: ${player1?.first_name || "Player 1"} vs ${player2?.first_name || "Player 2"}`
-  const body = tournament?.name || "Watch now!"
+  const title = `Live: ${match.player1?.first_name || "Player 1"} vs ${match.player2?.first_name || "Player 2"}`
+  const body = match.tournaments?.name || "Watch now!"
 
   const notifications = interestedUsers.map((u: any) => ({
     user_id: u.user_id,

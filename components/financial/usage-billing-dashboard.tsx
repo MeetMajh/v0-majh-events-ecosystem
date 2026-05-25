@@ -72,43 +72,23 @@ interface UsageBillingDashboardProps {
   invoices: Invoice[]
 }
 
-type DisplayPlan = {
-  name: string
-  slug: string
-  price: number | null
-  max_api_calls: number
-  max_events: number
-  max_users: number
-  features: string[]
-  popular?: boolean
-}
-
-const PLANS: DisplayPlan[] = [
+const PLANS = [
   {
     name: "Free",
     slug: "free",
     price: 0,
-    max_api_calls: 1000,
-    max_events: 5,
-    max_users: 2,
     features: ["1,000 API calls/month", "5 events", "2 team members", "Community support"],
   },
   {
     name: "Starter",
     slug: "starter",
     price: 29,
-    max_api_calls: 10000,
-    max_events: 50,
-    max_users: 5,
     features: ["10,000 API calls/month", "50 events", "5 team members", "Email support", "API access"],
   },
   {
     name: "Pro",
     slug: "pro",
     price: 99,
-    max_api_calls: 100000,
-    max_events: Number.POSITIVE_INFINITY,
-    max_users: 20,
     popular: true,
     features: ["100,000 API calls/month", "Unlimited events", "20 team members", "Priority support", "Advanced analytics", "Custom webhooks"],
   },
@@ -116,9 +96,6 @@ const PLANS: DisplayPlan[] = [
     name: "Enterprise",
     slug: "enterprise",
     price: null,
-    max_api_calls: Number.POSITIVE_INFINITY,
-    max_events: Number.POSITIVE_INFINITY,
-    max_users: Number.POSITIVE_INFINITY,
     features: ["Unlimited API calls", "Unlimited events", "Unlimited team members", "24/7 support", "SLA guarantee", "Custom integrations", "Dedicated account manager"],
   },
 ]
@@ -131,10 +108,7 @@ export function UsageBillingDashboard({
   invoices,
 }: UsageBillingDashboardProps) {
   const currentTier = tenant?.subscription_tier || "free"
-  const currentPlan: (Plan & { price?: number | null }) | DisplayPlan =
-    plan || PLANS.find(p => p.slug === currentTier) || PLANS[0]
-  const currentPlanPrice =
-    "price" in currentPlan ? currentPlan.price : currentPlan.price_monthly_cents / 100
+  const currentPlan = plan || PLANS.find(p => p.slug === currentTier) || PLANS[0]
 
   const maxApiCalls = tenant?.max_api_calls || currentPlan.max_api_calls || 1000
   const maxEvents = tenant?.max_events || currentPlan.max_events || 5
@@ -197,7 +171,7 @@ export function UsageBillingDashboard({
             <div>
               <p className="text-sm text-muted-foreground">Price</p>
               <p className="text-xl font-semibold">
-                {currentPlanPrice === 0 ? "Free" : currentPlanPrice ? `$${currentPlanPrice}/mo` : "Custom"}
+                {currentPlan.price === 0 ? "Free" : currentPlan.price ? `$${currentPlan.price}/mo` : "Custom"}
               </p>
             </div>
             {subscription && (

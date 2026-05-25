@@ -48,7 +48,8 @@ export default async function MyRentalsPage() {
   return (
     <div className="flex flex-col gap-6">
       <DashboardHeader
-        displayName="My Rentals"
+        title="My Rentals"
+        description="View and manage your equipment rentals"
       />
 
       {rentals?.length === 0 && (

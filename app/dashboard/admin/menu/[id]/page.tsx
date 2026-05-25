@@ -9,7 +9,7 @@ export default async function EditMenuItemPage({
 }: {
   params: Promise<{ id: string }>
 }) {
-  await requireRole(["owner", "manager", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_MANAGER", "DEPARTMENT_MANAGER", "PLATFORM_OWNER"])
+  await requireRole(["owner", "manager"])
   const { id } = await params
   const supabase = await createClient()
   

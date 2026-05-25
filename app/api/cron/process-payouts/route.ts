@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { requireCronAuth } from "@/lib/cron-auth"
-import { stripe } from "@/lib/stripe"
+import { getStripe } from "@/lib/stripe"
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // PAYOUT EXECUTION WORKER
@@ -9,10 +9,13 @@ import { stripe } from "@/lib/stripe"
 // Runs every 5 minutes via Vercel Cron
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// Lazy initialization for service role client
+function getSupabaseAdmin() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) throw new Error("Supabase env vars not configured")
+  return createClient(url, key)
+}
 
 interface EligiblePayout {
   id: string
@@ -31,6 +34,8 @@ export async function GET(req: NextRequest) {
   if (authError) return authError
 
   try {
+    const supabase = getSupabaseAdmin()
+    const stripe = getStripe()
 
     // 1. Fetch eligible payouts
     const { data: payouts, error: fetchError } = await supabase.rpc(

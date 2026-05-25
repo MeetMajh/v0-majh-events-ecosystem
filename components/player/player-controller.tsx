@@ -336,10 +336,9 @@ export function PlayerController({
           isOpen={expandedSections.currentMatch}
           onToggle={() => toggleSection("currentMatch")}
         >
-          <CurrentMatchSection
-            match={currentMatch}
-            userId={userId}
-            playerId={playerId}
+          <CurrentMatchSection 
+            match={currentMatch} 
+            userId={userId} 
             points={myPoints}
             tournamentId={tournament.id}
           />
@@ -360,7 +359,7 @@ export function PlayerController({
           isOpen={expandedSections.seatings}
           onToggle={() => toggleSection("seatings")}
         >
-          <SeatingsSection matches={myMatches} userId={userId} playerId={playerId} />
+          <SeatingsSection matches={myMatches} userId={userId} />
         </CollapsiblePanel>
       </div>
     </div>
@@ -409,16 +408,14 @@ function CollapsiblePanel({
 
 // ── Current Match Section ──
 
-function CurrentMatchSection({
-  match,
-  userId,
-  playerId,
+function CurrentMatchSection({ 
+  match, 
+  userId, 
   points,
-  tournamentId
-}: {
+  tournamentId 
+}: { 
   match: any
   userId: string
-  playerId?: string
   points: number
   tournamentId: string
 }) {
@@ -467,7 +464,7 @@ function CurrentMatchSection({
       )}
 
       {/* Match Result Reporting */}
-      {(match.status === "pending" || match.status === "in_progress") && !match.is_bye && playerId && (
+      {(match.status === "pending" || match.status === "in_progress") && !match.is_bye && (
         <MatchResultReporter
           matchId={match.id}
           playerId={playerId}
@@ -484,7 +481,7 @@ function CurrentMatchSection({
               ? "Waiting for opponent to confirm"
               : "Opponent reported - please confirm"}
           </p>
-          {match.status !== (isPlayer1 ? "player1_reported" : "player2_reported") && playerId && (
+          {match.status !== (isPlayer1 ? "player1_reported" : "player2_reported") && (
             <MatchResultReporter
               matchId={match.id}
               playerId={playerId}
@@ -848,7 +845,7 @@ function AnnouncementsSection({ announcements }: { announcements: any[] }) {
 
 // ── Seatings/Match History Section ──
 
-function SeatingsSection({ matches, userId, playerId }: { matches: any[], userId: string, playerId?: string }) {
+function SeatingsSection({ matches, userId }: { matches: any[], userId: string }) {
   if (matches.length === 0) {
     return (
       <p className="text-sm text-muted-foreground text-center py-4">

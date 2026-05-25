@@ -53,8 +53,6 @@ export const REVENUE_SPLIT_CONFIGS = {
   },
 }
 
-type RevenueSplitConfigMap = typeof REVENUE_SPLIT_CONFIGS
-
 // Payout settings
 export const PAYOUT_CONFIG = {
   minimum_payout_cents: 5000, // $50 minimum
@@ -140,43 +138,40 @@ export async function processRevenueEvent(event: RevenueEvent) {
   // Calculate distributions based on config
   switch (event.split_config) {
     case "clip_ad": {
-      const config = splitConfig as RevenueSplitConfigMap["clip_ad"]
       if (event.context.creator_id) {
         distributions.push({
           user_id: event.context.creator_id,
           role: "creator",
-          amount_cents: Math.floor(event.net_amount_cents * config.creator),
+          amount_cents: Math.floor(event.net_amount_cents * splitConfig.creator),
         })
       }
       break
     }
     
     case "stream_ad": {
-      const config = splitConfig as RevenueSplitConfigMap["stream_ad"]
       if (event.context.creator_id) {
         distributions.push({
           user_id: event.context.creator_id,
           role: "streamer",
-          amount_cents: Math.floor(event.net_amount_cents * config.streamer),
+          amount_cents: Math.floor(event.net_amount_cents * splitConfig.streamer),
         })
       }
       break
     }
     
     case "tournament_ad": {
-      const config = splitConfig as RevenueSplitConfigMap["tournament_ad"]
       if (event.context.organizer_id) {
         distributions.push({
           user_id: event.context.organizer_id,
           role: "organizer",
-          amount_cents: Math.floor(event.net_amount_cents * config.organizer),
+          amount_cents: Math.floor(event.net_amount_cents * splitConfig.organizer),
         })
       }
       
       // Split among featured players
       if (event.context.player_ids?.length) {
         const perPlayerAmount = Math.floor(
-          (event.net_amount_cents * config.featured_players) / event.context.player_ids.length
+          (event.net_amount_cents * splitConfig.featured_players) / event.context.player_ids.length
         )
         for (const playerId of event.context.player_ids) {
           distributions.push({
@@ -190,12 +185,11 @@ export async function processRevenueEvent(event: RevenueEvent) {
     }
     
     case "feature_match_ad": {
-      const config = splitConfig as RevenueSplitConfigMap["feature_match_ad"]
       if (event.context.organizer_id) {
         distributions.push({
           user_id: event.context.organizer_id,
           role: "organizer",
-          amount_cents: Math.floor(event.net_amount_cents * config.organizer),
+          amount_cents: Math.floor(event.net_amount_cents * splitConfig.organizer),
         })
       }
       
@@ -203,14 +197,14 @@ export async function processRevenueEvent(event: RevenueEvent) {
         distributions.push({
           user_id: event.context.caster_id,
           role: "caster",
-          amount_cents: Math.floor(event.net_amount_cents * config.caster),
+          amount_cents: Math.floor(event.net_amount_cents * splitConfig.caster),
         })
       }
       
       // Split among players
       if (event.context.player_ids?.length) {
         const perPlayerAmount = Math.floor(
-          (event.net_amount_cents * config.players) / event.context.player_ids.length
+          (event.net_amount_cents * splitConfig.players) / event.context.player_ids.length
         )
         for (const playerId of event.context.player_ids) {
           distributions.push({
@@ -224,12 +218,11 @@ export async function processRevenueEvent(event: RevenueEvent) {
     }
     
     case "sponsorship": {
-      const config = splitConfig as RevenueSplitConfigMap["sponsorship"]
       if (event.context.organizer_id) {
         distributions.push({
           user_id: event.context.organizer_id,
           role: "organizer",
-          amount_cents: Math.floor(event.net_amount_cents * config.organizer),
+          amount_cents: Math.floor(event.net_amount_cents * splitConfig.organizer),
         })
       }
       // Prize pool portion handled separately
@@ -237,12 +230,11 @@ export async function processRevenueEvent(event: RevenueEvent) {
     }
     
     case "creator_subscription": {
-      const config = splitConfig as RevenueSplitConfigMap["creator_subscription"]
       if (event.context.creator_id) {
         distributions.push({
           user_id: event.context.creator_id,
           role: "creator",
-          amount_cents: Math.floor(event.net_amount_cents * config.creator),
+          amount_cents: Math.floor(event.net_amount_cents * splitConfig.creator),
         })
       }
       break
@@ -256,9 +248,7 @@ export async function processRevenueEvent(event: RevenueEvent) {
       revenue_event_id: event.id,
       earning_type: event.event_type === "ad_impression" || event.event_type === "ad_click" 
         ? "ad_revenue" 
-        : event.event_type === "tournament_entry"
-          ? "prize"
-          : event.event_type,
+        : event.event_type,
       gross_amount_cents: dist.amount_cents,
       platform_fee_cents: 0, // Already deducted
       net_amount_cents: dist.amount_cents,

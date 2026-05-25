@@ -1,20 +1,49 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 
-export type UserRole = 
-  "owner" | "manager" | "staff" | "admin" | "user" |
-  "PLATFORM_OWNER" | 
-  "TENANT_OWNER" | 
-  "TENANT_SUPER_ADMIN" | 
-  "TENANT_ADMIN" | 
-  "TENANT_MANAGER" | 
-  "TENANT_BILLING" | 
-  "TENANT_MEMBER" |
-  "DEPARTMENT_ADMIN" | 
-  "DEPARTMENT_MANAGER" | 
-  "DEPARTMENT_STAFF" |
-  "LOCATION_MANAGER" | 
-  "LOCATION_STAFF"
+// Legacy role types (kept for backward compatibility)
+export type UserRole = "owner" | "manager" | "staff"
+
+// T-204 Role types
+export type PlatformRole = "PLATFORM_OWNER" | "PLATFORM_ADMIN"
+export type TenantRole = "TENANT_OWNER" | "TENANT_SUPER_ADMIN" | "TENANT_ADMIN" | "TENANT_MANAGER" | "TENANT_STAFF"
+
+// Combined role type
+export type UnifiedRole = UserRole | PlatformRole | TenantRole
+
+// Role hierarchy mapping
+const ROLE_HIERARCHY: Record<string, number> = {
+  "PLATFORM_OWNER": 100,
+  "PLATFORM_ADMIN": 90,
+  "TENANT_OWNER": 80,
+  "TENANT_SUPER_ADMIN": 75,
+  "TENANT_ADMIN": 70,
+  "TENANT_MANAGER": 60,
+  "TENANT_STAFF": 50,
+  "owner": 80,
+  "manager": 60,
+  "staff": 50,
+}
+
+// Map T-204 roles to legacy roles for backward compatibility
+function mapToLegacyRole(role: string | null): UserRole | null {
+  if (!role) return null
+  
+  const mappings: Record<string, UserRole> = {
+    "PLATFORM_OWNER": "owner",
+    "PLATFORM_ADMIN": "owner",
+    "TENANT_OWNER": "owner",
+    "TENANT_SUPER_ADMIN": "owner",
+    "TENANT_ADMIN": "manager",
+    "TENANT_MANAGER": "manager",
+    "TENANT_STAFF": "staff",
+    "owner": "owner",
+    "manager": "manager",
+    "staff": "staff",
+  }
+  
+  return mappings[role] || null
+}
 
 export async function getUserRole(): Promise<UserRole | null> {
   const supabase = await createClient()
@@ -22,22 +51,29 @@ export async function getUserRole(): Promise<UserRole | null> {
   if (!user) return null
 
   const { data } = await supabase
-    .from("organization_members")
-    .select("role_key")
+    .from("staff_roles")
+    .select("role")
     .eq("user_id", user.id)
-    .eq("is_active", true)
-    .limit(1)
     .single()
 
-  return (data?.role_key as UserRole) ?? null
+  const rawRole = data?.role as string | undefined
+  
+  // Map T-204 roles to legacy roles for backward compatibility
+  return mapToLegacyRole(rawRole ?? null)
 }
 
-const LEGACY_MAP: Record<string, string[]> = {
-  "owner": ["owner", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "PLATFORM_OWNER"],
-  "admin": ["admin", "TENANT_ADMIN", "DEPARTMENT_ADMIN"],
-  "manager": ["manager", "TENANT_MANAGER", "DEPARTMENT_MANAGER", "LOCATION_MANAGER"],
-  "staff": ["staff", "DEPARTMENT_STAFF", "LOCATION_STAFF"],
-  "user": ["user", "TENANT_MEMBER"]
+export async function getUnifiedRole(): Promise<string | null> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return null
+
+  const { data } = await supabase
+    .from("staff_roles")
+    .select("role")
+    .eq("user_id", user.id)
+    .single()
+
+  return data?.role ?? null
 }
 
 export async function requireRole(allowed: UserRole[]): Promise<{ role: UserRole; userId: string }> {
@@ -46,42 +82,91 @@ export async function requireRole(allowed: UserRole[]): Promise<{ role: UserRole
   if (!user) redirect("/auth/login")
 
   const { data } = await supabase
-    .from("organization_members")
-    .select("role_key")
+    .from("staff_roles")
+    .select("role")
     .eq("user_id", user.id)
-    .eq("is_active", true)
+    .single()
 
-  const roles = (data || []).map(r => r.role_key as UserRole)
+  const rawRole = data?.role as string | undefined
+  const role = mapToLegacyRole(rawRole ?? null)
   
-  if (roles.length === 0) {
+  // Also check if the raw role is a T-204 role that should be allowed
+  const isT204Allowed = rawRole && (
+    // Platform-level roles always have access
+    rawRole.startsWith("PLATFORM_") ||
+    // Tenant owner/super admin always have access
+    rawRole === "TENANT_OWNER" ||
+    rawRole === "TENANT_SUPER_ADMIN" ||
+    // Check mapped role
+    (role && allowed.includes(role))
+  )
+  
+  if (!role && !isT204Allowed) {
+    redirect("/dashboard")
+  }
+  
+  if (role && !allowed.includes(role) && !isT204Allowed) {
     redirect("/dashboard")
   }
 
-  const allowedSet = new Set<string>()
-  for (const role of allowed) {
-    allowedSet.add(role)
-    if (LEGACY_MAP[role]) {
-      LEGACY_MAP[role].forEach(r => allowedSet.add(r))
-    }
+  return { role: role || "owner", userId: user.id }
+}
+
+export function canManageMenu(role: UserRole | string) {
+  if (typeof role === "string") {
+    // Check T-204 roles
+    if (role.startsWith("PLATFORM_")) return true
+    if (role === "TENANT_OWNER" || role === "TENANT_SUPER_ADMIN" || role === "TENANT_ADMIN") return true
   }
+  return role === "owner" || role === "manager"
+}
 
-  const hasAccess = roles.some(role => allowedSet.has(role))
-
-  if (!hasAccess) {
-    redirect("/dashboard")
+export function canManageStaff(role: UserRole | string) {
+  if (typeof role === "string") {
+    // Check T-204 roles
+    if (role.startsWith("PLATFORM_")) return true
+    if (role === "TENANT_OWNER" || role === "TENANT_SUPER_ADMIN") return true
   }
-
-  return { role: roles[0], userId: user.id }
+  return role === "owner"
 }
 
-export function canManageMenu(role: UserRole) {
-  return ["owner", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "manager", "TENANT_MANAGER", "DEPARTMENT_MANAGER"].includes(role)
+export function canManageInventory(role: UserRole | string) {
+  if (typeof role === "string") {
+    // Check T-204 roles
+    if (role.startsWith("PLATFORM_")) return true
+    if (role === "TENANT_OWNER" || role === "TENANT_SUPER_ADMIN" || role === "TENANT_ADMIN") return true
+  }
+  return role === "owner" || role === "manager"
 }
 
-export function canManageStaff(role: UserRole) {
-  return ["owner", "TENANT_OWNER", "TENANT_SUPER_ADMIN"].includes(role)
+// New helper to check if a role has at least the minimum required level
+export function hasMinimumRoleLevel(userRole: string | null, requiredRole: string): boolean {
+  const userLevel = ROLE_HIERARCHY[userRole || ""] || 0
+  const requiredLevel = ROLE_HIERARCHY[requiredRole] || 0
+  return userLevel >= requiredLevel
 }
 
-export function canManageInventory(role: UserRole) {
-  return ["owner", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "manager", "TENANT_MANAGER", "DEPARTMENT_MANAGER"].includes(role)
+// Check if role is a staff-level role
+export function isStaffRole(role: string | null): boolean {
+  if (!role) return false
+  return (
+    role === "owner" ||
+    role === "manager" ||
+    role === "staff" ||
+    role.startsWith("PLATFORM_") ||
+    role.startsWith("TENANT_")
+  )
+}
+
+// Check if role is an admin-level role
+export function isAdminRole(role: string | null): boolean {
+  if (!role) return false
+  return (
+    role === "owner" ||
+    role === "PLATFORM_OWNER" ||
+    role === "PLATFORM_ADMIN" ||
+    role === "TENANT_OWNER" ||
+    role === "TENANT_SUPER_ADMIN" ||
+    role === "TENANT_ADMIN"
+  )
 }

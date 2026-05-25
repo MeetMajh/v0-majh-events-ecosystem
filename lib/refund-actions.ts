@@ -1,7 +1,8 @@
 "use server"
 
-import { createClient, createAdminClient } from "@/lib/supabase/server"
+import { createClient } from "@/lib/supabase/server"
 import { stripe } from "@/lib/stripe"
+import { createServiceClient } from "@/lib/supabase/service"
 
 interface RefundResult {
   success: boolean
@@ -18,7 +19,7 @@ export async function validateRefund(
   originalIntentId: string,
   amountCents: number
 ): Promise<{ success: boolean; error?: string; maxAvailable?: number }> {
-  const supabase = createAdminClient()
+  const supabase = await createServiceClient()
 
   const { data, error } = await supabase.rpc("validate_refund", {
     p_original_intent_id: originalIntentId,
@@ -42,7 +43,7 @@ export async function initiateRefund(
   reason: string = "Customer requested refund"
 ): Promise<RefundResult> {
   const supabase = await createClient()
-  const serviceClient = createAdminClient()
+  const serviceClient = await createServiceClient()
 
   // Check authorization - only staff can initiate refunds
   const { data: { user } } = await supabase.auth.getUser()

@@ -1,37 +1,34 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { validateApiKey } from "@/lib/middleware/api-auth"
 import { checkRateLimit } from "@/lib/middleware/rate-limit"
 import { checkIdempotency, storeIdempotentResponse } from "@/lib/middleware/idempotency"
 import { apiError, apiSuccess } from "@/lib/middleware/api-response"
-import { stripe } from "@/lib/stripe"
+import { getStripe } from "@/lib/stripe"
 
 export async function POST(req: NextRequest) {
-  const startTime = Date.now()
   try {
+    const stripe = getStripe()
     const authResult = await validateApiKey(req)
     if (!authResult.valid) {
-      return apiError("authentication_error", authResult.error || "Invalid API key")
+      return apiError("authentication_error", authResult.error || "Invalid API key", 401)
     }
 
     if (!authResult.scopes?.includes("write")) {
-      return apiError("authorization_error", "API key does not have write permission")
+      return apiError("permission_denied", "API key does not have write permission", 403)
     }
 
     const rateLimitResult = await checkRateLimit(authResult.api_key_id, 30) // Lower limit for purchases
     if (!rateLimitResult.allowed) {
-      return apiError("rate_limit_exceeded", "Rate limit exceeded", { rateLimit: rateLimitResult })
+      return apiError("rate_limit_exceeded", "Rate limit exceeded", 429)
     }
 
     // Check idempotency
     const idempotencyKey = req.headers.get("idempotency-key")
     if (idempotencyKey) {
-      const cached = await checkIdempotency(req, authResult.tenant_id)
-      if (cached.found && cached.response) {
-        return NextResponse.json(cached.response.body, {
-          status: cached.response.status,
-          headers: { "Idempotent-Replayed": "true" },
-        })
+      const cached = await checkIdempotency(authResult.tenant_id, idempotencyKey)
+      if (cached) {
+        return apiSuccess(cached, { "Idempotent-Replayed": "true" })
       }
     }
 
@@ -50,7 +47,7 @@ export async function POST(req: NextRequest) {
     } = body
 
     if (!event_id || !email || !items || !Array.isArray(items) || items.length === 0) {
-      return apiError("invalid_request", "event_id, email, and items are required")
+      return apiError("invalid_request", "event_id, email, and items are required", 400)
     }
 
     // Validate event
@@ -62,11 +59,11 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (!event) {
-      return apiError("resource_not_found", "Event not found")
+      return apiError("not_found", "Event not found", 404)
     }
 
     if (event.status !== "published") {
-      return apiError("invalid_request", "Event is not available for ticket sales")
+      return apiError("invalid_request", "Event is not available for ticket sales", 400)
     }
 
     // Check availability for all items first
@@ -77,7 +74,7 @@ export async function POST(req: NextRequest) {
       })
 
       if (!availability?.available) {
-        return apiError("invalid_request", availability?.error || "Tickets not available")
+        return apiError("inventory_error", availability?.error || "Tickets not available", 400)
       }
     }
 
@@ -95,7 +92,7 @@ export async function POST(req: NextRequest) {
     })
 
     if (orderError || !orderResult?.success) {
-      return apiError("invalid_request", orderResult?.error || orderError?.message || "Failed to create order")
+      return apiError("order_error", orderResult?.error || orderError?.message || "Failed to create order", 400)
     }
 
     // If order is free, complete immediately
@@ -115,16 +112,10 @@ export async function POST(req: NextRequest) {
       }
 
       if (idempotencyKey) {
-        await storeIdempotentResponse(
-          req,
-          authResult.tenant_id,
-          authResult.api_key_id,
-          { status: 201, body: response },
-          Date.now() - startTime
-        )
+        await storeIdempotentResponse(authResult.tenant_id, idempotencyKey, response)
       }
 
-      return apiSuccess(response, { status: 201 })
+      return apiSuccess(response, {}, 201)
     }
 
     // Create Stripe Checkout Session
@@ -187,18 +178,12 @@ export async function POST(req: NextRequest) {
     }
 
     if (idempotencyKey) {
-      await storeIdempotentResponse(
-        req,
-        authResult.tenant_id,
-        authResult.api_key_id,
-        { status: 201, body: response },
-        Date.now() - startTime
-      )
+      await storeIdempotentResponse(authResult.tenant_id, idempotencyKey, response)
     }
 
-    return apiSuccess(response, { status: 201 })
+    return apiSuccess(response, {}, 201)
   } catch (error) {
     console.error("[API] Ticket Purchase error:", error)
-    return apiError("internal_error", "An unexpected error occurred")
+    return apiError("internal_error", "An unexpected error occurred", 500)
   }
 }

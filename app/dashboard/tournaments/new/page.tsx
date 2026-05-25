@@ -13,19 +13,19 @@ export default async function CreateTournamentPage() {
 
   // Check authorization - staff role OR profile role
   const { data: staffRole } = await supabase
-    .from("organization_members")
-    .select("role:role_key")
+    .from("staff_roles")
+    .select("role")
     .eq("user_id", user.id)
     .single()
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role:role_key")
+    .select("role")
     .eq("id", user.id)
     .single()
 
-  const staffAllowed = staffRole && ["owner", "manager", "organizer", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_MANAGER", "DEPARTMENT_MANAGER", "PLATFORM_OWNER"].includes(staffRole.role)
-  const profileAllowed = profile && ["admin", "organizer", "owner", "TENANT_ADMIN", "DEPARTMENT_ADMIN", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "PLATFORM_OWNER"].includes(profile.role ?? "")
+  const staffAllowed = staffRole && ["owner", "manager", "organizer"].includes(staffRole.role)
+  const profileAllowed = profile && ["admin", "organizer", "owner"].includes(profile.role ?? "")
   const canOrganize = staffAllowed || profileAllowed
 
   if (!canOrganize) {
