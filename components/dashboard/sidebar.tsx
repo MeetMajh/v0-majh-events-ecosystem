@@ -301,7 +301,7 @@ export function DashboardSidebar({
     .filter(section => section.items.length > 0)
 
   return (
-    <aside className="hidden w-64 flex-col border-r border-sidebar-border bg-sidebar md:flex">
+    <aside className="hidden w-64 flex-col border-r border-sidebar-border bg-sidebar md:flex h-screen sticky top-0">
       <div className="p-4">
         <Logo />
       </div>
@@ -320,7 +320,12 @@ export function DashboardSidebar({
 
         {/* Dynamic sections based on permissions */}
         {visibleSections.map((section) => (
-          <div key={section.id}>
+          <div 
+            key={section.id}
+            onClick={(e) => {
+              console.log("[v0] Section div clicked:", section.title, "target:", (e.target as HTMLElement).tagName)
+            }}
+          >
             <div className="my-3 border-t border-sidebar-border" />
             <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
               {section.title}
