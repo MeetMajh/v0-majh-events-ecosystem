@@ -315,7 +315,7 @@ export function PermissionManagerClient({
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <label className="text-sm font-medium">Current Role</label>
-              <div>{getRoleBadge(getEffectiveRole(selectedUser!))}</div>
+<div>{selectedUser && getRoleBadge(getEffectiveRole(selectedUser))}</div>
             </div>
 
             <div className="space-y-2">
