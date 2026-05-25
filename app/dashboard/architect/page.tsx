@@ -11,15 +11,26 @@ export default async function ArchitectPage() {
     redirect("/auth/login?next=/dashboard/architect")
   }
 
-  // Verify platform/tenant executive authority
-  const { data: staffRole } = await supabase
+  // Attempt to Verify platform/tenant executive authority via T-204 Organization Members
+  let authorizedRole = null;
+  const { data: orgRole } = await supabase
     .from("organization_members")
     .select("role_key")
     .eq("user_id", user.id)
     .in("role_key", ["PLATFORM_OWNER", "TENANT_OWNER", "TENANT_SUPER_ADMIN"])
     .single()
 
-  if (!staffRole) {
+  if (orgRole) {
+    authorizedRole = orgRole.role_key;
+  } else {
+    // Fallback: Check Legacy Profiles for Owner/Admin
+    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+    if (profile && ["owner", "admin", "PLATFORM_OWNER"].includes(profile.role)) {
+       authorizedRole = profile.role === "owner" ? "PLATFORM_OWNER (Legacy)" : "TENANT_ADMIN (Legacy)";
+    }
+  }
+
+  if (!authorizedRole) {
     redirect("/dashboard?error=unauthorized_architect")
   }
 
@@ -35,7 +46,7 @@ export default async function ArchitectPage() {
             </p>
           </div>
           <div className="text-xs bg-primary/10 text-primary px-3 py-1 rounded-full border border-primary/20 font-medium">
-            Authorization: {staffRole.role_key}
+            Authorization: {authorizedRole}
           </div>
         </div>
 
