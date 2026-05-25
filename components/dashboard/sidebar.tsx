@@ -245,9 +245,18 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
     ? pathname === "/dashboard"
     : pathname.startsWith(item.href)
 
+  console.log("[v0] NavLink:", item.label, "href:", item.href, "disabled:", item.disabled)
+
   return (
     <Link
       href={item.disabled ? "#" : item.href}
+      onClick={(e) => {
+        console.log("[v0] NavLink clicked:", item.label, "href:", item.href)
+        if (item.disabled) {
+          e.preventDefault()
+          console.log("[v0] Click prevented - item disabled")
+        }
+      }}
       className={cn(
         "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
         isActive
