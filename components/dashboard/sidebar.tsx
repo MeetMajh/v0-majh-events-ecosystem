@@ -158,9 +158,9 @@ export function DashboardSidebar({
   isOrganizer?: boolean
 }) {
   const pathname = usePathname()
-  const isStaff = userRole === "owner" || userRole === "manager" || userRole === "staff"
+  const isStaff = ["owner", "manager", "staff", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_ADMIN", "TENANT_MANAGER", "DEPARTMENT_ADMIN", "DEPARTMENT_MANAGER", "DEPARTMENT_STAFF", "PLATFORM_OWNER"].includes(userRole as string)
   const canOrganize = isStaff || userRole === "organizer" || isOrganizer
-  const isManager = userRole === "owner" || userRole === "manager"
+  const isManager = ["owner", "manager", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_ADMIN", "TENANT_MANAGER", "DEPARTMENT_ADMIN", "DEPARTMENT_MANAGER", "PLATFORM_OWNER"].includes(userRole as string)
 
   const adminItems = isStaff
     ? ADMIN_ITEMS.filter((item) => {
