@@ -21,23 +21,47 @@ async function getMyEvents(userId: string) {
   const supabase = await createClient()
   const adminClient = createAdminClient()
 
-  // PRIMARY: Get matches directly using user.id (matches store auth user IDs)
-  // Use adminClient to bypass RLS restrictions
-  const { data: matchData } = await adminClient
-    .from("tournament_matches")
-    .select(`
-      id,
-      tournament_id,
-      status,
-      result,
-      player1_id,
-      player2_id,
-      winner_id,
-      tournament_rounds (round_number, status)
-    `)
-    .or(`player1_id.eq.${userId},player2_id.eq.${userId}`)
-    .order("created_at", { ascending: false })
-    .limit(50)
+  // Run initial queries in parallel
+  const [matchResult, registrationResult, participantResult] = await Promise.all([
+    // Get matches directly using user.id
+    adminClient
+      .from("tournament_matches")
+      .select(`
+        id,
+        tournament_id,
+        status,
+        result,
+        player1_id,
+        player2_id,
+        winner_id,
+        tournament_rounds (round_number, status)
+      `)
+      .or(`player1_id.eq.${userId},player2_id.eq.${userId}`)
+      .order("created_at", { ascending: false })
+      .limit(50),
+    
+    // Get registrations
+    adminClient
+      .from("tournament_registrations")
+      .select("player_id, tournament_id")
+      .eq("player_id", userId),
+    
+    // Get from tournament_participants
+    adminClient
+      .from("tournament_participants")
+      .select(`
+        *,
+        tournaments (
+          id, name, slug, status, start_date, end_date, game_id
+        )
+      `)
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+  ])
+
+  const matchData = matchResult.data
+  const registrationRecords = registrationResult.data
+  const participantRegs = participantResult.data
   
   // Fetch opponent profiles
   const allPlayerIds = new Set<string>()
@@ -45,18 +69,34 @@ async function getMyEvents(userId: string) {
     if (m.player1_id) allPlayerIds.add(m.player1_id)
     if (m.player2_id) allPlayerIds.add(m.player2_id)
   })
-  
-  let profilesMap: Record<string, { id: string; first_name: string | null; last_name: string | null; avatar_url: string | null }> = {}
-  if (allPlayerIds.size > 0) {
-    const { data: profiles } = await adminClient
-      .from("profiles")
-      .select("id, first_name, last_name, avatar_url")
-      .in("id", Array.from(allPlayerIds))
+
+  // Get unique tournament IDs from matches
+  const tournamentIdsFromMatches = [...new Set((matchData || []).map(m => m.tournament_id).filter(Boolean))]
+
+  // Run secondary queries in parallel
+  const [profilesResult, tournamentsResult] = await Promise.all([
+    // Fetch profiles if we have player IDs
+    allPlayerIds.size > 0
+      ? adminClient
+          .from("profiles")
+          .select("id, first_name, last_name, avatar_url")
+          .in("id", Array.from(allPlayerIds))
+      : Promise.resolve({ data: [] }),
     
-    profiles?.forEach(p => {
-      profilesMap[p.id] = p
-    })
-  }
+    // Fetch tournaments from matches
+    tournamentIdsFromMatches.length > 0
+      ? adminClient
+          .from("tournaments")
+          .select(`id, name, slug, status, start_date, end_date, game_id`)
+          .in("id", tournamentIdsFromMatches)
+          .order("start_date", { ascending: false })
+      : Promise.resolve({ data: [] })
+  ])
+
+  let profilesMap: Record<string, { id: string; first_name: string | null; last_name: string | null; avatar_url: string | null }> = {}
+  profilesResult.data?.forEach(p => {
+    profilesMap[p.id] = p
+  })
   
   // Attach profile data to matches
   const matches = (matchData || []).map(m => ({
@@ -64,12 +104,6 @@ async function getMyEvents(userId: string) {
     player1: m.player1_id ? profilesMap[m.player1_id] : null,
     player2: m.player2_id ? profilesMap[m.player2_id] : null,
   }))
-
-  // Get registrations for additional tournament info
-  const { data: registrationRecords } = await adminClient
-    .from("tournament_registrations")
-    .select("player_id, tournament_id")
-    .eq("player_id", userId)
 
   // playerIds for leaderboard/results queries
   const playerIds = [userId]
@@ -84,22 +118,7 @@ async function getMyEvents(userId: string) {
     }
   })
 
-  // Get unique tournament IDs from matches
-  const tournamentIdsFromMatches = [...new Set(matches.map(m => m.tournament_id).filter(Boolean))]
-
-  // Fetch tournament details for tournaments the user has matches in
-  let tournamentsFromMatches: any[] = []
-  if (tournamentIdsFromMatches.length > 0) {
-    const { data: tournamentData } = await adminClient
-      .from("tournaments")
-      .select(`
-        id, name, slug, status, start_date, end_date, game_id
-      `)
-      .in("id", tournamentIdsFromMatches)
-      .order("start_date", { ascending: false })
-    
-    tournamentsFromMatches = tournamentData || []
-  }
+  const tournamentsFromMatches = tournamentsResult.data || []
 
   // Build registration-like objects from match data
   const registrations = tournamentsFromMatches.map(tournament => ({
@@ -111,18 +130,6 @@ async function getMyEvents(userId: string) {
     tournaments: tournament
   }))
 
-  // SECONDARY: Get from tournament_participants (the correct table with user_id)
-  const { data: participantRegs } = await adminClient
-    .from("tournament_participants")
-    .select(`
-      *,
-      tournaments (
-        id, name, slug, status, start_date, end_date, game_id
-      )
-    `)
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false })
-
   // Merge registrations, preferring participant records if they exist
   const existingTournamentIds = new Set(registrations.map(r => r.tournament_id))
   participantRegs?.forEach(reg => {
@@ -131,41 +138,34 @@ async function getMyEvents(userId: string) {
     }
   })
 
-  // Get user's leaderboard entries (using playerIds)
-  let leaderboardEntries: any[] = []
-  if (playerIds.length > 0) {
-    const { data } = await adminClient
-      .from("leaderboard_entries")
-      .select(`
-        *,
-        games (id, name, category, icon_url)
-      `)
-      .in("player_id", playerIds)
-      .order("ranking_points", { ascending: false })
-    leaderboardEntries = data || []
-  }
-
-  // Get user's tournament results (using playerIds)
-  let results: any[] = []
-  if (playerIds.length > 0) {
-    const { data } = await adminClient
-      .from("tournament_results")
-      .select(`
-        *,
-        tournaments (id, name, slug, start_date, games (name))
-      `)
-      .in("player_id", playerIds)
-      .order("created_at", { ascending: false })
-      .limit(10)
-    results = data || []
-  }
+  // Run final queries in parallel
+  const [leaderboardResult, resultsResult] = await Promise.all([
+    // Get user's leaderboard entries
+    playerIds.length > 0
+      ? adminClient
+          .from("leaderboard_entries")
+          .select(`*, games (id, name, category, icon_url)`)
+          .in("player_id", playerIds)
+          .order("ranking_points", { ascending: false })
+      : Promise.resolve({ data: [] }),
+    
+    // Get user's tournament results
+    playerIds.length > 0
+      ? adminClient
+          .from("tournament_results")
+          .select(`*, tournaments (id, name, slug, start_date, games (name))`)
+          .in("player_id", playerIds)
+          .order("created_at", { ascending: false })
+          .limit(10)
+      : Promise.resolve({ data: [] })
+  ])
 
   return {
     registrations: registrations ?? [],
     matches: matches ?? [],
-    leaderboardEntries,
-    results,
-    playerMap, // Pass the map for UI to check player identity
+    leaderboardEntries: leaderboardResult.data || [],
+    results: resultsResult.data || [],
+    playerMap,
   }
 }
 
