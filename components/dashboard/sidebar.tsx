@@ -245,21 +245,11 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
     ? pathname === "/dashboard"
     : pathname.startsWith(item.href)
 
-  console.log("[v0] NavLink:", item.label, "href:", item.href, "disabled:", item.disabled)
-
-  // Using native <a> tag temporarily to debug Link issues
   return (
-    <a
+    <Link
       href={item.disabled ? "#" : item.href}
-      onClick={(e) => {
-        console.log("[v0] NavLink clicked:", item.label, "href:", item.href)
-        if (item.disabled) {
-          e.preventDefault()
-          console.log("[v0] Click prevented - item disabled")
-        }
-      }}
       className={cn(
-        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors cursor-pointer",
+        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
         isActive
           ? "bg-sidebar-accent text-sidebar-primary"
           : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
@@ -267,6 +257,7 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
       )}
       aria-current={isActive ? "page" : undefined}
       aria-disabled={item.disabled}
+      onClick={item.disabled ? (e) => e.preventDefault() : undefined}
     >
       <item.icon className="h-4 w-4" />
       {item.label}
@@ -275,7 +266,7 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
           Soon
         </span>
       )}
-    </a>
+    </Link>
   )
 }
 
@@ -309,9 +300,6 @@ export function DashboardSidebar({
       <nav 
         className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-2" 
         aria-label="Dashboard navigation"
-        onClick={(e) => {
-          console.log("[v0] Nav container clicked, target:", (e.target as HTMLElement).tagName, (e.target as HTMLElement).className)
-        }}
       >
         {/* Base navigation items */}
         {BASE_NAV_ITEMS.map((item) => (
@@ -320,12 +308,7 @@ export function DashboardSidebar({
 
         {/* Dynamic sections based on permissions */}
         {visibleSections.map((section) => (
-          <div 
-            key={section.id}
-            onClick={(e) => {
-              console.log("[v0] Section div clicked:", section.title, "target:", (e.target as HTMLElement).tagName)
-            }}
-          >
+          <div key={section.id}>
             <div className="my-3 border-t border-sidebar-border" />
             <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
               {section.title}
