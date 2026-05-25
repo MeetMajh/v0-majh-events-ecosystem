@@ -247,8 +247,9 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
 
   console.log("[v0] NavLink:", item.label, "href:", item.href, "disabled:", item.disabled)
 
+  // Using native <a> tag temporarily to debug Link issues
   return (
-    <Link
+    <a
       href={item.disabled ? "#" : item.href}
       onClick={(e) => {
         console.log("[v0] NavLink clicked:", item.label, "href:", item.href)
@@ -258,7 +259,7 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
         }
       }}
       className={cn(
-        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors cursor-pointer",
         isActive
           ? "bg-sidebar-accent text-sidebar-primary"
           : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
@@ -274,7 +275,7 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
           Soon
         </span>
       )}
-    </Link>
+    </a>
   )
 }
 
@@ -305,7 +306,13 @@ export function DashboardSidebar({
         <Logo />
       </div>
 
-      <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-2" aria-label="Dashboard navigation">
+      <nav 
+        className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-2" 
+        aria-label="Dashboard navigation"
+        onClick={(e) => {
+          console.log("[v0] Nav container clicked, target:", (e.target as HTMLElement).tagName, (e.target as HTMLElement).className)
+        }}
+      >
         {/* Base navigation items */}
         {BASE_NAV_ITEMS.map((item) => (
           <NavLink key={item.href} item={item} pathname={pathname} />
