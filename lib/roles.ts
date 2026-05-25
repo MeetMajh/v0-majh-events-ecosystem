@@ -170,3 +170,27 @@ export function isAdminRole(role: string | null): boolean {
     role === "TENANT_ADMIN"
   )
 }
+// The deploy hasn't picked up the latest roles.ts — possible if a stale node_modules or build cache is in play
+
+Quickest way to find out: drop a temporary log into requireRole. Edit lib/roles.ts:
+export async function requireRole(allowed: UserRole[]): Promise<{ role: UserRole; userId: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect("/auth/login")
+
+  const { data, error } = await supabase
+    .from("staff_roles")
+    .select("role")
+    .eq("user_id", user.id)
+    .single()
+
+  // TEMP DEBUG
+  console.log("[requireRole]", {
+    userId: user.id,
+    rawRole: data?.role,
+    queryError: error?.message,
+    allowed,
+  })
+
+  const rawRole = data?.role as string | undefined
+  // ... rest unchanged
