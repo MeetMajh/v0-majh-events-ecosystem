@@ -64,24 +64,29 @@ export async function getUnifiedRole(): Promise<string | null> {
   return data?.role ?? null
 }
 
+import { getUserPermissions } from "@/lib/authorization"
+
 export async function requireRole(allowed: UserRole[]): Promise<{ role: UserRole; userId: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect("/auth/login")
+  const permissions = await getUserPermissions()
 
-  const { data, error } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .single()
+  if (!permissions) {
+    redirect("/auth/login")
+  }
 
-  // TEMP DEBUG — remove after diagnosing the redirect
-  console.log("[requireRole]", {
-    userId: user.id,
-    rawRole: data?.role,
-    queryError: error?.message,
-    allowed,
-  })
+  // Platform-level users (PLATFORM_OWNER, PLATFORM_ADMIN) always pass
+  if (permissions.isPlatformLevel) {
+    return { role: "owner", userId: permissions.userId }
+  }
+
+  // Otherwise map the unified role down to the legacy role
+  const legacyRole = mapToLegacyRole(permissions.unifiedRole)
+
+  if (!legacyRole || !allowed.includes(legacyRole)) {
+    redirect("/dashboard")
+  }
+
+  return { role: legacyRole, userId: permissions.userId }
+}
 
   const rawRole = data?.role as string | undefined
   const role = mapToLegacyRole(rawRole ?? null)
