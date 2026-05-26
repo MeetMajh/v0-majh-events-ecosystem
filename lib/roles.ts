@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
+import { getUserPermissions } from "@/lib/authorization"
 
 export type UserRole = "owner" | "manager" | "staff"
 export type PlatformRole = "PLATFORM_OWNER" | "PLATFORM_ADMIN"
@@ -64,8 +65,6 @@ export async function getUnifiedRole(): Promise<string | null> {
   return data?.role ?? null
 }
 
-import { getUserPermissions } from "@/lib/authorization"
-
 export async function requireRole(allowed: UserRole[]): Promise<{ role: UserRole; userId: string }> {
   const permissions = await getUserPermissions()
 
@@ -86,27 +85,6 @@ export async function requireRole(allowed: UserRole[]): Promise<{ role: UserRole
   }
 
   return { role: legacyRole, userId: permissions.userId }
-}
-
-  const rawRole = data?.role as string | undefined
-  const role = mapToLegacyRole(rawRole ?? null)
-
-  const isT204Allowed = rawRole && (
-    rawRole.startsWith("PLATFORM_") ||
-    rawRole === "TENANT_OWNER" ||
-    rawRole === "TENANT_SUPER_ADMIN" ||
-    (role && allowed.includes(role))
-  )
-
-  if (!role && !isT204Allowed) {
-    redirect("/dashboard")
-  }
-
-  if (role && !allowed.includes(role) && !isT204Allowed) {
-    redirect("/dashboard")
-  }
-
-  return { role: role || "owner", userId: user.id }
 }
 
 export function canManageMenu(role: UserRole | string) {
