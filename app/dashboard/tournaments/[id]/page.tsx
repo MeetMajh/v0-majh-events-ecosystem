@@ -37,8 +37,8 @@ export default async function TournamentControllerPage({
     .eq("user_id", user.id)
     .single()
 
-  const isStaff = staffRole && ["owner", "manager", "organizer"].includes(staffRole.role)
-  const isCreator = tournament.created_by === user.id
+const ALLOWED_STAFF_ROLES = ["owner", "manager", "organizer", "PLATFORM_OWNER", "PLATFORM_ADMIN", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_ADMIN", "TENANT_MANAGER"]
+const isStaff = staffRole && ALLOWED_STAFF_ROLES.includes(staffRole.role)  const isCreator = tournament.created_by === user.id
 
   if (!isStaff && !isCreator) {
     redirect("/dashboard/tournaments")
