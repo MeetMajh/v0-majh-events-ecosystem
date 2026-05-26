@@ -158,8 +158,8 @@ export async function createTournament(formData: FormData) {
     .eq("id", user.id)
     .single()
 
-  const allowedStaffRoles = ["owner", "manager", "organizer"]
-  const allowedProfileRoles = ["admin", "organizer", "owner"]
+  const allowedStaffRoles = ["owner", "manager", "organizer", "PLATFORM_OWNER", "PLATFORM_ADMIN", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_ADMIN", "TENANT_MANAGER"]
+  const allowedProfileRoles = ["admin", "organizer", "owner", "PLATFORM_OWNER", "PLATFORM_ADMIN", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_ADMIN", "TENANT_MANAGER"]
   const staffAllowed = staffRole && allowedStaffRoles.includes(staffRole.role)
   const profileAllowed = profile && allowedProfileRoles.includes(profile.role ?? "")
   
