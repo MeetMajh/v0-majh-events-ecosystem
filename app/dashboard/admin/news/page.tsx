@@ -1,6 +1,5 @@
-import { redirect } from "next/navigation"
 import Link from "next/link"
-import { createClient } from "@/lib/supabase/server"
+import { requireStaff } from "@/lib/auth/require-staff"
 import { getAllArticlesAdmin, getNewsCategories } from "@/lib/content-actions"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -21,22 +20,7 @@ export const metadata = {
 }
 
 export default async function NewsAdminPage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  
-  if (!user) redirect("/auth/sign-in")
-  
-  const ALLOWED_NEWS_ROLES = ["owner", "manager", "staff", "PLATFORM_OWNER", "PLATFORM_ADMIN", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_ADMIN", "TENANT_MANAGER", "TENANT_STAFF"]
-  
-  const { data: staffRole } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .single()
-  
-  if (!staffRole || !ALLOWED_NEWS_ROLES.includes(staffRole.role)) {
-    redirect("/dashboard")
-  }
+  await requireStaff("staff")
   
   const [articles, categories] = await Promise.all([
     getAllArticlesAdmin(),
