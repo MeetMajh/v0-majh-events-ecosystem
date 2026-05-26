@@ -39,10 +39,10 @@ export default async function TournamentsDashboardPage() {
     .single()
 
   const ALLOWED_STAFF_ROLES = ["owner", "manager", "organizer", "PLATFORM_OWNER", "PLATFORM_ADMIN", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_ADMIN", "TENANT_MANAGER"]
-const ALLOWED_PROFILE_ROLES = ["admin", "organizer", "owner", "PLATFORM_OWNER", "PLATFORM_ADMIN", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_ADMIN", "TENANT_MANAGER"]
+  const ALLOWED_PROFILE_ROLES = ["admin", "organizer", "owner", "PLATFORM_OWNER", "PLATFORM_ADMIN", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_ADMIN", "TENANT_MANAGER"]
 
-const staffAllowed = staffRole && ALLOWED_STAFF_ROLES.includes(staffRole.role)
-const profileAllowed = profile && ALLOWED_PROFILE_ROLES.includes(profile.role ?? "")
+  const staffAllowed = staffRole && ALLOWED_STAFF_ROLES.includes(staffRole.role)
+  const profileAllowed = profile && ALLOWED_PROFILE_ROLES.includes(profile.role ?? "")
   const canOrganize = staffAllowed || profileAllowed
 
   // Get tournaments user has created or has TO access to
