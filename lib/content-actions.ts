@@ -2,16 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
-import { redirect } from "next/navigation"
-
-async function requireStaffRole(allowed: string[]) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect("/auth/login")
-  const { data } = await supabase.from("staff_roles").select("role").eq("user_id", user.id).single()
-  if (!data || !allowed.includes(data.role)) redirect("/dashboard")
-  return { supabase, userId: user.id }
-}
+import { requireStaffAction } from "@/lib/auth/require-staff"
 
 // ── News Articles ──
 
@@ -47,15 +38,14 @@ export async function getArticleBySlug(slug: string) {
     .select("*, profiles!news_articles_author_id_fkey(first_name, last_name, avatar_url), news_categories(name, slug, color)")
     .eq("slug", slug)
     .single()
-  
-  // Increment view count
+
   if (data) {
     await supabase
       .from("news_articles")
       .update({ view_count: (data.view_count || 0) + 1 })
       .eq("id", data.id)
   }
-  
+
   return data
 }
 
@@ -69,7 +59,7 @@ export async function getAllArticlesAdmin() {
 }
 
 export async function createArticle(formData: FormData) {
-  const { supabase, userId } = await requireStaffRole(["owner", "manager", "staff"])
+  const { supabase, userId } = await requireStaffAction("staff")
   const title = formData.get("title") as string
   const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
   const isPublished = formData.get("is_published") === "on"
@@ -97,12 +87,11 @@ export async function createArticle(formData: FormData) {
 }
 
 export async function updateArticle(formData: FormData) {
-  const { supabase } = await requireStaffRole(["owner", "manager", "staff"])
+  const { supabase } = await requireStaffAction("staff")
   const id = formData.get("id") as string
   const isPublished = formData.get("is_published") === "on"
   const isFeatured = formData.get("featured") === "on"
 
-  // Get current article to check publish state
   const { data: current } = await supabase
     .from("news_articles")
     .select("is_published, published_at")
@@ -118,8 +107,7 @@ export async function updateArticle(formData: FormData) {
     category_id: formData.get("category_id") as string || null,
     is_published: isPublished,
     featured: isFeatured,
-    // Only set published_at if newly published
-    published_at: isPublished 
+    published_at: isPublished
       ? (current?.is_published ? current.published_at : new Date().toISOString())
       : null,
     updated_at: new Date().toISOString(),
@@ -132,12 +120,12 @@ export async function updateArticle(formData: FormData) {
 }
 
 export async function toggleArticleFeatured(id: string, featured: boolean) {
-  const { supabase } = await requireStaffRole(["owner", "manager"])
+  const { supabase } = await requireStaffAction("manager")
   const { error } = await supabase
     .from("news_articles")
     .update({ featured })
     .eq("id", id)
-  
+
   if (error) return { error: error.message }
   revalidatePath("/news")
   revalidatePath("/dashboard/admin/news")
@@ -145,7 +133,7 @@ export async function toggleArticleFeatured(id: string, featured: boolean) {
 }
 
 export async function deleteArticle(id: string) {
-  const { supabase } = await requireStaffRole(["owner", "manager"])
+  const { supabase } = await requireStaffAction("manager")
   await supabase.from("news_articles").delete().eq("id", id)
   revalidatePath("/news")
   revalidatePath("/dashboard/admin/news")
@@ -165,7 +153,7 @@ export async function getLivestreams() {
 }
 
 export async function createLivestream(formData: FormData) {
-  const { supabase } = await requireStaffRole(["owner", "manager"])
+  const { supabase } = await requireStaffAction("manager")
   const url = formData.get("embed_url") as string
   let platform: string = "other"
   if (url.includes("twitch")) platform = "twitch"
@@ -188,14 +176,14 @@ export async function createLivestream(formData: FormData) {
 }
 
 export async function toggleLiveStatus(id: string, isLive: boolean) {
-  const { supabase } = await requireStaffRole(["owner", "manager"])
+  const { supabase } = await requireStaffAction("manager")
   await supabase.from("livestreams").update({ is_live: isLive }).eq("id", id)
   revalidatePath("/live")
   return { success: true }
 }
 
 export async function deleteLivestream(id: string) {
-  const { supabase } = await requireStaffRole(["owner", "manager"])
+  const { supabase } = await requireStaffAction("manager")
   await supabase.from("livestreams").delete().eq("id", id)
   revalidatePath("/live")
   return { success: true }
@@ -218,7 +206,7 @@ export async function getCalendarEvents(startDate?: string, endDate?: string) {
 }
 
 export async function createCalendarEvent(formData: FormData) {
-  const { supabase } = await requireStaffRole(["owner", "manager"])
+  const { supabase } = await requireStaffAction("manager")
   const { error } = await supabase.from("event_calendar").insert({
     title: formData.get("title") as string,
     description: formData.get("description") as string,
@@ -237,7 +225,7 @@ export async function createCalendarEvent(formData: FormData) {
 }
 
 export async function deleteCalendarEvent(id: string) {
-  const { supabase } = await requireStaffRole(["owner", "manager"])
+  const { supabase } = await requireStaffAction("manager")
   await supabase.from("event_calendar").delete().eq("id", id)
   revalidatePath("/calendar")
   return { success: true }
@@ -256,7 +244,7 @@ export async function getSponsors() {
 }
 
 export async function createSponsor(formData: FormData) {
-  const { supabase } = await requireStaffRole(["owner", "manager"])
+  const { supabase } = await requireStaffAction("manager")
   const name = formData.get("name") as string
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
 
@@ -275,7 +263,7 @@ export async function createSponsor(formData: FormData) {
 }
 
 export async function linkSponsorToTournament(formData: FormData) {
-  const { supabase } = await requireStaffRole(["owner", "manager"])
+  const { supabase } = await requireStaffAction("manager")
   const { error } = await supabase.from("tournament_sponsors").insert({
     tournament_id: formData.get("tournament_id") as string,
     sponsor_id: formData.get("sponsor_id") as string,
@@ -319,7 +307,7 @@ export async function getContactSubmissions() {
 }
 
 export async function updateContactStatus(id: string, status: string) {
-  const { supabase } = await requireStaffRole(["owner", "manager"])
+  const { supabase } = await requireStaffAction("manager")
   await supabase.from("contact_submissions").update({ status }).eq("id", id)
   revalidatePath("/dashboard/admin/contacts")
   return { success: true }
@@ -356,7 +344,7 @@ export async function getRecruitmentApplications() {
 }
 
 export async function updateApplicationStatus(id: string, status: string) {
-  const { supabase } = await requireStaffRole(["owner", "manager"])
+  const { supabase } = await requireStaffAction("manager")
   await supabase.from("recruitment_applications").update({ status }).eq("id", id)
   revalidatePath("/dashboard/admin/recruitment")
   return { success: true }
@@ -414,7 +402,6 @@ export async function createThread(formData: FormData) {
 
   if (error) return { error: error.message }
 
-  // Add first reply as the thread body
   const body = formData.get("body") as string
   if (body) {
     await supabase.from("forum_replies").insert({
@@ -433,7 +420,6 @@ export async function createReply(threadId: string, content: string) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: "You must be signed in" }
 
-  // Check if thread is locked
   const { data: thread } = await supabase.from("forum_threads").select("is_locked").eq("id", threadId).single()
   if (thread?.is_locked) return { error: "This thread is locked" }
 
@@ -449,14 +435,14 @@ export async function createReply(threadId: string, content: string) {
 }
 
 export async function togglePinThread(threadId: string, isPinned: boolean) {
-  const { supabase } = await requireStaffRole(["owner", "manager"])
+  const { supabase } = await requireStaffAction("manager")
   await supabase.from("forum_threads").update({ is_pinned: isPinned }).eq("id", threadId)
   revalidatePath("/community")
   return { success: true }
 }
 
 export async function toggleLockThread(threadId: string, isLocked: boolean) {
-  const { supabase } = await requireStaffRole(["owner", "manager"])
+  const { supabase } = await requireStaffAction("manager")
   await supabase.from("forum_threads").update({ is_locked: isLocked }).eq("id", threadId)
   revalidatePath("/community")
   return { success: true }
