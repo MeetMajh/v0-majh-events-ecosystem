@@ -14,13 +14,15 @@ export default async function NewArticlePage() {
   
   if (!user) redirect("/auth/sign-in")
   
+const ALLOWED_NEWS_ROLES = ["owner", "manager", "staff", "PLATFORM_OWNER", "PLATFORM_ADMIN", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_ADMIN", "TENANT_MANAGER", "TENANT_STAFF"]
+  
   const { data: staffRole } = await supabase
     .from("staff_roles")
     .select("role")
     .eq("user_id", user.id)
     .single()
   
-  if (!staffRole || !["owner", "manager", "staff"].includes(staffRole.role)) {
+  if (!staffRole || !ALLOWED_NEWS_ROLES.includes(staffRole.role)) {
     redirect("/dashboard")
   }
   
