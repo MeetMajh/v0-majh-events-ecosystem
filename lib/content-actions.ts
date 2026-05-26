@@ -51,10 +51,17 @@ export async function getArticleBySlug(slug: string) {
 
 export async function getAllArticlesAdmin() {
   const supabase = await createClient()
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("news_articles")
     .select("*, profiles!news_articles_author_id_fkey(first_name, last_name), news_categories(name, slug, color)")
     .order("created_at", { ascending: false })
+  
+  console.log("[getAllArticlesAdmin]", { 
+    rowCount: data?.length ?? 0, 
+    error: error?.message ?? null,
+    firstRow: data?.[0] ? { id: data[0].id, title: data[0].title } : null
+  })
+  
   return data ?? []
 }
 
