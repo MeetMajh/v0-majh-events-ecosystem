@@ -47,3 +47,20 @@ export async function requireStaff(
 
   return { role, userId: permissions.userId }
 }
+
+import { createClient } from "@/lib/supabase/server"
+
+/**
+ * Guard for server actions. Same tier semantics as requireStaff,
+ * but also returns a Supabase client and the user's ID so the
+ * action can use them directly.
+ *
+ *   const { supabase, userId } = await requireStaffAction("staff")
+ */
+export async function requireStaffAction(
+  minimumTier: "staff" | "organizer" | "manager" | "owner" = "staff"
+) {
+  const { role, userId } = await requireStaff(minimumTier)
+  const supabase = await createClient()
+  return { supabase, userId, role }
+}
