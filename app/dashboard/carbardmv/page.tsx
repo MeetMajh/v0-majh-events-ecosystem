@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
-import { requireRole } from "@/lib/roles"
+import { requireStaff } from "@/lib/auth/require-staff"
 import { formatCents } from "@/lib/format"
 import Link from "next/link"
 import {
@@ -17,7 +17,7 @@ import { DatabaseSetup } from "@/components/carbardmv/database-setup"
 export const metadata = { title: "CARBARDMV Overview | Dashboard" }
 
 export default async function CarbardmvOverviewPage() {
-  await requireRole(["owner", "manager", "staff"])
+await requireStaff("staff")
   const supabase = await createClient()
 
   const now = new Date()
