@@ -84,7 +84,6 @@ export default async function InventoryPage() {
       </div>
 
       <div className="flex items-center justify-between">
-       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Inventory Items</h2>
         <NewInventoryItemForm />
       </div>
