@@ -1,5 +1,6 @@
-import { redirect, notFound } from "next/navigation"
+import { notFound } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
+import { requireStaff } from "@/lib/auth/require-staff"
 import { getNewsCategories } from "@/lib/content-actions"
 import { ArticleForm } from "@/components/admin/article-form"
 
@@ -13,23 +14,10 @@ export default async function EditArticlePage({
 }: { 
   params: Promise<{ id: string }> 
 }) {
+  await requireStaff("staff")
+  
   const { id } = await params
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  
-  if (!user) redirect("/auth/sign-in")
-  
- const ALLOWED_NEWS_ROLES = ["owner", "manager", "staff", "PLATFORM_OWNER", "PLATFORM_ADMIN", "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_ADMIN", "TENANT_MANAGER", "TENANT_STAFF"]
-  
-  const { data: staffRole } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .single()
-  
-  if (!staffRole || !ALLOWED_NEWS_ROLES.includes(staffRole.role)) {
-    redirect("/dashboard")
-  }
   
   const [{ data: article }, categories] = await Promise.all([
     supabase
@@ -39,9 +27,9 @@ export default async function EditArticlePage({
       .single(),
     getNewsCategories(),
   ])
-
+  
   if (!article) notFound()
-
+  
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <div>
