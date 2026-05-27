@@ -27,22 +27,6 @@ export default async function InventoryPage() {
     .order("category")
     .order("name")
 
-export default async function InventoryPage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
-  if (!user) redirect("/sign-in")
-
-  const role = await getUserRole(user.id)
-  if (role !== "admin" && role !== "staff") redirect("/dashboard")
-
-  const { data: items } = await supabase
-    .from("cb_inventory_items")
-    .select("*")
-    .eq("is_active", true)
-    .order("category")
-    .order("name")
-
   const lowStockItems = items?.filter((i) => i.current_stock <= i.min_stock) || []
   const totalValue = items?.reduce((sum, i) => sum + (i.current_stock * i.cost_per_unit_cents), 0) || 0
 
@@ -100,83 +84,4 @@ export default async function InventoryPage() {
       </div>
 
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Inventory Items</h2>
-        <NewInventoryItemForm />
-      </div>
-
-      {lowStockItems.length > 0 && (
-        <Card className="border-destructive/50 bg-destructive/5">
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-destructive">
-              <AlertTriangle className="h-5 w-5" />
-              Low Stock Alert
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-2">
-              {lowStockItems.map((item) => (
-                <Badge key={item.id} variant="destructive">
-                  {item.name}: {item.current_stock} {item.unit} (min: {item.min_stock})
-                </Badge>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {items?.map((item) => (
-          <Card key={item.id} className={item.current_stock <= item.min_stock ? "border-destructive/50" : ""}>
-            <CardHeader className="pb-2">
-              <div className="flex items-start justify-between">
-                <div>
-                  <CardTitle className="text-base">{item.name}</CardTitle>
-                  <Badge variant="secondary" className="mt-1">
-                    {CATEGORY_LABELS[item.category] || item.category}
-                  </Badge>
-                </div>
-                <InventoryAdjustment item={item} />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div>
-                  <span className="text-muted-foreground">Stock:</span>{" "}
-                  <span className={item.current_stock <= item.min_stock ? "font-semibold text-destructive" : "font-semibold"}>
-                    {item.current_stock} {item.unit}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Min:</span>{" "}
-                  <span className="font-semibold">{item.min_stock} {item.unit}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Cost:</span>{" "}
-                  <span className="font-semibold">
-                    ${(item.cost_per_unit_cents / 100).toFixed(2)}/{item.unit}
-                  </span>
-                </div>
-                {item.supplier && (
-                  <div>
-                    <span className="text-muted-foreground">Supplier:</span>{" "}
-                    <span className="font-semibold">{item.supplier}</span>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {(!items || items.length === 0) && (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <Boxes className="mb-4 h-12 w-12 text-muted-foreground" />
-            <p className="text-lg font-medium">No inventory items yet</p>
-            <p className="text-muted-foreground">Add your first item to start tracking</p>
-          </CardContent>
-        </Card>
-      )}
-    </div>
-  )
-}
+        <h2 className="text-lg font
