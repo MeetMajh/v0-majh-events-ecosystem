@@ -1,6 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
-import { redirect } from "next/navigation"
-import { getUserRole } from "@/lib/roles"
+import { requireStaff } from "@/lib/auth/require-staff"
 import { DashboardHeader } from "@/components/dashboard/dashboard-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -16,6 +15,17 @@ const CATEGORY_LABELS: Record<string, string> = {
   disposables: "Disposables",
   other: "Other",
 }
+
+export default async function InventoryPage() {
+  await requireStaff("staff")
+  const supabase = await createClient()
+
+  const { data: items } = await supabase
+    .from("cb_inventory_items")
+    .select("*")
+    .eq("is_active", true)
+    .order("category")
+    .order("name")
 
 export default async function InventoryPage() {
   const supabase = await createClient()
