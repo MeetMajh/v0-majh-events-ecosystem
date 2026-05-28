@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
-import { requireRole } from "@/lib/roles"
+import { requireStaff } from "@/lib/auth/require-staff"
 import { formatDate } from "@/lib/format"
 import { Badge } from "@/components/ui/badge"
 import { Mail, Phone, Building2, MapPin, ChevronRight } from "lucide-react"
@@ -16,7 +16,7 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 export default async function ClientsCRMPage() {
-  await requireRole(["owner", "manager", "staff"])
+  await requireStaff("staff")
   const supabase = await createClient()
 
   const { data: clients } = await supabase
