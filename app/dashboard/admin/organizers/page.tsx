@@ -1,11 +1,9 @@
-import { redirect } from "next/navigation"
-import { createClient } from "@/lib/supabase/server"
+import { requireStaff } from "@/lib/auth/require-staff"
 import { getOrganizerRequests, approveOrganizerRequest, rejectOrganizerRequest } from "@/lib/admin-actions"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Textarea } from "@/components/ui/textarea"
 import { AlertCircle, CheckCircle, XCircle, Clock, UserCheck, Users } from "lucide-react"
 import { format } from "date-fns"
 
@@ -14,35 +12,17 @@ export const metadata = {
   description: "Manage tournament organizer requests",
 }
 
-async function checkAccess() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect("/auth/login")
-
-  const { data: role } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .single()
-
-  if (!role || !["owner", "manager"].includes(role.role)) {
-    redirect("/dashboard")
-  }
-  return user
-}
-
 export default async function OrganizersPage({
   searchParams,
 }: {
   searchParams: Promise<{ error?: string; success?: string; filter?: string }>
 }) {
-  await checkAccess()
+  await requireStaff("manager")
   const params = await searchParams
   
   const filter = params.filter || "pending"
   const requests = await getOrganizerRequests(filter === "all" ? undefined : filter)
   
-  // Get stats
   const allRequests = await getOrganizerRequests()
   const pendingCount = allRequests.filter(r => r.status === "pending").length
   const approvedCount = allRequests.filter(r => r.status === "approved").length
@@ -71,7 +51,6 @@ export default async function OrganizersPage({
         </div>
       )}
 
-      {/* Stats */}
       <div className="grid gap-4 sm:grid-cols-3">
         <Card className="border-border bg-card">
           <CardContent className="flex items-center gap-3 p-4">
@@ -108,9 +87,8 @@ export default async function OrganizersPage({
         </Card>
       </div>
 
-      {/* Filter Tabs */}
       <div className="flex gap-2">
-        <a
+        
           href="/dashboard/admin/organizers?filter=pending"
           className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
             filter === "pending"
@@ -120,7 +98,7 @@ export default async function OrganizersPage({
         >
           Pending ({pendingCount})
         </a>
-        <a
+        
           href="/dashboard/admin/organizers?filter=approved"
           className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
             filter === "approved"
@@ -130,7 +108,7 @@ export default async function OrganizersPage({
         >
           Approved
         </a>
-        <a
+        
           href="/dashboard/admin/organizers?filter=rejected"
           className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
             filter === "rejected"
@@ -140,7 +118,7 @@ export default async function OrganizersPage({
         >
           Rejected
         </a>
-        <a
+        
           href="/dashboard/admin/organizers?filter=all"
           className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
             filter === "all"
@@ -152,7 +130,6 @@ export default async function OrganizersPage({
         </a>
       </div>
 
-      {/* Requests List */}
       {requests.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center justify-center py-12">
