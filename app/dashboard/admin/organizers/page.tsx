@@ -12,6 +12,12 @@ export const metadata = {
   description: "Manage tournament organizer requests",
 }
 
+function tabClass(isActive: boolean): string {
+  const base = "rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+  if (isActive) return base + " bg-primary text-primary-foreground"
+  return base + " bg-muted text-muted-foreground hover:bg-muted/80"
+}
+
 export default async function OrganizersPage({
   searchParams,
 }: {
@@ -19,10 +25,10 @@ export default async function OrganizersPage({
 }) {
   await requireStaff("manager")
   const params = await searchParams
-  
+
   const filter = params.filter || "pending"
   const requests = await getOrganizerRequests(filter === "all" ? undefined : filter)
-  
+
   const allRequests = await getOrganizerRequests()
   const pendingCount = allRequests.filter(r => r.status === "pending").length
   const approvedCount = allRequests.filter(r => r.status === "approved").length
@@ -88,44 +94,16 @@ export default async function OrganizersPage({
       </div>
 
       <div className="flex gap-2">
-        
-          href="/dashboard/admin/organizers?filter=pending"
-          className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-            filter === "pending"
-              ? "bg-primary text-primary-foreground"
-              : "bg-muted text-muted-foreground hover:bg-muted/80"
-          }`}
-        >
+        <a href="/dashboard/admin/organizers?filter=pending" className={tabClass(filter === "pending")}>
           Pending ({pendingCount})
         </a>
-        
-          href="/dashboard/admin/organizers?filter=approved"
-          className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-            filter === "approved"
-              ? "bg-primary text-primary-foreground"
-              : "bg-muted text-muted-foreground hover:bg-muted/80"
-          }`}
-        >
+        <a href="/dashboard/admin/organizers?filter=approved" className={tabClass(filter === "approved")}>
           Approved
         </a>
-        
-          href="/dashboard/admin/organizers?filter=rejected"
-          className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-            filter === "rejected"
-              ? "bg-primary text-primary-foreground"
-              : "bg-muted text-muted-foreground hover:bg-muted/80"
-          }`}
-        >
+        <a href="/dashboard/admin/organizers?filter=rejected" className={tabClass(filter === "rejected")}>
           Rejected
         </a>
-        
-          href="/dashboard/admin/organizers?filter=all"
-          className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-            filter === "all"
-              ? "bg-primary text-primary-foreground"
-              : "bg-muted text-muted-foreground hover:bg-muted/80"
-          }`}
-        >
+        <a href="/dashboard/admin/organizers?filter=all" className={tabClass(filter === "all")}>
           All
         </a>
       </div>
@@ -152,7 +130,7 @@ export default async function OrganizersPage({
                     </Avatar>
                     <div>
                       <CardTitle className="text-lg">
-                        {request.user?.display_name || `${request.user?.first_name} ${request.user?.last_name}`}
+                        {request.user?.display_name || (request.user?.first_name + " " + request.user?.last_name)}
                       </CardTitle>
                       <CardDescription>
                         Applied {format(new Date(request.created_at), "MMM d, yyyy 'at' h:mm a")}
@@ -160,20 +138,8 @@ export default async function OrganizersPage({
                     </div>
                   </div>
                   <Badge
-                    variant={
-                      request.status === "pending"
-                        ? "outline"
-                        : request.status === "approved"
-                        ? "default"
-                        : "destructive"
-                    }
-                    className={
-                      request.status === "pending"
-                        ? "border-amber-500 text-amber-500"
-                        : request.status === "approved"
-                        ? "bg-green-500/20 text-green-600 border-green-500/30"
-                        : ""
-                    }
+                    variant={request.status === "pending" ? "outline" : request.status === "approved" ? "default" : "destructive"}
+                    className={request.status === "pending" ? "border-amber-500 text-amber-500" : request.status === "approved" ? "bg-green-500/20 text-green-600 border-green-500/30" : ""}
                   >
                     {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
                   </Badge>
@@ -186,14 +152,14 @@ export default async function OrganizersPage({
                     <p className="text-sm text-foreground">{request.reason}</p>
                   </div>
                 )}
-                
+
                 {request.experience && (
                   <div>
                     <p className="text-xs font-medium text-muted-foreground mb-1">Experience:</p>
                     <p className="text-sm text-foreground">{request.experience}</p>
                   </div>
                 )}
-                
+
                 {request.games_of_interest && request.games_of_interest.length > 0 && (
                   <div>
                     <p className="text-xs font-medium text-muted-foreground mb-1">Games of interest:</p>
@@ -206,19 +172,19 @@ export default async function OrganizersPage({
                     </div>
                   </div>
                 )}
-                
+
                 {request.status !== "pending" && request.reviewer && (
                   <div className="border-t border-border pt-3 mt-3">
                     <p className="text-xs text-muted-foreground">
                       {request.status === "approved" ? "Approved" : "Rejected"} by {request.reviewer.first_name} {request.reviewer.last_name}
-                      {request.reviewed_at && ` on ${format(new Date(request.reviewed_at), "MMM d, yyyy")}`}
+                      {request.reviewed_at && (" on " + format(new Date(request.reviewed_at), "MMM d, yyyy"))}
                     </p>
                     {request.review_notes && (
                       <p className="text-sm text-foreground mt-1">{request.review_notes}</p>
                     )}
                   </div>
                 )}
-                
+
                 {request.status === "pending" && (
                   <div className="flex gap-2 pt-2">
                     <form action={approveOrganizerRequest} className="flex-1">
