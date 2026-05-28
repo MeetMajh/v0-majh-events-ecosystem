@@ -1,16 +1,15 @@
-import { redirect } from "next/navigation"
 import Link from "next/link"
+import { requireStaff } from "@/lib/auth/require-staff"
 import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { 
-  Trophy, Users, Calendar, Clock, AlertTriangle, CheckCircle, 
-  XCircle, Play, Pause, TrendingUp, DollarSign, Gamepad2,
-  BarChart3, Eye, Settings, ExternalLink
+  Trophy, Users, Calendar, AlertTriangle, Play, TrendingUp, DollarSign,
+  Eye, Settings
 } from "lucide-react"
-import { format, formatDistanceToNow } from "date-fns"
+import { format } from "date-fns"
 import { formatCents } from "@/lib/format"
 
 export const metadata = {
@@ -18,35 +17,17 @@ export const metadata = {
   description: "Site-wide tournament management and oversight",
 }
 
-async function checkAdminAccess() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect("/auth/login")
-
-  const { data: role } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .single()
-
-  if (!role || !["owner", "manager"].includes(role.role)) {
-    redirect("/dashboard")
-  }
-  return user
-}
-
 export default async function TournamentAdminPage({
   searchParams,
 }: {
   searchParams: Promise<{ filter?: string }>
 }) {
-  await checkAdminAccess()
+  await requireStaff("manager")
   const params = await searchParams
   const filter = params.filter || "all"
   
   const supabase = await createClient()
   
-  // Fetch tournaments with stats
   let tournamentsQuery = supabase
     .from("tournaments")
     .select(`
@@ -65,7 +46,6 @@ export default async function TournamentAdminPage({
   
   const { data: tournaments } = await tournamentsQuery
   
-  // Get aggregate stats
   const [
     { count: totalTournaments },
     { count: liveTournaments },
@@ -80,7 +60,6 @@ export default async function TournamentAdminPage({
     supabase.from("tournament_matches").select("id, tournament_id").eq("status", "disputed"),
   ])
 
-  // Calculate total revenue
   const { data: paidRegistrations } = await supabase
     .from("tournament_registrations")
     .select("paid_amount_cents")
@@ -89,42 +68,12 @@ export default async function TournamentAdminPage({
   const totalRevenue = paidRegistrations?.reduce((sum, r) => sum + (r.paid_amount_cents || 0), 0) || 0
 
   const stats = [
-    { 
-      label: "Total Tournaments", 
-      value: totalTournaments ?? 0, 
-      icon: Trophy, 
-      color: "bg-primary/10 text-primary" 
-    },
-    { 
-      label: "Live Now", 
-      value: liveTournaments ?? 0, 
-      icon: Play, 
-      color: "bg-green-500/10 text-green-600" 
-    },
-    { 
-      label: "Upcoming", 
-      value: upcomingTournaments ?? 0, 
-      icon: Calendar, 
-      color: "bg-blue-500/10 text-blue-600" 
-    },
-    { 
-      label: "Weekly Signups", 
-      value: recentRegistrations?.length ?? 0, 
-      icon: TrendingUp, 
-      color: "bg-purple-500/10 text-purple-600" 
-    },
-    { 
-      label: "Total Revenue", 
-      value: formatCents(totalRevenue), 
-      icon: DollarSign, 
-      color: "bg-amber-500/10 text-amber-600" 
-    },
-    { 
-      label: "Disputes", 
-      value: disputedMatches?.length ?? 0, 
-      icon: AlertTriangle, 
-      color: disputedMatches && disputedMatches.length > 0 ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground" 
-    },
+    { label: "Total Tournaments", value: totalTournaments ?? 0, icon: Trophy, color: "bg-primary/10 text-primary" },
+    { label: "Live Now", value: liveTournaments ?? 0, icon: Play, color: "bg-green-500/10 text-green-600" },
+    { label: "Upcoming", value: upcomingTournaments ?? 0, icon: Calendar, color: "bg-blue-500/10 text-blue-600" },
+    { label: "Weekly Signups", value: recentRegistrations?.length ?? 0, icon: TrendingUp, color: "bg-purple-500/10 text-purple-600" },
+    { label: "Total Revenue", value: formatCents(totalRevenue), icon: DollarSign, color: "bg-amber-500/10 text-amber-600" },
+    { label: "Disputes", value: disputedMatches?.length ?? 0, icon: AlertTriangle, color: disputedMatches && disputedMatches.length > 0 ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground" },
   ]
 
   const statusColors: Record<string, string> = {
@@ -149,7 +98,6 @@ export default async function TournamentAdminPage({
         </div>
       </div>
 
-      {/* Stats Grid */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
         {stats.map((stat) => (
           <Card key={stat.label} className="border-border bg-card">
@@ -166,7 +114,6 @@ export default async function TournamentAdminPage({
         ))}
       </div>
 
-      {/* Disputes Alert */}
       {disputedMatches && disputedMatches.length > 0 && (
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="flex items-center justify-between p-4">
@@ -190,7 +137,6 @@ export default async function TournamentAdminPage({
         </Card>
       )}
 
-      {/* Filter Tabs */}
       <div className="flex flex-wrap gap-2">
         {[
           { value: "all", label: "All" },
@@ -214,7 +160,6 @@ export default async function TournamentAdminPage({
         ))}
       </div>
 
-      {/* Tournaments Table */}
       <Card className="border-border bg-card">
         <CardHeader className="pb-3">
           <CardTitle className="text-lg">Tournaments</CardTitle>
@@ -240,7 +185,6 @@ export default async function TournamentAdminPage({
                     key={tournament.id}
                     className="flex items-center gap-4 rounded-lg border border-border bg-background p-4 transition-colors hover:bg-muted/20"
                   >
-                    {/* Status & Game */}
                     <div className="hidden sm:flex flex-col items-center gap-1 w-20">
                       <Badge 
                         variant="outline" 
@@ -255,7 +199,6 @@ export default async function TournamentAdminPage({
                       )}
                     </div>
                     
-                    {/* Tournament Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <Link 
@@ -297,7 +240,6 @@ export default async function TournamentAdminPage({
                       </div>
                     </div>
                     
-                    {/* Organizer */}
                     <div className="hidden md:flex items-center gap-2">
                       <Avatar className="h-6 w-6">
                         <AvatarImage src={organizer?.avatar_url ?? undefined} />
@@ -310,7 +252,6 @@ export default async function TournamentAdminPage({
                       </span>
                     </div>
                     
-                    {/* Actions */}
                     <div className="flex items-center gap-2">
                       <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
                         <Link href={`/esports/tournaments/${tournament.slug}`} target="_blank">
