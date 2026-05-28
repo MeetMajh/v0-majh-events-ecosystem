@@ -3,21 +3,8 @@ import { redirect } from "next/navigation"
 import { AuditLogViewer } from "@/components/control-panel/audit-log-viewer"
 
 export default async function AuditLogPage() {
+  await requireStaff("manager")
   const supabase = await createClient()
-  
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect("/login")
-
-  // Check admin/staff access
-  const { data: staffRole } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .in("role", ["owner", "manager"])
-    .single()
-
-  if (!staffRole) redirect("/dashboard")
-
   // Fetch audit logs - query without joins first for reliability
   const { data: auditLogs } = await supabase
     .from("reconciliation_audit_log")
