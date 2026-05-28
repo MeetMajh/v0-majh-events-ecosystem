@@ -1,6 +1,6 @@
 import { createClient, createAdminClient } from "@/lib/supabase/server"
-import { requireRole } from "@/lib/roles"
-import { createUserManually, deleteUser, assignStaffRole } from "@/lib/admin-actions"
+import { requireStaff } from "@/lib/auth/require-staff"
+import { createUserManually, deleteUser } from "@/lib/admin-actions"
 import { AssignProfileRoleDialog } from "@/components/admin/assign-profile-role-dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -8,17 +8,8 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { 
-  Users, 
-  UserPlus, 
-  Mail, 
-  Calendar,
-  ShieldCheck, 
-  Shield, 
-  User,
-  Trash2,
-  CheckCircle2,
-  Clock,
-  Search
+  Users, UserPlus, Calendar, ShieldCheck, Shield, User,
+  Trash2, CheckCircle2, Clock, Search
 } from "lucide-react"
 import { formatDistanceToNow, format } from "date-fns"
 
@@ -41,11 +32,10 @@ export default async function UsersAdminPage({
 }: {
   searchParams: Promise<{ error?: string; success?: string; search?: string }>
 }) {
-  await requireRole(["owner", "manager"])
+  await requireStaff("manager")
   const params = await searchParams
   const supabase = await createClient()
   
-  // Try to use admin client for listing users
   let authUsers: { users: any[] } | null = null
   
   try {
@@ -55,16 +45,14 @@ export default async function UsersAdminPage({
       authUsers = data
     }
   } catch {
-    // Admin client not available - will rely on profiles only
+    // Admin client not available
   }
 
-  // Get profiles
   const { data: profiles } = await supabase
     .from("profiles")
     .select("*")
     .order("created_at", { ascending: false })
   
-  // Get staff roles
   const { data: staffRoles } = await supabase
     .from("staff_roles")
     .select("user_id, role")
@@ -72,7 +60,6 @@ export default async function UsersAdminPage({
   const staffMap = new Map(staffRoles?.map(sr => [sr.user_id, sr.role]) ?? [])
   const profileMap = new Map(profiles?.map(p => [p.id, p]) ?? [])
 
-  // Combine data - use auth users if available, otherwise fall back to profiles
   let users: Array<{
     id: string
     email: string | undefined
@@ -84,7 +71,6 @@ export default async function UsersAdminPage({
   }> = []
   
   if (authUsers?.users && authUsers.users.length > 0) {
-    // Use auth users data
     users = authUsers.users.map(user => ({
       id: user.id,
       email: user.email,
@@ -95,11 +81,10 @@ export default async function UsersAdminPage({
       staff_role: staffMap.get(user.id),
     }))
   } else if (profiles && profiles.length > 0) {
-    // Fallback to profiles data
     users = profiles.map(profile => ({
       id: profile.id,
       email: profile.email || undefined,
-      email_confirmed_at: profile.email_verified_at || profile.created_at, // Assume verified if in profiles
+      email_confirmed_at: profile.email_verified_at || profile.created_at,
       created_at: profile.created_at,
       last_sign_in_at: profile.updated_at || null,
       profile: profile,
@@ -107,7 +92,6 @@ export default async function UsersAdminPage({
     }))
   }
 
-  // Filter by search
   if (params.search) {
     const search = params.search.toLowerCase()
     users = users.filter(u => 
@@ -118,10 +102,8 @@ export default async function UsersAdminPage({
     )
   }
 
-  // Sort by created_at descending
   users.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
-  // Stats - use the combined users array for accurate counts
   const totalUsers = users.length
   const verifiedUsers = users.filter(u => u.email_confirmed_at).length
   const staffCount = staffRoles?.length ?? 0
@@ -151,7 +133,6 @@ export default async function UsersAdminPage({
         </div>
       )}
 
-      {/* Stats */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="border-border bg-card">
           <CardContent className="flex items-center gap-3 p-4">
@@ -199,7 +180,6 @@ export default async function UsersAdminPage({
         </Card>
       </div>
 
-      {/* Create User Form */}
       <Card className="border-border bg-card">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">
@@ -250,7 +230,6 @@ export default async function UsersAdminPage({
         </CardContent>
       </Card>
 
-      {/* Search */}
       <form className="flex gap-2">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -264,7 +243,6 @@ export default async function UsersAdminPage({
         <Button type="submit" variant="secondary">Search</Button>
       </form>
 
-      {/* Users Table */}
       <div className="overflow-hidden rounded-xl border border-border">
         <table className="w-full text-sm">
           <thead>
