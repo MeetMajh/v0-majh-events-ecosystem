@@ -7,10 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { 
-  Users, UserPlus, Calendar, ShieldCheck, Shield, User,
-  Trash2, CheckCircle2, Clock, Search
-} from "lucide-react"
+import { Users, UserPlus, Calendar, ShieldCheck, Shield, User, Trash2, CheckCircle2, Clock, Search } from "lucide-react"
 import { formatDistanceToNow, format } from "date-fns"
 
 const ROLE_ICONS: Record<string, any> = {
@@ -35,9 +32,9 @@ export default async function UsersAdminPage({
   await requireStaff("manager")
   const params = await searchParams
   const supabase = await createClient()
-  
+
   let authUsers: { users: any[] } | null = null
-  
+
   try {
     const adminClient = createAdminClient()
     const { data, error } = await adminClient.auth.admin.listUsers()
@@ -52,11 +49,11 @@ export default async function UsersAdminPage({
     .from("profiles")
     .select("*")
     .order("created_at", { ascending: false })
-  
+
   const { data: staffRoles } = await supabase
     .from("staff_roles")
     .select("user_id, role")
-  
+
   const staffMap = new Map(staffRoles?.map(sr => [sr.user_id, sr.role]) ?? [])
   const profileMap = new Map(profiles?.map(p => [p.id, p]) ?? [])
 
@@ -69,7 +66,7 @@ export default async function UsersAdminPage({
     profile: any
     staff_role: string | undefined
   }> = []
-  
+
   if (authUsers?.users && authUsers.users.length > 0) {
     users = authUsers.users.map(user => ({
       id: user.id,
@@ -94,7 +91,7 @@ export default async function UsersAdminPage({
 
   if (params.search) {
     const search = params.search.toLowerCase()
-    users = users.filter(u => 
+    users = users.filter(u =>
       u.email?.toLowerCase().includes(search) ||
       u.profile?.first_name?.toLowerCase().includes(search) ||
       u.profile?.last_name?.toLowerCase().includes(search) ||
@@ -125,7 +122,7 @@ export default async function UsersAdminPage({
           {params.error}
         </div>
       )}
-      
+
       {params.success && (
         <div className="rounded-lg border border-green-500/30 bg-green-500/5 p-4 text-sm text-green-600 flex items-center gap-2">
           <CheckCircle2 className="h-4 w-4" />
@@ -233,9 +230,9 @@ export default async function UsersAdminPage({
       <form className="flex gap-2">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input 
-            name="search" 
-            placeholder="Search by email or name..." 
+          <Input
+            name="search"
+            placeholder="Search by email or name..."
             defaultValue={params.search}
             className="pl-9"
           />
@@ -260,17 +257,18 @@ export default async function UsersAdminPage({
           <tbody>
             {users.map((user) => {
               const RoleIcon = user.staff_role ? ROLE_ICONS[user.staff_role] : null
-              const name = user.profile?.display_name || 
-                (user.profile?.first_name && user.profile?.last_name 
-                  ? `${user.profile.first_name} ${user.profile.last_name}` 
-                  : null)
-              
+              const firstAndLast = user.profile?.first_name && user.profile?.last_name
+                ? user.profile.first_name + " " + user.profile.last_name
+                : null
+              const name = user.profile?.display_name || firstAndLast
+              const initial = name?.[0]?.toUpperCase() || user.email?.[0]?.toUpperCase() || "?"
+
               return (
                 <tr key={user.id} className="border-b border-border last:border-0 hover:bg-muted/20">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-sm font-medium text-primary">
-                        {name?.[0]?.toUpperCase() || user.email?.[0]?.toUpperCase() || "?"}
+                        {initial}
                       </div>
                       <div>
                         <p className="font-medium text-foreground">
@@ -332,14 +330,14 @@ export default async function UsersAdminPage({
                     <div className="flex items-center justify-end gap-2">
                       <AssignProfileRoleDialog
                         userId={user.id}
-                        userName={name || user.email || 'User'}
+                        userName={name || user.email || "User"}
                         currentRole={user.profile?.role || null}
                       />
                       <form action={deleteUser}>
                         <input type="hidden" name="user_id" value={user.id} />
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           className="text-destructive hover:text-destructive"
                           title="Delete user"
                         >
