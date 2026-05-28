@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
-import { requireRole } from "@/lib/roles"
+import { requireStaff } from "@/lib/auth/require-staff"
 import { formatCents, formatDateTime } from "@/lib/format"
 import { updateOrderStatus } from "@/lib/admin-actions"
 import { Button } from "@/components/ui/button"
@@ -23,7 +23,7 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 export default async function OrdersAdminPage() {
-  await requireRole(["owner", "manager", "staff"])
+  await requireStaff("staff")
   const supabase = await createClient()
 
   const { data: orders } = await supabase
