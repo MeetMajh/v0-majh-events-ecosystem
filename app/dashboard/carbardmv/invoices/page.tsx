@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
-import { requireRole } from "@/lib/roles"
+import { requireStaff } from "@/lib/auth/require-staff"
 import { formatCents, formatDate } from "@/lib/format"
 import { updateInvoiceStatus } from "@/lib/carbardmv-actions"
 import { Button } from "@/components/ui/button"
