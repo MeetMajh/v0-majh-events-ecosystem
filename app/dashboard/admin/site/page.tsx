@@ -1,5 +1,4 @@
-import { redirect } from "next/navigation"
-import { createClient } from "@/lib/supabase/server"
+import { requireStaff } from "@/lib/auth/require-staff"
 import { getHomepageSections, getSiteInfo } from "@/lib/site-settings-actions"
 import { HomepageEditor } from "@/components/admin/homepage-editor"
 
@@ -9,23 +8,7 @@ export const metadata = {
 }
 
 export default async function SiteSettingsPage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  
-  if (!user) {
-    redirect("/auth/sign-in")
-  }
-  
-  // Check if user is owner/manager
-  const { data: staffRole } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .single()
-  
-  if (!staffRole || !["owner", "manager"].includes(staffRole.role)) {
-    redirect("/dashboard")
-  }
+  await requireStaff("manager")
   
   const [sections, siteInfo] = await Promise.all([
     getHomepageSections(),
