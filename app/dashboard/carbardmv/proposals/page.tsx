@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
-import { requireRole } from "@/lib/roles"
+import { requireStaff } from "@/lib/auth/require-staff"
 import { formatCents, formatDate } from "@/lib/format"
 import { updateProposalStatus } from "@/lib/carbardmv-actions"
 import { Button } from "@/components/ui/button"
@@ -34,7 +34,7 @@ const STATUS_ACTIONS: Record<string, Array<{ status: string; label: string; vari
 }
 
 export default async function ProposalsPage() {
-  await requireRole(["owner", "manager", "staff"])
+  await requireStaff("staff")
   const supabase = await createClient()
 
   const [{ data: proposals }, { data: clients }] = await Promise.all([
