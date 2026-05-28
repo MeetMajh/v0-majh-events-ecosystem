@@ -22,6 +22,11 @@ const ROLE_COLORS: Record<string, string> = {
   staff: "bg-secondary text-secondary-foreground",
 }
 
+function rolePillClass(role: string): string {
+  const base = "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium "
+  return base + (ROLE_COLORS[role] || "")
+}
+
 export default async function StaffAdminPage({
   searchParams,
 }: {
@@ -38,7 +43,7 @@ export default async function StaffAdminPage({
 
   const { data: authUsers } = await supabase.auth.admin.listUsers()
   const emailMap = new Map(authUsers?.users?.map((u) => [u.id, u.email]) ?? [])
-  
+
   const { data: pendingInvitations } = await supabase
     .from("invitations")
     .select("*")
@@ -59,7 +64,7 @@ export default async function StaffAdminPage({
           {params.error}
         </div>
       )}
-      
+
       {params.success && (
         <div className="rounded-lg border border-green-500/30 bg-green-500/5 p-4 text-sm text-green-600 flex items-center gap-2">
           <CheckCircle2 className="h-4 w-4" />
@@ -165,7 +170,7 @@ export default async function StaffAdminPage({
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">{emailMap.get(sr.user_id) ?? "—"}</td>
                   <td className="px-4 py-3 text-center">
-                    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${ROLE_COLORS[sr.role]}`}>
+                    <span className={rolePillClass(sr.role)}>
                       <Icon className="h-3 w-3" />
                       {sr.role}
                     </span>
