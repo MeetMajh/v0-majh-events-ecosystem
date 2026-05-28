@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
-import { redirect } from "next/navigation"
+import { requireStaff } from "@/lib/auth/require-staff"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -24,22 +24,9 @@ export const metadata = {
 }
 
 export default async function ComplianceDashboardPage() {
+  await requireStaff("manager")
   const supabase = await createClient()
-  
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect("/login")
 
-  // Check admin access
-  const { data: staffRole } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .in("role", ["owner", "manager"])
-    .single()
-
-  if (!staffRole) redirect("/dashboard")
-
-  // Fetch compliance metrics
   const [
     { count: pendingKycCount },
     { count: verifiedCount },
@@ -49,32 +36,26 @@ export default async function ComplianceDashboardPage() {
     { data: recentKycSessions },
     { data: recentAlerts },
   ] = await Promise.all([
-    // Pending KYC verifications
     supabase
       .from("profiles")
       .select("*", { count: "exact", head: true })
       .eq("kyc_status", "pending"),
-    // Verified users
     supabase
       .from("profiles")
       .select("*", { count: "exact", head: true })
       .eq("kyc_status", "verified"),
-    // Rejected verifications
     supabase
       .from("profiles")
       .select("*", { count: "exact", head: true })
       .eq("kyc_status", "rejected"),
-    // Open compliance alerts
     supabase
       .from("compliance_alerts")
       .select("*", { count: "exact", head: true })
       .eq("status", "open"),
-    // Pending tax forms
     supabase
       .from("tax_forms")
       .select("*", { count: "exact", head: true })
       .eq("status", "submitted"),
-    // Recent KYC sessions
     supabase
       .from("kyc_sessions")
       .select(`
@@ -87,7 +68,6 @@ export default async function ComplianceDashboardPage() {
       `)
       .order("created_at", { ascending: false })
       .limit(5),
-    // Recent alerts
     supabase
       .from("compliance_alerts")
       .select(`
@@ -110,7 +90,6 @@ export default async function ComplianceDashboardPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">Compliance Dashboard</h1>
@@ -126,7 +105,6 @@ export default async function ComplianceDashboardPage() {
         )}
       </div>
 
-      {/* Key Metrics */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -195,7 +173,6 @@ export default async function ComplianceDashboardPage() {
         </Card>
       </div>
 
-      {/* Detailed Views */}
       <Tabs defaultValue="kyc" className="space-y-4">
         <TabsList>
           <TabsTrigger value="kyc" className="flex items-center gap-2">
@@ -240,9 +217,7 @@ export default async function ComplianceDashboardPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Recent Activity Summary */}
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Recent KYC Submissions */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -296,7 +271,6 @@ export default async function ComplianceDashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Recent Alerts */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
