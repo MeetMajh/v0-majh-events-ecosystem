@@ -5,16 +5,33 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { 
-  Trophy, Users, Calendar, AlertTriangle, Play, TrendingUp, DollarSign,
-  Eye, Settings
-} from "lucide-react"
+import { Trophy, Users, Calendar, AlertTriangle, Play, TrendingUp, DollarSign, Eye, Settings } from "lucide-react"
 import { format } from "date-fns"
 import { formatCents } from "@/lib/format"
 
 export const metadata = {
   title: "Tournament Admin | MAJH EVENTS",
   description: "Site-wide tournament management and oversight",
+}
+
+function tabClass(isActive: boolean): string {
+  const base = "rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+  if (isActive) return base + " bg-primary text-primary-foreground"
+  return base + " bg-muted text-muted-foreground hover:bg-muted/80"
+}
+
+function statusBadgeClass(status: string): string {
+  const colors: Record<string, string> = {
+    draft: "bg-muted text-muted-foreground",
+    published: "bg-blue-500/20 text-blue-600 border-blue-500/30",
+    registration_open: "bg-green-500/20 text-green-600 border-green-500/30",
+    registration_closed: "bg-amber-500/20 text-amber-600 border-amber-500/30",
+    check_in: "bg-purple-500/20 text-purple-600 border-purple-500/30",
+    in_progress: "bg-primary/20 text-primary border-primary/30",
+    completed: "bg-muted text-muted-foreground",
+    cancelled: "bg-destructive/20 text-destructive border-destructive/30",
+  }
+  return "text-[10px] " + (colors[status] || "")
 }
 
 export default async function TournamentAdminPage({
@@ -25,13 +42,13 @@ export default async function TournamentAdminPage({
   await requireStaff("manager")
   const params = await searchParams
   const filter = params.filter || "all"
-  
+
   const supabase = await createClient()
-  
+
   let tournamentsQuery = supabase
     .from("tournaments")
     .select(`
-      id, name, slug, status, format, start_date, end_date, 
+      id, name, slug, status, format, start_date, end_date,
       entry_fee_cents, max_participants, created_at,
       games(name, slug),
       profiles!tournaments_organizer_id_fkey(id, first_name, last_name, avatar_url),
@@ -39,13 +56,13 @@ export default async function TournamentAdminPage({
     `)
     .order("created_at", { ascending: false })
     .limit(50)
-  
+
   if (filter !== "all") {
     tournamentsQuery = tournamentsQuery.eq("status", filter)
   }
-  
+
   const { data: tournaments } = await tournamentsQuery
-  
+
   const [
     { count: totalTournaments },
     { count: liveTournaments },
@@ -64,7 +81,7 @@ export default async function TournamentAdminPage({
     .from("tournament_registrations")
     .select("paid_amount_cents")
     .eq("payment_status", "paid")
-  
+
   const totalRevenue = paidRegistrations?.reduce((sum, r) => sum + (r.paid_amount_cents || 0), 0) || 0
 
   const stats = [
@@ -76,16 +93,14 @@ export default async function TournamentAdminPage({
     { label: "Disputes", value: disputedMatches?.length ?? 0, icon: AlertTriangle, color: disputedMatches && disputedMatches.length > 0 ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground" },
   ]
 
-  const statusColors: Record<string, string> = {
-    draft: "bg-muted text-muted-foreground",
-    published: "bg-blue-500/20 text-blue-600 border-blue-500/30",
-    registration_open: "bg-green-500/20 text-green-600 border-green-500/30",
-    registration_closed: "bg-amber-500/20 text-amber-600 border-amber-500/30",
-    check_in: "bg-purple-500/20 text-purple-600 border-purple-500/30",
-    in_progress: "bg-primary/20 text-primary border-primary/30",
-    completed: "bg-muted text-muted-foreground",
-    cancelled: "bg-destructive/20 text-destructive border-destructive/30",
-  }
+  const filterTabs = [
+    { value: "all", label: "All" },
+    { value: "in_progress", label: "Live" },
+    { value: "published", label: "Upcoming" },
+    { value: "draft", label: "Drafts" },
+    { value: "completed", label: "Completed" },
+    { value: "cancelled", label: "Cancelled" },
+  ]
 
   return (
     <div className="space-y-6">
@@ -99,19 +114,24 @@ export default async function TournamentAdminPage({
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
-        {stats.map((stat) => (
-          <Card key={stat.label} className="border-border bg-card">
-            <CardContent className="flex items-center gap-3 p-4">
-              <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${stat.color.split(" ")[0]}`}>
-                <stat.icon className={`h-5 w-5 ${stat.color.split(" ")[1]}`} />
-              </div>
-              <div>
-                <p className="text-xl font-bold text-foreground">{stat.value}</p>
-                <p className="text-xs text-muted-foreground">{stat.label}</p>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+        {stats.map((stat) => {
+          const colorParts = stat.color.split(" ")
+          const bgColor = colorParts[0]
+          const textColor = colorParts[1]
+          return (
+            <Card key={stat.label} className="border-border bg-card">
+              <CardContent className="flex items-center gap-3 p-4">
+                <div className={"flex h-10 w-10 items-center justify-center rounded-lg " + bgColor}>
+                  <stat.icon className={"h-5 w-5 " + textColor} />
+                </div>
+                <div>
+                  <p className="text-xl font-bold text-foreground">{stat.value}</p>
+                  <p className="text-xs text-muted-foreground">{stat.label}</p>
+                </div>
+              </CardContent>
+            </Card>
+          )
+        })}
       </div>
 
       {disputedMatches && disputedMatches.length > 0 && (
@@ -138,22 +158,11 @@ export default async function TournamentAdminPage({
       )}
 
       <div className="flex flex-wrap gap-2">
-        {[
-          { value: "all", label: "All" },
-          { value: "in_progress", label: "Live" },
-          { value: "published", label: "Upcoming" },
-          { value: "draft", label: "Drafts" },
-          { value: "completed", label: "Completed" },
-          { value: "cancelled", label: "Cancelled" },
-        ].map((tab) => (
+        {filterTabs.map((tab) => (
           <Link
             key={tab.value}
-            href={`/dashboard/admin/tournaments?filter=${tab.value}`}
-            className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-              filter === tab.value
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground hover:bg-muted/80"
-            }`}
+            href={"/dashboard/admin/tournaments?filter=" + tab.value}
+            className={tabClass(filter === tab.value)}
           >
             {tab.label}
           </Link>
@@ -164,7 +173,7 @@ export default async function TournamentAdminPage({
         <CardHeader className="pb-3">
           <CardTitle className="text-lg">Tournaments</CardTitle>
           <CardDescription>
-            {filter === "all" ? "All tournaments" : `Showing ${filter.replace("_", " ")} tournaments`}
+            {filter === "all" ? "All tournaments" : "Showing " + filter.replace("_", " ") + " tournaments"}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -179,18 +188,16 @@ export default async function TournamentAdminPage({
                 const registrationCount = tournament.tournament_registrations?.[0]?.count ?? 0
                 const organizer = tournament.profiles
                 const hasDisputes = disputedMatches?.some(m => m.tournament_id === tournament.id)
-                
+                const statusLabel = tournament.status === "in_progress" ? "LIVE" : tournament.status.replace("_", " ").toUpperCase()
+
                 return (
                   <div
                     key={tournament.id}
                     className="flex items-center gap-4 rounded-lg border border-border bg-background p-4 transition-colors hover:bg-muted/20"
                   >
                     <div className="hidden sm:flex flex-col items-center gap-1 w-20">
-                      <Badge 
-                        variant="outline" 
-                        className={`text-[10px] ${statusColors[tournament.status] || ""}`}
-                      >
-                        {tournament.status === "in_progress" ? "LIVE" : tournament.status.replace("_", " ").toUpperCase()}
+                      <Badge variant="outline" className={statusBadgeClass(tournament.status)}>
+                        {statusLabel}
                       </Badge>
                       {tournament.games && (
                         <span className="text-[10px] text-muted-foreground truncate max-w-[80px]">
@@ -198,11 +205,11 @@ export default async function TournamentAdminPage({
                         </span>
                       )}
                     </div>
-                    
+
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <Link 
-                          href={`/dashboard/tournaments/${tournament.id}`}
+                        <Link
+                          href={"/dashboard/tournaments/" + tournament.id}
                           className="font-medium text-foreground hover:text-primary transition-colors truncate"
                         >
                           {tournament.name}
@@ -222,14 +229,11 @@ export default async function TournamentAdminPage({
                       <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1">
                           <Users className="h-3 w-3" />
-                          {registrationCount}{tournament.max_participants ? `/${tournament.max_participants}` : ""}
+                          {registrationCount}{tournament.max_participants ? "/" + tournament.max_participants : ""}
                         </span>
                         <span className="flex items-center gap-1">
                           <Calendar className="h-3 w-3" />
-                          {tournament.start_date 
-                            ? format(new Date(tournament.start_date), "MMM d, yyyy")
-                            : "TBD"
-                          }
+                          {tournament.start_date ? format(new Date(tournament.start_date), "MMM d, yyyy") : "TBD"}
                         </span>
                         {tournament.entry_fee_cents > 0 && (
                           <span className="flex items-center gap-1">
@@ -239,7 +243,7 @@ export default async function TournamentAdminPage({
                         )}
                       </div>
                     </div>
-                    
+
                     <div className="hidden md:flex items-center gap-2">
                       <Avatar className="h-6 w-6">
                         <AvatarImage src={organizer?.avatar_url ?? undefined} />
@@ -251,15 +255,15 @@ export default async function TournamentAdminPage({
                         {organizer?.first_name} {organizer?.last_name}
                       </span>
                     </div>
-                    
+
                     <div className="flex items-center gap-2">
                       <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
-                        <Link href={`/esports/tournaments/${tournament.slug}`} target="_blank">
+                        <Link href={"/esports/tournaments/" + tournament.slug} target="_blank">
                           <Eye className="h-4 w-4" />
                         </Link>
                       </Button>
                       <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
-                        <Link href={`/dashboard/tournaments/${tournament.id}`}>
+                        <Link href={"/dashboard/tournaments/" + tournament.id}>
                           <Settings className="h-4 w-4" />
                         </Link>
                       </Button>
