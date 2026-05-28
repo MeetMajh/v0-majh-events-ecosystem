@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
-import { requireRole } from "@/lib/roles"
+import { requireStaff } from "@/lib/auth/require-staff"
 import { formatCents, formatDate } from "@/lib/format"
 import { updateRentalStatus } from "@/lib/carbardmv-actions"
 import { Button } from "@/components/ui/button"
@@ -39,7 +39,7 @@ const STATUS_LABELS: Record<string, string> = {
 }
 
 export default async function RentalBookingsPage() {
-  await requireRole(["owner", "manager", "staff"])
+  await requireStaff("staff")
   const supabase = await createClient()
 
   const { data: rentals } = await supabase
