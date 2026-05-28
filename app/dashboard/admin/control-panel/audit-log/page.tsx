@@ -1,10 +1,11 @@
 import { createClient } from "@/lib/supabase/server"
-import { redirect } from "next/navigation"
+import { requireStaff } from "@/lib/auth/require-staff"
 import { AuditLogViewer } from "@/components/control-panel/audit-log-viewer"
 
 export default async function AuditLogPage() {
   await requireStaff("manager")
   const supabase = await createClient()
+
   // Fetch audit logs - query without joins first for reliability
   const { data: auditLogs } = await supabase
     .from("reconciliation_audit_log")
