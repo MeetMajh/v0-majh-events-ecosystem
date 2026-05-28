@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
-import { requireRole } from "@/lib/roles"
+import { requireStaff } from "@/lib/auth/require-staff"
 import { formatDate } from "@/lib/format"
 import { updateInquiryStatus } from "@/lib/carbardmv-actions"
 import { Button } from "@/components/ui/button"
@@ -17,7 +17,7 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 export default async function CateringManagementPage() {
-  await requireRole(["owner", "manager", "staff"])
+  await requireStaff("staff")
   const supabase = await createClient()
 
   const { data: inquiries } = await supabase
