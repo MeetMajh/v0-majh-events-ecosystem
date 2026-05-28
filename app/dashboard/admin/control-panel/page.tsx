@@ -1,22 +1,10 @@
 import { createClient } from "@/lib/supabase/server"
-import { redirect } from "next/navigation"
+import { requireStaff } from "@/lib/auth/require-staff"
 import { OverviewDashboard } from "@/components/control-panel/overview-dashboard"
 
 export default async function ControlPanelOverviewPage() {
+  await requireStaff("manager")
   const supabase = await createClient()
-  
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect("/login")
-
-  // Check admin/staff access
-  const { data: staffRole } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .in("role", ["owner", "manager"])
-    .single()
-
-  if (!staffRole) redirect("/dashboard")
 
   // Get first day of current month
   const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
