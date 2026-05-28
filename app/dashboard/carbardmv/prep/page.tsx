@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
-import { requireRole } from "@/lib/roles"
+import { requireStaff } from "@/lib/auth/require-staff"
 import { formatDate } from "@/lib/format"
 import { updatePrepTaskStatus } from "@/lib/carbardmv-actions"
 import { Button } from "@/components/ui/button"
@@ -45,7 +45,7 @@ const STATUS_ICONS: Record<string, React.ElementType> = {
 }
 
 export default async function PrepListsPage() {
-  await requireRole(["owner", "manager", "staff"])
+  await requireStaff("staff")
   const supabase = await createClient()
 
   const [{ data: tasks }, { data: staffMembers }, { data: bookings }] = await Promise.all([
