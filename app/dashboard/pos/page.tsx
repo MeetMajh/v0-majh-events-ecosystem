@@ -1,11 +1,11 @@
 import { createClient } from "@/lib/supabase/server"
-import { requireRole } from "@/lib/roles"
+import { requireStaff } from "@/lib/auth/require-staff"
 import { PosTerminal } from "@/components/pos/pos-terminal"
 
 export const metadata = { title: "POS Terminal - MAJH EVENTS" }
 
 export default async function PosPage() {
-  await requireRole(["owner", "manager", "staff"])
+  await requireStaff("staff")
   const supabase = await createClient()
 
   const { data: categories } = await supabase
