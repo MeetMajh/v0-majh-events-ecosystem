@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
-import { redirect } from "next/navigation"
+import { requireStaff } from "@/lib/auth/require-staff"
 import { OrganizerFinancialDashboard } from "@/components/organizer/financial-dashboard"
 
 export const metadata = {
@@ -8,37 +8,19 @@ export const metadata = {
 }
 
 export default async function OrganizerFinancialsPage() {
+  const { userId } = await requireStaff("organizer")
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
 
-  if (!user) redirect("/auth/login")
-
-  // Check if user is an organizer
-  const { data: staffRole } = await supabase
-    .from("staff_roles")
-    .select("role, tenant_id")
-    .eq("user_id", user.id)
-    .single()
-
-  const isOrganizer = staffRole && ["owner", "manager", "organizer"].includes(staffRole.role)
-
-  if (!isOrganizer) {
-    redirect("/dashboard")
-  }
-
-  // Fetch organizer dashboard data via RPC
   const { data: dashboardData, error: dashboardError } = await supabase.rpc(
     "get_organizer_dashboard",
-    { p_organizer_id: user.id }
+    { p_organizer_id: userId }
   )
 
-  // Fetch liability summary
   const { data: liabilityData } = await supabase.rpc(
     "get_organizer_liability_summary",
-    { p_organizer_id: user.id }
+    { p_organizer_id: userId }
   )
 
-  // Fetch payout requests for this user
   const { data: payoutRequests } = await supabase
     .from("payout_requests")
     .select(`
@@ -55,11 +37,10 @@ export default async function OrganizerFinancialsPage() {
       created_at,
       tournaments(name, slug)
     `)
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .order("created_at", { ascending: false })
     .limit(50)
 
-  // Fetch profile for Stripe Connect status
   const { data: profile } = await supabase
     .from("profiles")
     .select(`
@@ -68,10 +49,9 @@ export default async function OrganizerFinancialsPage() {
       stripe_connect_payouts_enabled,
       kyc_verified
     `)
-    .eq("id", user.id)
+    .eq("id", userId)
     .single()
 
-  // Fetch recent disputes involving this organizer
   const { data: disputes } = await supabase
     .from("disputes")
     .select(`
@@ -84,7 +64,7 @@ export default async function OrganizerFinancialsPage() {
       liability_collected,
       created_at
     `)
-    .eq("organizer_id", user.id)
+    .eq("organizer_id", userId)
     .order("created_at", { ascending: false })
     .limit(10)
 
