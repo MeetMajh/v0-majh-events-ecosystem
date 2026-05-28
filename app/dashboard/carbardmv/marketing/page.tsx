@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
-import { requireRole } from "@/lib/roles"
+import { requireStaff } from "@/lib/auth/require-staff"
 import { formatDate } from "@/lib/format"
 import { formatDistanceToNow } from "date-fns"
 import { Badge } from "@/components/ui/badge"
@@ -25,7 +25,7 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 export default async function MarketingPage() {
-  await requireRole(["owner", "manager", "staff"])
+  await requireStaff("staff")
   const supabase = await createClient()
 
   // Fetch campaigns
