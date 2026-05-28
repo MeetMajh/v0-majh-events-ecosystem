@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
-import { requireRole } from "@/lib/roles"
+import { requireStaff } from "@/lib/auth/require-staff"
 import { assignStaffRole, removeStaffRole, cancelInvitation, resendInvitation } from "@/lib/admin-actions"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -27,7 +27,7 @@ export default async function StaffAdminPage({
 }: {
   searchParams: Promise<{ error?: string; success?: string }>
 }) {
-  await requireRole(["owner", "manager"])
+  await requireStaff("manager")
   const params = await searchParams
   const supabase = await createClient()
 
@@ -36,11 +36,9 @@ export default async function StaffAdminPage({
     .select("*, profiles(first_name, last_name)")
     .order("created_at")
 
-  // Get emails from auth for each staff member
   const { data: authUsers } = await supabase.auth.admin.listUsers()
   const emailMap = new Map(authUsers?.users?.map((u) => [u.id, u.email]) ?? [])
   
-  // Get pending staff invitations
   const { data: pendingInvitations } = await supabase
     .from("invitations")
     .select("*")
@@ -69,7 +67,6 @@ export default async function StaffAdminPage({
         </div>
       )}
 
-      {/* Add Staff Form */}
       <div className="rounded-xl border border-border bg-card p-6">
         <h2 className="mb-4 font-semibold text-foreground">Add / Update Staff Role</h2>
         <form action={assignStaffRole} className="flex flex-wrap items-end gap-4">
@@ -99,7 +96,6 @@ export default async function StaffAdminPage({
         </p>
       </div>
 
-      {/* Pending Invitations */}
       {pendingInvitations && pendingInvitations.length > 0 && (
         <div className="rounded-xl border border-border bg-card p-6">
           <h2 className="mb-4 font-semibold text-foreground flex items-center gap-2">
@@ -149,7 +145,6 @@ export default async function StaffAdminPage({
         </div>
       )}
 
-      {/* Staff List */}
       <div className="overflow-hidden rounded-xl border border-border">
         <table className="w-full text-sm">
           <thead>
