@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
-import { requireRole } from "@/lib/roles"
+import { requireStaff } from "@/lib/auth/require-staff"
 import { notFound } from "next/navigation"
 import { formatDate } from "@/lib/format"
 import { formatDistanceToNow } from "date-fns"
@@ -36,7 +36,7 @@ export default async function ClientDetailPage({
 }: {
   params: Promise<{ id: string }>
 }) {
-  await requireRole(["owner", "manager", "staff"])
+  await requireStaff("staff")
   const { id } = await params
   const supabase = await createClient()
 
