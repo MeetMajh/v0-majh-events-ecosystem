@@ -1,7 +1,5 @@
-"use server"
-
 import { createClient } from "@/lib/supabase/server"
-import { redirect } from "next/navigation"
+import { requireStaff } from "@/lib/auth/require-staff"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
@@ -35,32 +33,17 @@ import { InvestorReports } from "@/components/financials/investor-reports"
 import { FileText, Settings, Bell, Activity, AlertTriangle, Banknote, Percent, Building2, BarChart3 } from "lucide-react"
 
 export default async function AdminFinancialsPage() {
+  const { userId } = await requireStaff("manager")
   const supabase = await createClient()
-  
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect("/login")
 
-  // Check admin/staff access
-  const { data: staffRole } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .in("role", ["owner", "manager"])
-    .single()
-
-  if (!staffRole) redirect("/dashboard")
-
-  // Get user's profile for tenant_id
   const { data: profile } = await supabase
     .from("profiles")
     .select("tenant_id")
-    .eq("id", user.id)
+    .eq("id", userId)
     .single()
 
-  // Get first day of current month
   const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
 
-  // Fetch financial metrics from actual data tables
   const [
     { data: stripeDeposits },
     { data: manualCredits },
@@ -70,46 +53,39 @@ export default async function AdminFinancialsPage() {
     { data: activeEscrows },
     { data: recentTransactions },
   ] = await Promise.all([
-    // Stripe deposits only (actual money in)
     supabase
       .from("financial_transactions")
       .select("amount_cents")
       .eq("type", "deposit")
       .eq("status", "completed")
       .gte("created_at", monthStart),
-    // Manual admin credits (separate tracking)
     supabase
       .from("financial_transactions")
       .select("amount_cents")
       .eq("type", "manual_credit")
       .eq("status", "completed")
       .gte("created_at", monthStart),
-    // Total entry fees this month
     supabase
       .from("financial_transactions")
       .select("amount_cents")
       .eq("type", "entry_fee")
       .eq("status", "completed")
       .gte("created_at", monthStart),
-    // Platform fees (actual revenue)
     supabase
       .from("financial_transactions")
       .select("amount_cents")
       .eq("type", "platform_fee")
       .eq("status", "completed")
       .gte("created_at", monthStart),
-    // Pending withdrawals
     supabase
       .from("financial_transactions")
       .select("id, amount_cents")
       .eq("type", "withdrawal")
       .eq("status", "pending"),
-    // Active escrows
     supabase
       .from("escrow_accounts")
       .select("id, funded_amount_cents, status")
       .neq("status", "released"),
-    // Recent transactions
     supabase
       .from("financial_transactions")
       .select(`
@@ -124,18 +100,15 @@ export default async function AdminFinancialsPage() {
       .limit(10),
   ])
 
-  // Calculate totals - separate Stripe deposits from manual credits
   const stripeDepositsAmount = stripeDeposits?.reduce((sum, d) => sum + Math.abs(d.amount_cents || 0), 0) || 0
   const manualCreditsAmount = manualCredits?.reduce((sum, c) => sum + Math.abs(c.amount_cents || 0), 0) || 0
   const totalEntryFeesAmount = entryFees?.reduce((sum, f) => sum + Math.abs(f.amount_cents || 0), 0) || 0
   const pendingWithdrawalsAmount = pendingWithdrawals?.reduce((sum, w) => sum + Math.abs(w.amount_cents || 0), 0) || 0
   const activeEscrowsAmount = activeEscrows?.reduce((sum, e) => sum + (e.funded_amount_cents || 0), 0) || 0
   
-  // Platform fees - actual recorded revenue from tournament payouts
   const recordedPlatformFees = platformFees?.reduce((sum, f) => sum + (f.amount_cents || 0), 0) || 0
   const platformFeesAmount = recordedPlatformFees > 0 ? recordedPlatformFees : Math.round(totalEntryFeesAmount * 0.05)
   
-  // Net wallet volume = Stripe deposits + manual credits (shows total user funds)
   const netWalletVolume = stripeDepositsAmount + manualCreditsAmount
 
   const formatCurrency = (cents: number) => {
@@ -156,7 +129,6 @@ export default async function AdminFinancialsPage() {
         </div>
       </div>
 
-      {/* Key Metrics - Separated for clarity */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -224,7 +196,6 @@ export default async function AdminFinancialsPage() {
         </Card>
       </div>
 
-      {/* Detailed Views */}
       <Tabs defaultValue="payouts" className="space-y-4">
         <TabsList>
           <TabsTrigger value="payouts" className="flex items-center gap-2">
@@ -359,7 +330,6 @@ export default async function AdminFinancialsPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Recent Activity */}
       <Card>
         <CardHeader>
           <CardTitle>Recent Transactions</CardTitle>
