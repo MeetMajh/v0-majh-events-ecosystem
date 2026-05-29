@@ -3,29 +3,28 @@
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
-
-async function requireStaffRole(allowed: string[]) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect("/auth/login")
-
-  const { data } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .single()
-
-  if (!data || !allowed.includes(data.role)) {
-    redirect("/dashboard")
-  }
-  return { supabase, userId: user.id, role: data.role }
-}
+import { requireStaffAction } from "@/lib/auth/require-staff"
+import { getUserPermissions } from "@/lib/authorization"
 
 async function requireAuth() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect("/auth/login")
   return { supabase, userId: user.id }
+}
+
+// Returns true if the user has manager-or-above privileges.
+// Unlike requireStaffAction, this does NOT redirect on failure — it's used
+// for soft elevation checks inside otherwise-authenticated actions.
+async function isManagerOrAbove(): Promise<boolean> {
+  const permissions = await getUserPermissions()
+  if (!permissions) return false
+  if (permissions.isPlatformLevel) return true
+  const role = permissions.unifiedRole ?? ""
+  return [
+    "owner", "manager",
+    "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_ADMIN", "TENANT_MANAGER",
+  ].includes(role)
 }
 
 // ── Teams ──
@@ -74,7 +73,6 @@ export async function createTeam(formData: FormData) {
 
   if (error) return { error: error.message }
 
-  // Add captain as team member
   await supabase.from("team_members").insert({
     team_id: team.id,
     user_id: userId,
@@ -89,7 +87,6 @@ export async function updateTeam(formData: FormData) {
   const { supabase, userId } = await requireAuth()
   const id = formData.get("id") as string
 
-  // Verify captain
   const { data: team } = await supabase.from("teams").select("captain_id").eq("id", id).single()
   if (!team || team.captain_id !== userId) return { error: "Not authorized" }
 
@@ -180,7 +177,6 @@ export async function createThread(formData: FormData) {
 
   if (error) return { error: error.message }
 
-  // Create initial post as first reply
   const content = formData.get("content") as string
   if (content) {
     await supabase.from("forum_replies").insert({
@@ -197,7 +193,6 @@ export async function createThread(formData: FormData) {
 export async function createReply(threadId: string, content: string) {
   const { supabase, userId } = await requireAuth()
 
-  // Check if thread is locked
   const { data: thread } = await supabase.from("forum_threads").select("is_locked").eq("id", threadId).single()
   if (thread?.is_locked) return { error: "Thread is locked" }
 
@@ -219,24 +214,24 @@ export async function deleteReply(replyId: string) {
 }
 
 export async function pinThread(threadId: string, pinned: boolean) {
-  const { supabase } = await requireStaffRole(["owner", "manager"])
+  const { supabase } = await requireStaffAction("manager")
   await supabase.from("forum_threads").update({ is_pinned: pinned }).eq("id", threadId)
   revalidatePath("/community")
 }
 
 export async function lockThread(threadId: string, locked: boolean) {
-  const { supabase } = await requireStaffRole(["owner", "manager"])
+  const { supabase } = await requireStaffAction("manager")
   await supabase.from("forum_threads").update({ is_locked: locked }).eq("id", threadId)
   revalidatePath("/community")
 }
 
 export async function deleteThread(threadId: string) {
-  const { supabase } = await requireStaffRole(["owner", "manager"])
+  const { supabase } = await requireStaffAction("manager")
   await supabase.from("forum_threads").delete().eq("id", threadId)
   revalidatePath("/community")
 }
 
-// ���─ Recruitment ──
+// ── Recruitment ──
 
 export async function submitRecruitmentApplication(formData: FormData) {
   const supabase = await createClient()
@@ -258,7 +253,7 @@ export async function submitRecruitmentApplication(formData: FormData) {
 }
 
 export async function getRecruitmentApplications(status?: string) {
-  const { supabase } = await requireStaffRole(["owner", "manager"])
+  const { supabase } = await requireStaffAction("manager")
   let query = supabase
     .from("recruitment_applications")
     .select("*")
@@ -269,7 +264,7 @@ export async function getRecruitmentApplications(status?: string) {
 }
 
 export async function updateApplicationStatus(id: string, status: string) {
-  const { supabase } = await requireStaffRole(["owner", "manager"])
+  const { supabase } = await requireStaffAction("manager")
   const { error } = await supabase.from("recruitment_applications").update({ status }).eq("id", id)
   if (error) return { error: error.message }
   revalidatePath("/dashboard/admin/recruitment")
@@ -280,43 +275,40 @@ export async function updateApplicationStatus(id: string, status: string) {
 
 export async function getCommunityRooms() {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  
-  let query = supabase
+
+  const { data, error } = await supabase
     .from("community_rooms")
     .select("*")
     .eq("is_archived", false)
     .order("category")
     .order("name")
-  
-  const { data, error } = await query
-  
+
   if (error) {
     console.error("Error fetching rooms:", error)
     return []
   }
-  
+
   return data || []
 }
 
 export async function getCommunityRoom(slug: string) {
   const supabase = await createClient()
-  
+
   const { data } = await supabase
     .from("community_rooms")
     .select("*")
     .eq("slug", slug)
     .single()
-  
+
   return data
 }
 
 export async function createCommunityRoom(formData: FormData) {
   const { supabase, userId } = await requireAuth()
-  
+
   const name = formData.get("name") as string
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
-  
+
   const { error } = await supabase
     .from("community_rooms")
     .insert({
@@ -328,11 +320,11 @@ export async function createCommunityRoom(formData: FormData) {
       category: formData.get("category") as string || "general",
       created_by: userId,
     })
-  
+
   if (error) {
     return { error: error.message }
   }
-  
+
   revalidatePath("/community")
   return { success: true, slug }
 }
@@ -341,7 +333,7 @@ export async function createCommunityRoom(formData: FormData) {
 
 export async function getRoomMessages(roomId: string, limit = 50, before?: string) {
   const supabase = await createClient()
-  
+
   let query = supabase
     .from("community_messages")
     .select(`
@@ -352,29 +344,28 @@ export async function getRoomMessages(roomId: string, limit = 50, before?: strin
     .eq("is_deleted", false)
     .order("created_at", { ascending: false })
     .limit(limit)
-  
+
   if (before) {
     query = query.lt("created_at", before)
   }
-  
+
   const { data, error } = await query
-  
+
   if (error) {
     console.error("Error fetching messages:", error)
     return []
   }
-  
-  // Return in ascending order for display
+
   return (data || []).reverse()
 }
 
 export async function sendMessage(roomId: string, content: string, replyToId?: string) {
   const { supabase, userId } = await requireAuth()
-  
+
   if (!content?.trim()) {
     return { error: "Message cannot be empty" }
   }
-  
+
   const { data, error } = await supabase
     .from("community_messages")
     .insert({
@@ -388,91 +379,79 @@ export async function sendMessage(roomId: string, content: string, replyToId?: s
       profiles:user_id(id, first_name, last_name, avatar_url)
     `)
     .single()
-  
+
   if (error) {
     return { error: error.message }
   }
-  
+
   return { success: true, message: data }
 }
 
 export async function editMessage(messageId: string, content: string) {
   const { supabase, userId } = await requireAuth()
-  
+
   const { error } = await supabase
     .from("community_messages")
-    .update({ 
+    .update({
       content: content.trim(),
       edited_at: new Date().toISOString(),
     })
     .eq("id", messageId)
     .eq("user_id", userId)
-  
+
   if (error) {
     return { error: error.message }
   }
-  
+
   return { success: true }
 }
 
 export async function deleteMessage(messageId: string) {
   const { supabase, userId } = await requireAuth()
-  
-  // Soft delete - check if user owns message or is staff
-  const { data: staffRole } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", userId)
-    .maybeSingle()
-  
+  const isStaff = await isManagerOrAbove()
+
   let query = supabase
     .from("community_messages")
     .update({ is_deleted: true })
     .eq("id", messageId)
-  
-  // If not staff, restrict to own messages
-  if (!staffRole || !["owner", "manager"].includes(staffRole.role)) {
+
+  if (!isStaff) {
     query = query.eq("user_id", userId)
   }
-  
+
   const { error } = await query
-  
+
   if (error) {
     return { error: error.message }
   }
-  
+
   return { success: true }
 }
 
 export async function togglePinMessage(messageId: string, isPinned: boolean) {
   const { supabase, userId } = await requireAuth()
-  
-  // Check if user is moderator or staff
-  const { data: staffRole } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", userId)
-    .maybeSingle()
-  
+
+  const isStaff = await isManagerOrAbove()
+
   const { data: moderator } = await supabase
     .from("community_moderators")
     .select("id")
     .eq("user_id", userId)
     .maybeSingle()
-  
-  if (!staffRole && !moderator) {
+
+  if (!isStaff && !moderator) {
     return { error: "Unauthorized" }
   }
-  
+
   const { error } = await supabase
     .from("community_messages")
     .update({ is_pinned: isPinned })
     .eq("id", messageId)
-  
+
   if (error) {
     return { error: error.message }
   }
-  
+
   return { success: true }
 }
 
@@ -480,32 +459,32 @@ export async function togglePinMessage(messageId: string, isPinned: boolean) {
 
 export async function joinRoom(roomId: string) {
   const { supabase, userId } = await requireAuth()
-  
+
   const { error } = await supabase
     .from("community_room_members")
     .insert({ room_id: roomId, user_id: userId })
-  
+
   if (error && !error.message.includes("duplicate")) {
     return { error: error.message }
   }
-  
+
   revalidatePath("/community")
   return { success: true }
 }
 
 export async function leaveRoom(roomId: string) {
   const { supabase, userId } = await requireAuth()
-  
+
   const { error } = await supabase
     .from("community_room_members")
     .delete()
     .eq("room_id", roomId)
     .eq("user_id", userId)
-  
+
   if (error) {
     return { error: error.message }
   }
-  
+
   revalidatePath("/community")
   return { success: true }
 }
