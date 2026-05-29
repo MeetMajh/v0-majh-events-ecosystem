@@ -3,28 +3,12 @@
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
-
-async function requireStaffRole(allowed: string[]) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect("/auth/login")
-
-  const { data } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .single()
-
-  if (!data || !allowed.includes(data.role)) {
-    redirect("/dashboard")
-  }
-  return { supabase, userId: user.id, role: data.role }
-}
+import { requireStaffAction } from "@/lib/auth/require-staff"
 
 // ── Menu Items ──
 
 export async function createMenuItem(formData: FormData) {
-  const { supabase } = await requireStaffRole(["owner", "manager"])
+  const { supabase } = await requireStaffAction("manager")
 
   const item = {
     category_id: formData.get("category_id") as string,
@@ -42,7 +26,6 @@ export async function createMenuItem(formData: FormData) {
     redirect(`/dashboard/admin/menu?error=${encodeURIComponent(error.message)}`)
   }
 
-  // Create inventory record
   const trackInventory = formData.get("track_inventory") === "on"
   const qty = parseInt(formData.get("quantity") as string) || 0
   const threshold = parseInt(formData.get("low_stock_threshold") as string) || 5
@@ -59,7 +42,7 @@ export async function createMenuItem(formData: FormData) {
 }
 
 export async function updateMenuItem(formData: FormData) {
-  const { supabase } = await requireStaffRole(["owner", "manager"])
+  const { supabase } = await requireStaffAction("manager")
   const id = formData.get("id") as string
 
   const updates = {
@@ -83,7 +66,7 @@ export async function updateMenuItem(formData: FormData) {
 }
 
 export async function deleteMenuItem(formData: FormData) {
-  const { supabase } = await requireStaffRole(["owner", "manager"])
+  const { supabase } = await requireStaffAction("manager")
   const id = formData.get("id") as string
 
   await supabase.from("menu_items").delete().eq("id", id)
@@ -94,7 +77,7 @@ export async function deleteMenuItem(formData: FormData) {
 // ── Inventory ──
 
 export async function updateInventory(formData: FormData) {
-  const { supabase } = await requireStaffRole(["owner", "manager"])
+  const { supabase } = await requireStaffAction("manager")
   const menuItemId = formData.get("menu_item_id") as string
   const quantity = parseInt(formData.get("quantity_on_hand") as string)
   const threshold = parseInt(formData.get("low_stock_threshold") as string)
@@ -110,7 +93,7 @@ export async function updateInventory(formData: FormData) {
 // ── Orders ──
 
 export async function updateOrderStatus(formData: FormData) {
-  const { supabase } = await requireStaffRole(["owner", "manager", "staff"])
+  const { supabase } = await requireStaffAction("staff")
   const orderId = formData.get("order_id") as string
   const status = formData.get("status") as string
 
@@ -120,7 +103,6 @@ export async function updateOrderStatus(formData: FormData) {
     return
   }
 
-  // If completing order and payment was cash, mark as paid and award points
   if (status === "completed") {
     const { data: order } = await supabase
       .from("orders")
@@ -132,7 +114,6 @@ export async function updateOrderStatus(formData: FormData) {
       await supabase.from("orders").update({ payment_status: "paid" }).eq("id", orderId)
     }
 
-    // Award points: 1 point per dollar spent
     if (order?.customer_id && order.total_cents > 0) {
       const pointsToAward = Math.floor(order.total_cents / 100)
 
@@ -146,7 +127,6 @@ export async function updateOrderStatus(formData: FormData) {
         })
 
         await supabase.rpc("increment_points", { uid: order.customer_id, pts: pointsToAward }).catch(() => {
-          // Fallback: manual update
           supabase.from("profiles")
             .select("points_balance")
             .eq("id", order.customer_id)
@@ -170,16 +150,14 @@ export async function updateOrderStatus(formData: FormData) {
 // ── Staff Roles ──
 
 export async function assignStaffRole(formData: FormData) {
-  const { supabase, userId } = await requireStaffRole(["owner", "manager"])
+  const { supabase, userId } = await requireStaffAction("manager")
   const email = formData.get("email") as string
   const role = formData.get("role") as string
 
-  // Find user by email via profiles
   const { data: users } = await supabase.auth.admin.listUsers()
   const targetUser = users?.users?.find((u) => u.email === email)
 
   if (!targetUser) {
-    // User doesn't exist - create an invitation instead
     const { error: inviteError } = await supabase
       .from("invitations")
       .insert({
@@ -210,7 +188,7 @@ export async function assignStaffRole(formData: FormData) {
 }
 
 export async function cancelInvitation(formData: FormData) {
-  const { supabase } = await requireStaffRole(["owner", "manager"])
+  const { supabase } = await requireStaffAction("manager")
   const invitationId = formData.get("invitation_id") as string
 
   await supabase
@@ -222,15 +200,14 @@ export async function cancelInvitation(formData: FormData) {
 }
 
 export async function resendInvitation(formData: FormData) {
-  const { supabase, userId } = await requireStaffRole(["owner", "manager"])
+  const { supabase } = await requireStaffAction("manager")
   const invitationId = formData.get("invitation_id") as string
 
-  // Reset the invitation expiry
   await supabase
     .from("invitations")
-    .update({ 
+    .update({
       expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-      status: "pending"
+      status: "pending",
     })
     .eq("id", invitationId)
 
@@ -238,21 +215,20 @@ export async function resendInvitation(formData: FormData) {
   redirect(`/dashboard/admin/staff?success=${encodeURIComponent("Invitation resent")}`)
 }
 
-// Get all pending invitations
 export async function getPendingInvitations(type?: string) {
-  const { supabase } = await requireStaffRole(["owner", "manager"])
-  
+  const { supabase } = await requireStaffAction("manager")
+
   let query = supabase
     .from("invitations")
     .select("*, inviter:profiles!invited_by(first_name, last_name)")
     .eq("status", "pending")
     .gt("expires_at", new Date().toISOString())
     .order("created_at", { ascending: false })
-  
+
   if (type) {
     query = query.eq("invitation_type", type)
   }
-  
+
   const { data } = await query
   return data ?? []
 }
@@ -260,20 +236,20 @@ export async function getPendingInvitations(type?: string) {
 // ── User Management ──
 
 export async function getAllUsers() {
-  const { supabase } = await requireStaffRole(["owner", "manager"])
-  
+  const { supabase } = await requireStaffAction("manager")
+
   const { data: authUsers } = await supabase.auth.admin.listUsers()
   const { data: profiles } = await supabase
     .from("profiles")
     .select("*")
     .order("created_at", { ascending: false })
-  
+
   const { data: staffRoles } = await supabase
     .from("staff_roles")
     .select("user_id, role")
-  
+
   const staffMap = new Map(staffRoles?.map(sr => [sr.user_id, sr.role]) ?? [])
-  
+
   return authUsers?.users?.map(user => ({
     id: user.id,
     email: user.email,
@@ -286,24 +262,22 @@ export async function getAllUsers() {
 }
 
 export async function createUserManually(formData: FormData) {
-  const { supabase, userId } = await requireStaffRole(["owner", "manager"])
-  
+  const { supabase, userId } = await requireStaffAction("manager")
+
   const email = formData.get("email") as string
   const firstName = formData.get("first_name") as string
   const lastName = formData.get("last_name") as string
   const role = formData.get("role") as string | null
   const sendInvite = formData.get("send_invite") === "on"
-  
-  // Check if user already exists
+
   const { data: authUsers } = await supabase.auth.admin.listUsers()
   const existingUser = authUsers?.users?.find(u => u.email === email.toLowerCase())
-  
+
   if (existingUser) {
     redirect(`/dashboard/admin/users?error=${encodeURIComponent("User with this email already exists")}`)
   }
-  
+
   if (sendInvite) {
-    // Create invitation for new user
     const { error: inviteError } = await supabase
       .from("invitations")
       .insert({
@@ -312,56 +286,52 @@ export async function createUserManually(formData: FormData) {
         role: role || null,
         invited_by: userId,
       })
-    
+
     if (inviteError) {
       redirect(`/dashboard/admin/users?error=${encodeURIComponent(inviteError.message)}`)
     }
-    
+
     revalidatePath("/dashboard/admin/users")
     redirect(`/dashboard/admin/users?success=${encodeURIComponent(`Invitation sent to ${email}`)}`)
   } else {
-    // Create user directly using admin API
     const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
       email: email.toLowerCase(),
-      email_confirm: true, // Skip email confirmation for manual creation
+      email_confirm: true,
       user_metadata: { first_name: firstName, last_name: lastName },
     })
-    
+
     if (createError || !newUser.user) {
       redirect(`/dashboard/admin/users?error=${encodeURIComponent(createError?.message || "Failed to create user")}`)
     }
-    
-    // Create profile
+
     await supabase.from("profiles").upsert({
       id: newUser.user.id,
       first_name: firstName,
       last_name: lastName,
     })
-    
-    // Assign role if specified
+
     if (role) {
       await supabase.from("staff_roles").upsert({
         user_id: newUser.user.id,
         role,
       }, { onConflict: "user_id" })
     }
-    
+
     revalidatePath("/dashboard/admin/users")
     redirect(`/dashboard/admin/users?success=${encodeURIComponent(`User ${email} created successfully`)}`)
   }
 }
 
 export async function deleteUser(formData: FormData) {
-  const { supabase } = await requireStaffRole(["owner"])
+  const { supabase } = await requireStaffAction("owner")
   const userId = formData.get("user_id") as string
-  
-  // Delete user from auth (this will cascade to profiles via trigger if set up)
+
   const { error } = await supabase.auth.admin.deleteUser(userId)
-  
+
   if (error) {
     redirect(`/dashboard/admin/users?error=${encodeURIComponent(error.message)}`)
   }
-  
+
   revalidatePath("/dashboard/admin/users")
 }
 
@@ -369,8 +339,7 @@ export async function deleteUser(formData: FormData) {
 
 export async function acceptInvitation(token: string, userId: string) {
   const supabase = await createClient()
-  
-  // Find the invitation
+
   const { data: invitation, error } = await supabase
     .from("invitations")
     .select("*")
@@ -378,42 +347,39 @@ export async function acceptInvitation(token: string, userId: string) {
     .eq("status", "pending")
     .gt("expires_at", new Date().toISOString())
     .single()
-  
+
   if (error || !invitation) {
     return { error: "Invalid or expired invitation" }
   }
-  
-  // Mark invitation as accepted
+
   await supabase
     .from("invitations")
-    .update({ 
+    .update({
       status: "accepted",
       accepted_at: new Date().toISOString(),
       accepted_by: userId,
     })
     .eq("id", invitation.id)
-  
-  // Apply the invitation effect
+
   if (invitation.invitation_type === "staff" && invitation.role) {
     await supabase.from("staff_roles").upsert({
       user_id: userId,
       role: invitation.role,
     }, { onConflict: "user_id" })
   } else if (invitation.invitation_type === "tournament_participant" && invitation.tournament_id) {
-    // Register user for tournament
     await supabase.from("tournament_registrations").insert({
       tournament_id: invitation.tournament_id,
       user_id: userId,
       status: "registered",
     })
   }
-  
+
   return { success: true, invitation }
 }
 
 export async function getInvitationByToken(token: string) {
   const supabase = await createClient()
-  
+
   const { data } = await supabase
     .from("invitations")
     .select("*, tournaments(name, slug)")
@@ -421,12 +387,12 @@ export async function getInvitationByToken(token: string) {
     .eq("status", "pending")
     .gt("expires_at", new Date().toISOString())
     .single()
-  
+
   return data
 }
 
 export async function removeStaffRole(formData: FormData) {
-  const { supabase } = await requireStaffRole(["owner"])
+  const { supabase } = await requireStaffAction("owner")
   const userId = formData.get("user_id") as string
 
   await supabase.from("staff_roles").delete().eq("user_id", userId)
@@ -437,8 +403,8 @@ export async function removeStaffRole(formData: FormData) {
 // ── Organizer Requests ──
 
 export async function getOrganizerRequests(status?: string) {
-  const { supabase } = await requireStaffRole(["owner", "manager"])
-  
+  const { supabase } = await requireStaffAction("manager")
+
   let query = supabase
     .from("organizer_requests")
     .select(`
@@ -447,33 +413,31 @@ export async function getOrganizerRequests(status?: string) {
       reviewer:profiles!reviewed_by(first_name, last_name)
     `)
     .order("created_at", { ascending: false })
-  
+
   if (status) {
     query = query.eq("status", status)
   }
-  
+
   const { data, error } = await query
   if (error) console.error("Error fetching organizer requests:", error)
   return data ?? []
 }
 
 export async function approveOrganizerRequest(formData: FormData) {
-  const { supabase, userId } = await requireStaffRole(["owner", "manager"])
+  const { supabase, userId } = await requireStaffAction("manager")
   const requestId = formData.get("request_id") as string
   const notes = formData.get("notes") as string | null
-  
-  // Get the request
+
   const { data: request, error: fetchError } = await supabase
     .from("organizer_requests")
     .select("user_id")
     .eq("id", requestId)
     .single()
-  
+
   if (fetchError || !request) {
     redirect(`/dashboard/admin/organizers?error=${encodeURIComponent("Request not found")}`)
   }
-  
-  // Update request status
+
   const { error: updateError } = await supabase
     .from("organizer_requests")
     .update({
@@ -483,26 +447,25 @@ export async function approveOrganizerRequest(formData: FormData) {
       review_notes: notes,
     })
     .eq("id", requestId)
-  
+
   if (updateError) {
     redirect(`/dashboard/admin/organizers?error=${encodeURIComponent(updateError.message)}`)
   }
-  
-  // Grant organizer role
+
   await supabase.from("staff_roles").upsert({
     user_id: request.user_id,
     role: "organizer",
   }, { onConflict: "user_id" })
-  
+
   revalidatePath("/dashboard/admin/organizers")
   redirect(`/dashboard/admin/organizers?success=${encodeURIComponent("Request approved - user is now an organizer")}`)
 }
 
 export async function rejectOrganizerRequest(formData: FormData) {
-  const { supabase, userId } = await requireStaffRole(["owner", "manager"])
+  const { supabase, userId } = await requireStaffAction("manager")
   const requestId = formData.get("request_id") as string
   const notes = formData.get("notes") as string | null
-  
+
   const { error } = await supabase
     .from("organizer_requests")
     .update({
@@ -512,51 +475,49 @@ export async function rejectOrganizerRequest(formData: FormData) {
       review_notes: notes,
     })
     .eq("id", requestId)
-  
+
   if (error) {
     redirect(`/dashboard/admin/organizers?error=${encodeURIComponent(error.message)}`)
   }
-  
+
   revalidatePath("/dashboard/admin/organizers")
   redirect(`/dashboard/admin/organizers?success=${encodeURIComponent("Request rejected")}`)
 }
 
-// User-facing action to submit an organizer request
 export async function submitOrganizerRequest(formData: FormData) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  
+
   if (!user) {
     redirect("/auth/login")
   }
-  
+
   const reason = formData.get("reason") as string
   const experience = formData.get("experience") as string
   const gamesOfInterest = formData.getAll("games") as string[]
-  
-  // Check if user already has a pending request
+
   const { data: existing } = await supabase
     .from("organizer_requests")
     .select("id, status")
     .eq("user_id", user.id)
     .eq("status", "pending")
     .single()
-  
+
   if (existing) {
     return { error: "You already have a pending organizer request" }
   }
-  
+
   const { error } = await supabase.from("organizer_requests").insert({
     user_id: user.id,
     reason,
     experience,
     games_of_interest: gamesOfInterest,
   })
-  
+
   if (error) {
     return { error: error.message }
   }
-  
+
   revalidatePath("/dashboard")
   return { success: true }
 }
@@ -564,7 +525,7 @@ export async function submitOrganizerRequest(formData: FormData) {
 // ── POS: Create order (staff-facing) ──
 
 export async function createPosOrder(formData: FormData) {
-  const { supabase } = await requireStaffRole(["owner", "manager", "staff"])
+  const { supabase } = await requireStaffAction("staff")
 
   const itemsJson = formData.get("items") as string
   const items: Array<{ id: string; quantity: number; price_cents: number }> = JSON.parse(itemsJson)
@@ -575,7 +536,6 @@ export async function createPosOrder(formData: FormData) {
   const subtotal = items.reduce((sum, i) => sum + i.price_cents * i.quantity, 0)
   const total = subtotal
 
-  // Find customer if email provided
   let customerId: string | null = null
   if (customerEmail) {
     const { data: users } = await supabase.auth.admin.listUsers()
@@ -603,7 +563,6 @@ export async function createPosOrder(formData: FormData) {
     return { error: error?.message || "Failed to create order" }
   }
 
-  // Insert order items
   const orderItems = items.map((i) => ({
     order_id: order.id,
     menu_item_id: i.id,
@@ -614,7 +573,6 @@ export async function createPosOrder(formData: FormData) {
 
   await supabase.from("order_items").insert(orderItems)
 
-  // Decrement inventory
   for (const item of items) {
     await supabase.rpc("decrement_inventory", { item_id: item.id, qty: item.quantity }).catch(async () => {
       const { data: inv } = await supabase
