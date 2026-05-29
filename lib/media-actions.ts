@@ -2,17 +2,12 @@
 
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
+import { requireStaffAction } from "@/lib/auth/require-staff"
 import { generateEmbedUrl, generateThumbnailUrl, checkContentViolations, isAllowedUrl } from "@/lib/media-utils"
 import { moderateMedia as runAIModeration } from "@/lib/content-moderation"
 
-// Define types locally to avoid server action bundling issues with type re-exports
 export type MediaType = "clip" | "vod" | "highlight" | "full_match" | "tutorial"
 export type SourceType = "upload" | "youtube" | "twitch" | "kick" | "external"
-
-// ==========================================
-// TYPES
-// ==========================================
-
 export type Visibility = "public" | "unlisted" | "private" | "followers_only"
 export type ModerationStatus = "pending" | "approved" | "rejected" | "flagged"
 export type ReactionType = "like" | "dislike" | "fire" | "shocked" | "clap" | "sad" | "laugh" | "pog" | "gg"
@@ -60,42 +55,37 @@ export async function uploadMediaFile(
   console.log("[v0] uploadMediaFile called")
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  
+
   if (!user) {
     console.log("[v0] Upload: No user found")
     return { error: "Must be logged in to upload" }
   }
   console.log("[v0] Upload: User ID:", user.id)
-  
+
   const file = formData.get("file") as File
   if (!file || !(file instanceof File)) {
     console.log("[v0] Upload: No file in formData")
     return { error: "No file provided" }
   }
   console.log("[v0] Upload: File name:", file.name, "type:", file.type, "size:", file.size)
-  
-  // Validate file type
+
   const allowedTypes = ["video/mp4", "video/webm", "video/quicktime", "video/x-m4v"]
   if (!allowedTypes.includes(file.type)) {
     return { error: "Invalid file type. Supported: MP4, WebM, MOV" }
   }
-  
-  // Validate file size (100MB max)
+
   const maxSize = 100 * 1024 * 1024
   if (file.size > maxSize) {
     return { error: "File too large. Maximum size is 100MB" }
   }
-  
-  // Generate unique file path
+
   const fileExt = file.name.split(".").pop()?.toLowerCase() || "mp4"
   const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${fileExt}`
   const filePath = `${user.id}/${fileName}`
-  
-  // Convert File to ArrayBuffer for server-side upload
+
   const arrayBuffer = await file.arrayBuffer()
   const buffer = new Uint8Array(arrayBuffer)
-  
-  // Upload to Supabase Storage
+
   const { error: uploadError } = await supabase.storage
     .from("player-media")
     .upload(filePath, buffer, {
@@ -103,24 +93,22 @@ export async function uploadMediaFile(
       upsert: false,
       contentType: file.type,
     })
-  
+
   if (uploadError) {
     console.error("[v0] Storage upload error:", uploadError)
-    // Check for common issues
     if (uploadError.message.includes("bucket") || uploadError.message.includes("not found")) {
       return { error: "Storage not configured. Please create a 'player-media' bucket in Supabase Storage." }
     }
     return { error: `Upload failed: ${uploadError.message}` }
   }
-  
-  // Get public URL
+
   const { data: urlData } = supabase.storage
     .from("player-media")
     .getPublicUrl(filePath)
-  
-  return { 
-    url: urlData.publicUrl, 
-    storagePath: filePath 
+
+  return {
+    url: urlData.publicUrl,
+    storagePath: filePath,
   }
 }
 
@@ -144,32 +132,29 @@ export async function createMedia(data: {
 }): Promise<{ media?: PlayerMedia; error?: string }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  
+
   if (!user) return { error: "Must be logged in to upload media" }
-  
-  // Check if user is content banned
+
   const { data: profile } = await supabase
     .from("profiles")
     .select("is_content_banned, content_ban_until")
     .eq("id", user.id)
     .single()
-  
+
   if (profile?.is_content_banned) {
     if (!profile.content_ban_until || new Date(profile.content_ban_until) > new Date()) {
       return { error: "You are currently banned from uploading content" }
     }
   }
-  
-  // Validate content
+
   const violations = checkContentViolations(data.title, data.description)
   if (violations.length > 0) {
     return { error: `Content violations: ${violations.join(", ")}` }
   }
-  
-  // Validate URL if provided
+
   let embedUrl: string | null = null
   let thumbnailUrl = data.thumbnailUrl || null
-  
+
   if (data.videoUrl && data.sourceType !== "upload") {
     if (!isAllowedUrl(data.videoUrl)) {
       return { error: "Video URL not from an allowed platform (YouTube, Twitch, Kick)" }
@@ -179,16 +164,10 @@ export async function createMedia(data: {
       thumbnailUrl = generateThumbnailUrl(data.videoUrl)
     }
   }
-  
-  // Gaming context is optional - clips can be general gaming content
-  // No longer require game/tournament/match linkage
-  
-  // Auto-approve uploads for now (can add moderation later)
+
   const autoApprove = true
-  
-  // url is required - use video_url, storage_path, or generate from embed
   const mediaUrl = data.videoUrl || data.storagePath || embedUrl || ""
-  
+
   const { data: media, error } = await supabase
     .from("player_media")
     .insert({
@@ -213,26 +192,22 @@ export async function createMedia(data: {
     })
     .select()
     .single()
-  
+
   if (error) return { error: error.message }
-  
-  // Increment user's upload count atomically
+
   await supabase.rpc("increment_upload_count", { user_id: user.id }).catch(() => {
-    // Fallback if RPC doesn't exist - just increment
     supabase
       .from("profiles")
       .update({ total_uploads: 1 })
       .eq("id", user.id)
   })
-  
-  // Run AI content moderation asynchronously (don't block the response)
-  // This will update moderation_status in the background
+
   if (!autoApprove) {
     runAIModeration(media.id).catch((err) => {
       console.error("[v0] Background moderation failed:", err)
     })
   }
-  
+
   revalidatePath(`/players/${user.id}`)
   return { media }
 }
@@ -251,28 +226,26 @@ export async function updateMedia(
 ): Promise<{ success?: boolean; error?: string }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  
+
   if (!user) return { error: "Must be logged in" }
-  
-  // Verify ownership
+
   const { data: existing } = await supabase
     .from("player_media")
     .select("player_id")
     .eq("id", mediaId)
     .single()
-  
+
   if (!existing || existing.player_id !== user.id) {
     return { error: "Not authorized to edit this media" }
   }
-  
-  // Validate content if title/description changed
+
   if (data.title || data.description) {
     const violations = checkContentViolations(data.title || "", data.description)
     if (violations.length > 0) {
       return { error: `Content violations: ${violations.join(", ")}` }
     }
   }
-  
+
   const updateData: Record<string, any> = { updated_at: new Date().toISOString() }
   if (data.title) updateData.title = data.title.trim()
   if (data.description !== undefined) updateData.description = data.description?.trim() || null
@@ -281,14 +254,14 @@ export async function updateMedia(
   if (data.gameId) updateData.game_id = data.gameId
   if (data.tournamentId) updateData.tournament_id = data.tournamentId
   if (data.matchId) updateData.match_id = data.matchId
-  
+
   const { error } = await supabase
     .from("player_media")
     .update(updateData)
     .eq("id", mediaId)
-  
+
   if (error) return { error: error.message }
-  
+
   revalidatePath(`/media/${mediaId}`)
   return { success: true }
 }
@@ -296,32 +269,30 @@ export async function updateMedia(
 export async function deleteMedia(mediaId: string): Promise<{ success?: boolean; error?: string }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  
+
   if (!user) return { error: "Must be logged in" }
-  
-  // Verify ownership
+
   const { data: existing } = await supabase
     .from("player_media")
     .select("player_id, storage_path")
     .eq("id", mediaId)
     .single()
-  
+
   if (!existing || existing.player_id !== user.id) {
     return { error: "Not authorized to delete this media" }
   }
-  
-  // Delete from storage if uploaded
+
   if (existing.storage_path) {
     await supabase.storage.from("player-media").remove([existing.storage_path])
   }
-  
+
   const { error } = await supabase
     .from("player_media")
     .delete()
     .eq("id", mediaId)
-  
+
   if (error) return { error: error.message }
-  
+
   revalidatePath(`/players/${user.id}`)
   return { success: true }
 }
@@ -332,7 +303,7 @@ export async function deleteMedia(mediaId: string): Promise<{ success?: boolean;
 
 export async function getMediaById(mediaId: string): Promise<PlayerMedia | null> {
   const supabase = await createClient()
-  
+
   const { data } = await supabase
     .from("player_media")
     .select(`
@@ -343,7 +314,7 @@ export async function getMediaById(mediaId: string): Promise<PlayerMedia | null>
     `)
     .eq("id", mediaId)
     .single()
-  
+
   return data as PlayerMedia | null
 }
 
@@ -353,20 +324,18 @@ export async function getMediaById(mediaId: string): Promise<PlayerMedia | null>
 
 export async function trackClipView(clipId: string): Promise<{ success: boolean; views?: number; error?: string }> {
   const supabase = await createClient()
-  
+
   try {
-    // Get current view count
     const { data: clip, error: fetchError } = await supabase
       .from("player_media")
       .select("view_count")
       .eq("id", clipId)
       .single()
-    
+
     if (fetchError || !clip) {
       return { success: false, error: "Clip not found" }
     }
-    
-    // Increment view count
+
     const newViews = (clip.view_count || 0) + 1
     const { data: updated, error: updateError } = await supabase
       .from("player_media")
@@ -374,11 +343,11 @@ export async function trackClipView(clipId: string): Promise<{ success: boolean;
       .eq("id", clipId)
       .select("view_count")
       .single()
-    
+
     if (updateError) {
       return { success: false, error: updateError.message }
     }
-    
+
     return { success: true, views: updated?.view_count || newViews }
   } catch (error) {
     console.error("[v0] Error tracking clip view:", error)
@@ -396,7 +365,7 @@ export async function getPlayerMedia(
 ): Promise<PlayerMedia[]> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  
+
   let query = supabase
     .from("player_media")
     .select(`
@@ -406,24 +375,23 @@ export async function getPlayerMedia(
     `)
     .eq("player_id", playerId)
     .order("created_at", { ascending: false })
-  
-  // Only show approved public media unless viewing own profile
+
   if (user?.id !== playerId) {
     query = query.eq("visibility", "public").eq("moderation_status", "approved")
   }
-  
+
   if (options?.mediaType) {
     query = query.eq("media_type", options.mediaType)
   }
-  
+
   if (options?.limit) {
     query = query.limit(options.limit)
   }
-  
+
   if (options?.offset) {
     query = query.range(options.offset, options.offset + (options?.limit || 20) - 1)
   }
-  
+
   const { data } = await query
   return (data || []) as PlayerMedia[]
 }
@@ -436,8 +404,7 @@ export async function getTrendingMedia(
   }
 ): Promise<PlayerMedia[]> {
   const supabase = await createClient()
-  
-  // Query with joins - use column name for foreign key relationship
+
   let query = supabase
     .from("player_media")
     .select(`
@@ -449,12 +416,11 @@ export async function getTrendingMedia(
     .eq("moderation_status", "approved")
     .order("trending_score", { ascending: false })
     .limit(options?.limit || 20)
-  
+
   if (options?.gameId) {
     query = query.eq("game_id", options.gameId)
   }
-  
-  // Timeframe filter
+
   if (options?.timeframe && options.timeframe !== "all") {
     const now = new Date()
     let cutoff: Date
@@ -465,528 +431,23 @@ export async function getTrendingMedia(
     }
     query = query.gte("created_at", cutoff.toISOString())
   }
-  
+
   const { data, error } = await query
-  
+
   if (error) {
     console.error("[v0] getTrendingMedia error:", error)
     return []
   }
-  
+
   console.log("[v0] getTrendingMedia found:", data?.length, "items")
   return (data || []) as PlayerMedia[]
 }
 
 export async function getRecentMedia(limit: number = 20): Promise<PlayerMedia[]> {
   const supabase = await createClient()
-  
+
   const { data, error } = await supabase
     .from("player_media")
     .select(`
       *,
       player:player_id(id, first_name, last_name, avatar_url),
-      game:game_id(id, name, slug)
-    `)
-    .eq("visibility", "public")
-    .eq("moderation_status", "approved")
-    .order("created_at", { ascending: false })
-    .limit(limit)
-  
-  if (error) {
-    console.error("[v0] getRecentMedia error:", error)
-    return []
-  }
-  
-  console.log("[v0] getRecentMedia found:", data?.length, "items")
-  return (data || []) as PlayerMedia[]
-}
-
-export async function getFeaturedMedia(limit: number = 5): Promise<PlayerMedia[]> {
-  const supabase = await createClient()
-  
-  const { data, error } = await supabase
-    .from("player_media")
-    .select(`
-      *,
-      player:player_id(id, first_name, last_name, avatar_url),
-      game:game_id(id, name, slug)
-    `)
-    .eq("visibility", "public")
-    .eq("moderation_status", "approved")
-    .eq("is_featured", true)
-    .order("created_at", { ascending: false })
-    .limit(limit)
-  
-  if (error) {
-    console.error("[v0] getFeaturedMedia error:", error)
-    return []
-  }
-  
-  return (data || []) as PlayerMedia[]
-}
-
-// Get paginated media feed for infinite scroll (TikTok-style)
-export async function getMediaFeed(
-  cursor?: string, // ID of last item for pagination
-  limit: number = 10,
-  filter: "trending" | "recent" | "following" = "trending"
-): Promise<{ media: PlayerMedia[]; nextCursor: string | null }> {
-  const supabase = await createClient()
-  
-  let query = supabase
-    .from("player_media")
-    .select(`
-      *,
-      player:player_id(id, first_name, last_name, avatar_url),
-      game:game_id(id, name, slug)
-    `)
-    .eq("visibility", "public")
-    .eq("moderation_status", "approved")
-  
-  // Filter by type
-  if (filter === "trending") {
-    query = query.order("trending_score", { ascending: false })
-  } else if (filter === "recent") {
-    query = query.order("created_at", { ascending: false })
-  } else if (filter === "following") {
-    // Get user's followed players
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user) {
-      const { data: follows } = await supabase
-        .from("player_follows")
-        .select("player_id")
-        .eq("follower_id", user.id)
-      
-      const followedIds = follows?.map(f => f.player_id) || []
-      if (followedIds.length > 0) {
-        query = query.in("player_id", followedIds)
-      }
-    }
-    query = query.order("created_at", { ascending: false })
-  }
-  
-  // Cursor-based pagination
-  if (cursor) {
-    // Get the cursor item to compare
-    const { data: cursorItem } = await supabase
-      .from("player_media")
-      .select("trending_score, created_at")
-      .eq("id", cursor)
-      .single()
-    
-    if (cursorItem) {
-      if (filter === "trending") {
-        query = query.or(`trending_score.lt.${cursorItem.trending_score},and(trending_score.eq.${cursorItem.trending_score},id.lt.${cursor})`)
-      } else {
-        query = query.lt("created_at", cursorItem.created_at)
-      }
-    }
-  }
-  
-  query = query.limit(limit + 1) // Fetch one extra to check if there are more
-  
-  const { data } = await query
-  
-  const media = (data || []).slice(0, limit) as PlayerMedia[]
-  const hasMore = (data?.length || 0) > limit
-  const nextCursor = hasMore && media.length > 0 ? media[media.length - 1].id : null
-  
-  return { media, nextCursor }
-}
-
-// ==========================================
-// ENGAGEMENT
-// ==========================================
-
-export async function addMediaReaction(
-  mediaId: string,
-  reactionType: ReactionType
-): Promise<{ success?: boolean; error?: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  
-  if (!user) {
-    return { error: "Must be logged in to react" }
-  }
-  
-  // First remove any existing reaction of this type, then insert
-  // This avoids upsert issues with the composite unique constraint
-  await supabase
-    .from("media_reactions")
-    .delete()
-    .eq("media_id", mediaId)
-    .eq("user_id", user.id)
-    .eq("reaction_type", reactionType)
-  
-  // Insert new reaction
-  const { error } = await supabase
-    .from("media_reactions")
-    .insert({
-      media_id: mediaId,
-      user_id: user.id,
-      reaction_type: reactionType,
-    })
-  
-  if (error) return { error: error.message }
-  
-  // Update like_count on the media
-  await supabase.rpc("update_media_stats", { p_media_id: mediaId })
-  
-  return { success: true }
-}
-
-export async function removeMediaReaction(
-  mediaId: string,
-  reactionType: ReactionType
-): Promise<{ success?: boolean; error?: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  
-  if (!user) return { error: "Must be logged in" }
-  
-  const { error } = await supabase
-    .from("media_reactions")
-    .delete()
-    .eq("media_id", mediaId)
-    .eq("user_id", user.id)
-    .eq("reaction_type", reactionType)
-  
-  if (error) return { error: error.message }
-  return { success: true }
-}
-
-export async function getMediaReactions(mediaId: string) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  
-  const { data: reactions } = await supabase
-    .from("media_reactions")
-    .select("reaction_type")
-    .eq("media_id", mediaId)
-  
-  // Count by type
-  const counts: Record<string, number> = {}
-  reactions?.forEach(r => {
-    counts[r.reaction_type] = (counts[r.reaction_type] || 0) + 1
-  })
-  
-  // Check user's reaction
-  let userReaction: ReactionType | null = null
-  if (user) {
-    const { data: userReactionData } = await supabase
-      .from("media_reactions")
-      .select("reaction_type")
-      .eq("media_id", mediaId)
-      .eq("user_id", user.id)
-      .limit(1)
-      .single()
-    
-    userReaction = userReactionData?.reaction_type as ReactionType | null
-  }
-  
-  return { counts, userReaction }
-}
-
-// ==========================================
-// COMMENTS
-// ==========================================
-
-export async function addMediaComment(
-  mediaId: string,
-  content: string,
-  parentId?: string
-): Promise<{ commentId?: string; error?: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  
-  if (!user) {
-    return { error: "Must be logged in to comment" }
-  }
-  
-  if (content.length < 1 || content.length > 1000) {
-    return { error: "Comment must be between 1 and 1000 characters" }
-  }
-  
-  const { data, error } = await supabase
-    .from("media_comments")
-    .insert({
-      media_id: mediaId,
-      user_id: user.id,
-      parent_id: parentId || null,
-      content: content.trim(),
-    })
-    .select("id")
-    .single()
-  
-  if (error) return { error: error.message }
-  return { commentId: data.id }
-}
-
-export async function getMediaComments(mediaId: string, limit: number = 50) {
-  const supabase = await createClient()
-  
-  const { data } = await supabase
-    .from("media_comments")
-    .select(`
-      *,
-      user:profiles!media_comments_user_id_fkey(id, first_name, last_name, avatar_url)
-    `)
-    .eq("media_id", mediaId)
-    .eq("is_deleted", false)
-    .is("parent_id", null) // Top-level comments only
-    .order("created_at", { ascending: false })
-    .limit(limit)
-  
-  return data || []
-}
-
-export async function deleteMediaComment(commentId: string): Promise<{ success?: boolean; error?: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  
-  if (!user) return { error: "Must be logged in" }
-  
-  // Soft delete
-  const { error } = await supabase
-    .from("media_comments")
-    .update({ is_deleted: true })
-    .eq("id", commentId)
-    .eq("user_id", user.id)
-  
-  if (error) return { error: error.message }
-  return { success: true }
-}
-
-// ==========================================
-// VIEWS
-// ==========================================
-
-export async function trackMediaView(
-  mediaId: string
-): Promise<void> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  
-  // For logged-in users, use upsert to avoid duplicate views
-  // For anonymous users, just insert a new view each time
-  if (user) {
-    await supabase
-      .from("media_views")
-      .upsert({
-        media_id: mediaId,
-        user_id: user.id,
-      }, { onConflict: "media_id,user_id" })
-  } else {
-    // Anonymous view - just insert
-    await supabase
-      .from("media_views")
-      .insert({
-        media_id: mediaId,
-        user_id: null,
-      })
-  }
-  
-  // Update view count on the media
-  await supabase.rpc("update_media_stats", { p_media_id: mediaId })
-}
-
-// ==========================================
-// REPORTING
-// ==========================================
-
-export async function reportMedia(
-  mediaId: string,
-  reason: string,
-  details?: string
-): Promise<{ success?: boolean; error?: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  
-  if (!user) return { error: "Must be logged in to report" }
-  
-  const { error } = await supabase
-    .from("media_reports")
-    .insert({
-      media_id: mediaId,
-      reporter_id: user.id,
-      reason,
-      details: details?.trim() || null,
-    })
-  
-  if (error) {
-    if (error.code === "23505") return { error: "You have already reported this content" }
-    return { error: error.message }
-  }
-  
-  return { success: true }
-}
-
-// ==========================================
-// MODERATION (Admin)
-// ==========================================
-
-export async function moderateMedia(
-  mediaId: string,
-  action: "approve" | "reject",
-  reason?: string
-): Promise<{ success?: boolean; error?: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  
-  if (!user) return { error: "Must be logged in" }
-  
-  // Check admin permission
-  const { data: staff } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .single()
-  
-  if (!staff || !["owner", "manager", "organizer"].includes(staff.role)) {
-    return { error: "Not authorized" }
-  }
-  
-  const updateData: Record<string, any> = {
-    moderation_status: action === "approve" ? "approved" : "rejected",
-    moderated_by: user.id,
-    moderated_at: new Date().toISOString(),
-  }
-  
-  if (action === "approve") {
-    updateData.published_at = new Date().toISOString()
-    updateData.is_flagged = false
-  } else {
-    updateData.rejection_reason = reason || null
-  }
-  
-  const { data: media, error } = await supabase
-    .from("player_media")
-    .update(updateData)
-    .eq("id", mediaId)
-    .select("player_id")
-    .single()
-  
-  if (error) return { error: error.message }
-  
-  // Update user's trust score
-  if (media) {
-    const column = action === "approve" ? "approved_uploads" : "rejected_uploads"
-    await supabase.rpc("increment_profile_column", { 
-      p_user_id: media.player_id, 
-      p_column: column 
-    })
-    
-    // Recalculate trust score
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("approved_uploads, rejected_uploads")
-      .eq("id", media.player_id)
-      .single()
-    
-    if (profile) {
-      const total = (profile.approved_uploads || 0) + (profile.rejected_uploads || 0)
-      const trustScore = total > 0 
-        ? Math.round(((profile.approved_uploads || 0) / total) * 100)
-        : 100
-      
-      await supabase
-        .from("profiles")
-        .update({ content_trust_score: trustScore })
-        .eq("id", media.player_id)
-    }
-  }
-  
-  return { success: true }
-}
-
-export async function getPendingMedia(limit: number = 50): Promise<PlayerMedia[]> {
-  const supabase = await createClient()
-  
-  const { data } = await supabase
-    .from("player_media")
-    .select(`
-      *,
-      player:profiles!player_media_player_id_fkey(id, first_name, last_name, avatar_url, content_trust_score),
-      game:games(id, name, slug)
-    `)
-    .eq("moderation_status", "pending")
-    .order("created_at", { ascending: true })
-    .limit(limit)
-  
-  return (data || []) as PlayerMedia[]
-}
-
-export async function getFlaggedMedia(limit: number = 50): Promise<PlayerMedia[]> {
-  const supabase = await createClient()
-  
-  const { data } = await supabase
-    .from("player_media")
-    .select(`
-      *,
-      player:profiles!player_media_player_id_fkey(id, first_name, last_name, avatar_url),
-      game:games(id, name, slug)
-    `)
-    .eq("is_flagged", true)
-    .order("flag_count", { ascending: false })
-    .limit(limit)
-  
-  return (data || []) as PlayerMedia[]
-}
-
-// ==========================================
-// PLAYER FOLLOW SYSTEM
-// ==========================================
-
-export async function followPlayer(playerId: string): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  
-  if (!user) return { success: false, error: "Must be logged in" }
-  if (user.id === playerId) return { success: false, error: "Cannot follow yourself" }
-  
-  const { error } = await supabase
-    .from("player_follows")
-    .insert({
-      follower_id: user.id,
-      player_id: playerId,
-    })
-  
-  if (error) {
-    if (error.code === "23505") return { success: true } // Already following
-    return { success: false, error: error.message }
-  }
-  
-  return { success: true }
-}
-
-export async function unfollowPlayer(playerId: string): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  
-  if (!user) return { success: false, error: "Must be logged in" }
-  
-  const { error } = await supabase
-    .from("player_follows")
-    .delete()
-    .eq("follower_id", user.id)
-    .eq("player_id", playerId)
-  
-  if (error) return { success: false, error: error.message }
-  return { success: true }
-}
-
-export async function checkIfFollowing(playerId: string): Promise<boolean> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  
-  if (!user) return false
-  
-  const { data } = await supabase
-    .from("player_follows")
-    .select("id")
-    .eq("follower_id", user.id)
-    .eq("player_id", playerId)
-    .single()
-  
-  return !!data
-}
