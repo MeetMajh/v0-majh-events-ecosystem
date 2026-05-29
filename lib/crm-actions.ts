@@ -1,56 +1,38 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
-
-// ── Auth helper ──
-
-async function requireStaff() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) redirect("/auth/login")
-
-  const { data } = await supabase.from("staff_roles").select("role").eq("user_id", user.id).single()
-
-  if (!data || !["admin", "staff", "owner", "manager"].includes(data.role)) {
-    redirect("/dashboard")
-  }
-  return { supabase, userId: user.id, role: data.role }
-}
+import { requireStaffAction } from "@/lib/auth/require-staff"
 
 // ════════════════════════════════════════════
 // SEGMENTS
 // ════════════════════════════════════════════
 
 export async function createSegment(formData: FormData) {
-  const { supabase, userId } = await requireStaff()
+  const { supabase, userId } = await requireStaffAction("staff")
 
-  // Build criteria object from form
   const criteria: Record<string, any> = {}
-  
+
   const minLtv = formData.get("min_ltv") as string
   if (minLtv && parseInt(minLtv) > 0) {
-    criteria.min_lifetime_value = parseInt(minLtv) * 100 // Convert to cents
+    criteria.min_lifetime_value = parseInt(minLtv) * 100
   }
-  
+
   const statusFilter = formData.get("status_filter") as string
   if (statusFilter && statusFilter !== "any") {
     criteria.status = [statusFilter]
   }
-  
+
   const cityFilter = formData.get("city_filter") as string
   if (cityFilter) {
     criteria.city = cityFilter
   }
-  
+
   const sourceFilter = formData.get("source_filter") as string
   if (sourceFilter && sourceFilter !== "any") {
     criteria.source = sourceFilter
   }
-  
+
   const hasBirthday = formData.get("has_birthday") === "on"
   if (hasBirthday) {
     criteria.has_birthday = true
@@ -70,7 +52,6 @@ export async function createSegment(formData: FormData) {
 
   if (error) return { error: error.message }
 
-  // If dynamic, populate members based on criteria
   if (segment && formData.get("is_dynamic") === "on") {
     await refreshSegmentMembers(segment.id, criteria)
   }
@@ -82,7 +63,6 @@ export async function createSegment(formData: FormData) {
 export async function refreshSegmentMembers(segmentId: string, criteria: Record<string, any>) {
   const supabase = await createClient()
 
-  // Build query based on criteria
   let query = supabase.from("cb_clients").select("id")
 
   if (criteria.min_lifetime_value) {
@@ -107,10 +87,8 @@ export async function refreshSegmentMembers(segmentId: string, criteria: Record<
 
   const { data: clients } = await query
 
-  // Clear existing members
   await supabase.from("crm_segment_members").delete().eq("segment_id", segmentId)
 
-  // Insert new members
   if (clients && clients.length > 0) {
     await supabase.from("crm_segment_members").insert(
       clients.map((c: { id: string }) => ({
@@ -119,7 +97,6 @@ export async function refreshSegmentMembers(segmentId: string, criteria: Record<
       }))
     )
 
-    // Update member count
     await supabase
       .from("crm_segments")
       .update({ member_count: clients.length, updated_at: new Date().toISOString() })
@@ -130,7 +107,7 @@ export async function refreshSegmentMembers(segmentId: string, criteria: Record<
 }
 
 export async function deleteSegment(segmentId: string) {
-  const { supabase } = await requireStaff()
+  const { supabase } = await requireStaffAction("staff")
 
   const { error } = await supabase.from("crm_segments").delete().eq("id", segmentId)
 
@@ -145,7 +122,7 @@ export async function deleteSegment(segmentId: string) {
 // ════════════════════════════════════════════
 
 export async function createCampaign(formData: FormData) {
-  const { supabase, userId } = await requireStaff()
+  const { supabase, userId } = await requireStaffAction("staff")
 
   const { data: campaign, error } = await supabase
     .from("marketing_campaigns")
@@ -169,7 +146,7 @@ export async function createCampaign(formData: FormData) {
 }
 
 export async function updateCampaignStatus(campaignId: string, status: string) {
-  const { supabase } = await requireStaff()
+  const { supabase } = await requireStaffAction("staff")
 
   const updates: Record<string, any> = { status, updated_at: new Date().toISOString() }
   if (status === "sent") updates.sent_at = new Date().toISOString()
@@ -183,7 +160,7 @@ export async function updateCampaignStatus(campaignId: string, status: string) {
 }
 
 export async function scheduleCampaign(campaignId: string, scheduledAt: string) {
-  const { supabase } = await requireStaff()
+  const { supabase } = await requireStaffAction("staff")
 
   const { error } = await supabase
     .from("marketing_campaigns")
@@ -205,9 +182,8 @@ export async function scheduleCampaign(campaignId: string, scheduledAt: string) 
 // ════════════════════════════════════════════
 
 export async function createTemplate(formData: FormData) {
-  const { supabase, userId } = await requireStaff()
+  const { supabase, userId } = await requireStaffAction("staff")
 
-  // Extract variables from body using {{variable}} pattern
   const body = formData.get("body") as string
   const variableMatches = body.match(/\{\{(\w+)\}\}/g) || []
   const variables = [...new Set(variableMatches.map((v) => v.replace(/\{\{|\}\}/g, "")))]
@@ -229,7 +205,7 @@ export async function createTemplate(formData: FormData) {
 }
 
 export async function updateTemplate(templateId: string, formData: FormData) {
-  const { supabase } = await requireStaff()
+  const { supabase } = await requireStaffAction("staff")
 
   const body = formData.get("body") as string
   const variableMatches = body.match(/\{\{(\w+)\}\}/g) || []
@@ -258,7 +234,7 @@ export async function updateTemplate(templateId: string, formData: FormData) {
 // ════════════════════════════════════════════
 
 export async function toggleAutomation(ruleId: string, isActive: boolean) {
-  const { supabase } = await requireStaff()
+  const { supabase } = await requireStaffAction("staff")
 
   const { error } = await supabase
     .from("automation_rules")
@@ -272,7 +248,7 @@ export async function toggleAutomation(ruleId: string, isActive: boolean) {
 }
 
 export async function updateAutomationRule(ruleId: string, formData: FormData) {
-  const { supabase } = await requireStaff()
+  const { supabase } = await requireStaffAction("staff")
 
   const triggerConfig: Record<string, any> = {}
   const daysBefore = formData.get("days_before") as string
