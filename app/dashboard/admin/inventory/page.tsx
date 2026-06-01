@@ -1,12 +1,12 @@
 import { createClient } from "@/lib/supabase/server"
-import { requireRole } from "@/lib/roles"
+import { requireStaff } from "@/lib/auth/require-staff"
 import { updateInventory } from "@/lib/admin-actions"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { AlertTriangle, Package } from "lucide-react"
 
 export default async function InventoryPage() {
-  await requireRole(["owner", "manager"])
+  await requireStaff("manager")
   const supabase = await createClient()
 
   const { data: inventory } = await supabase
