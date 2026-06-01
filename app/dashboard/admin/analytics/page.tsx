@@ -18,6 +18,12 @@ import {
 
 export const metadata = { title: "Analytics - Admin - MAJH EVENTS" }
 
+function periodButtonClass(isActive: boolean): string {
+  const base = "rounded-md px-4 py-2 text-sm font-medium transition-colors"
+  if (isActive) return base + " bg-primary text-primary-foreground"
+  return base + " text-muted-foreground hover:bg-muted hover:text-foreground"
+}
+
 async function getAnalyticsData(period: "today" | "7d" | "30d") {
   const supabase = await createClient()
   const now = new Date()
@@ -192,16 +198,10 @@ function PeriodButton({
 }) {
   const isActive = period === currentPeriod
   const displayLabel = label || (period === "today" ? "Today" : period)
+  const href = "/dashboard/admin/analytics?period=" + period
 
   return (
-    
-      href={`/dashboard/admin/analytics?period=${period}`}
-      className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-        isActive
-          ? "bg-primary text-primary-foreground"
-          : "text-muted-foreground hover:bg-muted hover:text-foreground"
-      }`}
-    >
+    <a href={href} className={periodButtonClass(isActive)}>
       {displayLabel}
     </a>
   )
