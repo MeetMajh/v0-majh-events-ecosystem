@@ -1,32 +1,15 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
+import { requireStaffAction } from "@/lib/auth/require-staff"
 import { stripe } from "@/lib/stripe"
-import { 
-  sendBookingInquiryEmail, 
+import {
+  sendBookingInquiryEmail,
   sendBookingConfirmedEmail,
   sendDepositPaidEmail,
-  sendAdminBookingNotification 
+  sendAdminBookingNotification,
 } from "@/lib/booking-emails"
-
-// ── Auth helper ──
-
-async function requireStaff() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) redirect("/auth/login")
-
-  const { data } = await supabase.from("staff_roles").select("role").eq("user_id", user.id).single()
-
-  if (!data || !["admin", "staff", "owner", "manager"].includes(data.role)) {
-    redirect("/dashboard")
-  }
-  return { supabase, userId: user.id, role: data.role }
-}
 
 // ════════════════════════════════════════════
 // STRIPE CHECKOUT SESSIONS
@@ -49,7 +32,6 @@ export async function createEventBookingCheckout(bookingData: {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // Fetch package from DB (server-side price validation)
   const { data: pkg } = await supabase
     .from("cb_event_packages")
     .select("*")
@@ -58,7 +40,6 @@ export async function createEventBookingCheckout(bookingData: {
 
   if (!pkg) throw new Error("Package not found")
 
-  // Fetch addons from DB
   let addonsTotal = 0
   const addonDetails: Array<{ id: string; name: string; price_cents: number }> = []
   if (bookingData.addonIds.length > 0) {
@@ -77,7 +58,6 @@ export async function createEventBookingCheckout(bookingData: {
     }
   }
 
-  // Fetch catering items from DB
   let cateringTotal = 0
   if (bookingData.cateringItems && bookingData.cateringItems.length > 0) {
     const itemIds = bookingData.cateringItems.map((ci) => ci.itemId)
@@ -99,9 +79,8 @@ export async function createEventBookingCheckout(bookingData: {
   }
 
   const totalCents = pkg.base_price_cents + addonsTotal + cateringTotal
-  const depositCents = Math.round(totalCents * 0.25) // 25% deposit
+  const depositCents = Math.round(totalCents * 0.25)
 
-  // Create booking record
   const { data: booking, error: bookingError } = await supabase
     .from("cb_bookings")
     .insert({
@@ -123,7 +102,6 @@ export async function createEventBookingCheckout(bookingData: {
 
   if (bookingError || !booking) throw new Error(bookingError?.message || "Failed to create booking")
 
-  // Insert booking addons
   if (addonDetails.length > 0) {
     await supabase.from("cb_booking_addons").insert(
       addonDetails.map((a) => ({
@@ -135,7 +113,6 @@ export async function createEventBookingCheckout(bookingData: {
     )
   }
 
-  // Create Stripe checkout session for deposit
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000"
   const session = await stripe.checkout.sessions.create({
     ui_mode: "embedded",
@@ -160,10 +137,8 @@ export async function createEventBookingCheckout(bookingData: {
     },
   })
 
-  // Store stripe session id
   await supabase.from("cb_bookings").update({ stripe_session_id: session.id }).eq("id", booking.id)
 
-  // Send confirmation emails
   const emailData = {
     bookingId: booking.id,
     contactName: bookingData.contactName,
@@ -177,8 +152,7 @@ export async function createEventBookingCheckout(bookingData: {
     depositCents,
     specialRequests: bookingData.venueNotes,
   }
-  
-  // Send emails in background (don't block checkout)
+
   sendBookingInquiryEmail(emailData).catch(console.error)
   sendAdminBookingNotification(emailData, "inquiry").catch(console.error)
 
@@ -199,7 +173,6 @@ export async function createRentalCheckout(rentalData: {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // Fetch rental items from DB for server-side price validation
   const itemIds = rentalData.items.map((i) => i.itemId)
   const { data: dbItems } = await supabase
     .from("cb_rental_items")
@@ -224,9 +197,8 @@ export async function createRentalCheckout(rentalData: {
     lineItems.push({ itemId: ri.itemId, quantity: ri.quantity, rateType: ri.rateType, lineTotalCents: lineTotal })
   }
 
-  const depositCents = Math.round(totalCents * 0.5) // 50% deposit for rentals
+  const depositCents = Math.round(totalCents * 0.5)
 
-  // Create rental booking
   const { data: rental, error: rentalError } = await supabase
     .from("cb_rental_bookings")
     .insert({
@@ -245,7 +217,6 @@ export async function createRentalCheckout(rentalData: {
 
   if (rentalError || !rental) throw new Error(rentalError?.message || "Failed to create rental booking")
 
-  // Insert items
   await supabase.from("cb_rental_booking_items").insert(
     lineItems.map((li) => ({
       booking_id: rental.id,
@@ -256,7 +227,6 @@ export async function createRentalCheckout(rentalData: {
     }))
   )
 
-  // Create Stripe session
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000"
   const session = await stripe.checkout.sessions.create({
     ui_mode: "embedded",
@@ -315,9 +285,8 @@ export async function submitCateringInquiry(formData: FormData) {
 // ════════════════════════════════════════════
 
 export async function updateBookingStatus(bookingId: string, status: string) {
-  const { supabase } = await requireStaff()
+  const { supabase } = await requireStaffAction("staff")
 
-  // Get booking details for email
   const { data: booking } = await supabase
     .from("cb_bookings")
     .select(`
@@ -331,7 +300,6 @@ export async function updateBookingStatus(bookingId: string, status: string) {
 
   if (error) return { error: error.message }
 
-  // Send email notifications based on status change
   if (booking && (status === "confirmed" || status === "deposit_paid")) {
     const emailData = {
       bookingId: booking.id,
@@ -361,7 +329,7 @@ export async function updateBookingStatus(bookingId: string, status: string) {
 }
 
 export async function updateRentalStatus(rentalId: string, status: string) {
-  const { supabase } = await requireStaff()
+  const { supabase } = await requireStaffAction("staff")
 
   const { error } = await supabase
     .from("cb_rental_bookings")
@@ -375,7 +343,7 @@ export async function updateRentalStatus(rentalId: string, status: string) {
 }
 
 export async function updateCateringOrderStatus(orderId: string, status: string) {
-  const { supabase } = await requireStaff()
+  const { supabase } = await requireStaffAction("staff")
 
   const { error } = await supabase
     .from("cb_catering_orders")
@@ -389,7 +357,7 @@ export async function updateCateringOrderStatus(orderId: string, status: string)
 }
 
 export async function updateInquiryStatus(inquiryId: string, status: string) {
-  const { supabase } = await requireStaff()
+  const { supabase } = await requireStaffAction("staff")
 
   const { error } = await supabase.from("cb_catering_inquiries").update({ status }).eq("id", inquiryId)
 
@@ -404,7 +372,7 @@ export async function updateInquiryStatus(inquiryId: string, status: string) {
 // ════════════════════════════════════════════
 
 export async function createClient_CRM(formData: FormData) {
-  const { supabase } = await requireStaff()
+  const { supabase } = await requireStaffAction("staff")
 
   const client = {
     contact_name: formData.get("contact_name") as string,
@@ -428,7 +396,7 @@ export async function createClient_CRM(formData: FormData) {
 }
 
 export async function updateClient_CRM(clientId: string, formData: FormData) {
-  const { supabase } = await requireStaff()
+  const { supabase } = await requireStaffAction("staff")
 
   const updates = {
     contact_name: formData.get("contact_name") as string,
@@ -456,7 +424,7 @@ export async function updateClient_CRM(clientId: string, formData: FormData) {
 }
 
 export async function addClientInteraction(formData: FormData) {
-  const { supabase, userId } = await requireStaff()
+  const { supabase, userId } = await requireStaffAction("staff")
 
   const interaction = {
     client_id: formData.get("client_id") as string,
@@ -478,9 +446,8 @@ export async function addClientInteraction(formData: FormData) {
 // ════════════════════════════════════════════
 
 export async function createProposal(formData: FormData) {
-  const { supabase } = await requireStaff()
+  const { supabase } = await requireStaffAction("staff")
 
-  // Auto-generate proposal number
   const { count } = await supabase.from("cb_proposals").select("*", { count: "exact", head: true })
   const proposalNumber = `PROP-${String((count ?? 0) + 1).padStart(4, "0")}`
 
@@ -512,7 +479,6 @@ export async function createProposal(formData: FormData) {
 
   if (error || !proposal) return { error: error?.message || "Failed to create proposal" }
 
-  // Insert line items
   if (items.length > 0) {
     await supabase.from("cb_proposal_items").insert(
       items.map((item, idx) => ({
@@ -531,7 +497,7 @@ export async function createProposal(formData: FormData) {
 }
 
 export async function updateProposalStatus(proposalId: string, status: string) {
-  const { supabase } = await requireStaff()
+  const { supabase } = await requireStaffAction("staff")
 
   const updates: Record<string, unknown> = { status, updated_at: new Date().toISOString() }
   if (status === "sent") updates.sent_at = new Date().toISOString()
@@ -549,7 +515,7 @@ export async function updateProposalStatus(proposalId: string, status: string) {
 // ════════════════════════════════════════════
 
 export async function createInvoice(formData: FormData) {
-  const { supabase } = await requireStaff()
+  const { supabase } = await requireStaffAction("staff")
 
   const { count } = await supabase.from("cb_invoices").select("*", { count: "exact", head: true })
   const invoiceNumber = `INV-${String((count ?? 0) + 1).padStart(4, "0")}`
@@ -600,7 +566,7 @@ export async function createInvoice(formData: FormData) {
 }
 
 export async function updateInvoiceStatus(invoiceId: string, status: string) {
-  const { supabase } = await requireStaff()
+  const { supabase } = await requireStaffAction("staff")
 
   const updates: Record<string, unknown> = { status, updated_at: new Date().toISOString() }
   if (status === "sent") updates.sent_at = new Date().toISOString()
@@ -614,7 +580,7 @@ export async function updateInvoiceStatus(invoiceId: string, status: string) {
 }
 
 export async function recordInvoicePayment(invoiceId: string, amountCents: number) {
-  const { supabase } = await requireStaff()
+  const { supabase } = await requireStaffAction("staff")
 
   const { data: invoice } = await supabase.from("cb_invoices").select("amount_paid_cents, total_cents").eq("id", invoiceId).single()
   if (!invoice) return { error: "Invoice not found" }
@@ -643,25 +609,7 @@ export async function recordInvoicePayment(invoiceId: string, amountCents: numbe
 // ════════════════════════════════════════════
 
 export async function createStaffShift(formData: FormData) {
-  "use server"
-  
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  
-  if (!user) {
-    return { error: "Not authenticated" }
-  }
-
-  // Check staff role
-  const { data: staffRole } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .single()
-
-  if (!staffRole) {
-    return { error: "Not authorized - no staff role found" }
-  }
+  const { supabase } = await requireStaffAction("staff")
 
   const shift = {
     staff_id: formData.get("staff_id") as string,
@@ -676,7 +624,7 @@ export async function createStaffShift(formData: FormData) {
   }
 
   const { error } = await supabase.from("cb_staff_shifts").insert(shift)
-  
+
   if (error) {
     return { error: error.message }
   }
@@ -686,7 +634,7 @@ export async function createStaffShift(formData: FormData) {
 }
 
 export async function updateShiftStatus(shiftId: string, status: string) {
-  const { supabase } = await requireStaff()
+  const { supabase } = await requireStaffAction("staff")
 
   const { error } = await supabase.from("cb_staff_shifts").update({ status }).eq("id", shiftId)
   if (error) return { error: error.message }
@@ -696,7 +644,7 @@ export async function updateShiftStatus(shiftId: string, status: string) {
 }
 
 export async function deleteStaffShift(shiftId: string) {
-  const { supabase } = await requireStaff()
+  const { supabase } = await requireStaffAction("staff")
 
   const { error } = await supabase.from("cb_staff_shifts").delete().eq("id", shiftId)
   if (error) return { error: error.message }
@@ -707,7 +655,7 @@ export async function deleteStaffShift(shiftId: string) {
 
 // ════════════════════════════════════════════
 // PREP TASKS
-// ═════════════��══���═══════════════════════════
+// ════════════════════════════════════════════
 
 export async function createPrepTask(data: {
   title: string
@@ -719,27 +667,8 @@ export async function createPrepTask(data: {
   booking_id?: string
   assigned_to?: string
 }) {
-  "use server"
-  
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  
-  if (!user) {
-    return { error: "Not authenticated" }
-  }
+  const { supabase } = await requireStaffAction("staff")
 
-  // Check staff role
-  const { data: staffRole } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .single()
-
-  if (!staffRole) {
-    return { error: "Not authorized - no staff role found" }
-  }
-
-  // Build task object with only valid columns
   const task = {
     title: data.title,
     description: data.description || null,
@@ -753,7 +682,7 @@ export async function createPrepTask(data: {
   }
 
   const { error } = await supabase.from("cb_prep_tasks").insert(task)
-  
+
   if (error) {
     return { error: error.message }
   }
@@ -763,7 +692,7 @@ export async function createPrepTask(data: {
 }
 
 export async function updatePrepTaskStatus(taskId: string, status: string) {
-  const { supabase } = await requireStaff()
+  const { supabase } = await requireStaffAction("staff")
 
   const updates: Record<string, unknown> = { status }
   if (status === "done") updates.completed_at = new Date().toISOString()
@@ -780,7 +709,7 @@ export async function updatePrepTaskStatus(taskId: string, status: string) {
 // ════════════════════════════════════════════
 
 export async function createInventoryItem_CB(formData: FormData) {
-  const { supabase } = await requireStaff()
+  const { supabase } = await requireStaffAction("staff")
 
   const item = {
     name: formData.get("name") as string,
@@ -800,9 +729,8 @@ export async function createInventoryItem_CB(formData: FormData) {
 }
 
 export async function adjustInventoryStock(itemId: string, changeQty: number, reason: string, notes?: string) {
-  const { supabase, userId } = await requireStaff()
+  const { supabase, userId } = await requireStaffAction("staff")
 
-  // Log the change
   const { error: logError } = await supabase.from("cb_inventory_log").insert({
     item_id: itemId,
     change_qty: changeQty,
@@ -813,7 +741,6 @@ export async function adjustInventoryStock(itemId: string, changeQty: number, re
 
   if (logError) return { error: logError.message }
 
-  // Update current stock
   const { data: item } = await supabase.from("cb_inventory_items").select("current_stock").eq("id", itemId).single()
   if (item) {
     await supabase
@@ -834,7 +761,7 @@ export async function adjustInventoryStock(itemId: string, changeQty: number, re
 // ════════════════════════════════════════════
 
 export async function createEventPackage(formData: FormData) {
-  const { supabase } = await requireStaff()
+  const { supabase } = await requireStaffAction("staff")
 
   const name = formData.get("name") as string
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
@@ -864,7 +791,6 @@ export async function createEventPackage(formData: FormData) {
 export async function handleStripePaymentSuccess(sessionId: string) {
   const supabase = await createClient()
 
-  // Check event bookings
   const { data: booking } = await supabase
     .from("cb_bookings")
     .select("id")
@@ -879,7 +805,6 @@ export async function handleStripePaymentSuccess(sessionId: string) {
     return
   }
 
-  // Check rental bookings
   const { data: rental } = await supabase
     .from("cb_rental_bookings")
     .select("id")
@@ -922,7 +847,6 @@ export async function acceptProposal(proposalId: string) {
 export async function createInvoicePaymentCheckout(invoiceId: string) {
   const supabase = await createClient()
 
-  // Fetch invoice from DB for server-side validation
   const { data: invoice } = await supabase
     .from("cb_invoices")
     .select("*, cb_clients(contact_name, email)")
@@ -931,11 +855,9 @@ export async function createInvoicePaymentCheckout(invoiceId: string) {
 
   if (!invoice) throw new Error("Invoice not found")
 
-  // Calculate balance due
   const balanceDue = invoice.total_cents - invoice.amount_paid_cents
   if (balanceDue <= 0) throw new Error("Invoice is already paid")
 
-  // Create Stripe checkout session
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000"
   const session = await stripe.checkout.sessions.create({
     ui_mode: "embedded",
@@ -961,7 +883,6 @@ export async function createInvoicePaymentCheckout(invoiceId: string) {
     },
   })
 
-  // Update invoice to mark as viewed
   if (invoice.status === "sent") {
     await supabase
       .from("cb_invoices")
@@ -979,9 +900,9 @@ export async function createInvoicePaymentCheckout(invoiceId: string) {
 export async function getUserBookings() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  
+
   if (!user) return { bookings: [] }
-  
+
   const { data: bookings, error } = await supabase
     .from("cb_bookings")
     .select(`
@@ -997,21 +918,21 @@ export async function getUserBookings() {
     `)
     .eq("user_id", user.id)
     .order("event_date", { ascending: false })
-  
+
   if (error) {
     console.error("[Bookings] Error fetching user bookings:", error)
     return { bookings: [], error: error.message }
   }
-  
+
   return { bookings: bookings || [] }
 }
 
 export async function getBookingById(bookingId: string) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  
+
   if (!user) return { booking: null, error: "Not authenticated" }
-  
+
   const { data: booking, error } = await supabase
     .from("cb_bookings")
     .select(`
@@ -1030,52 +951,49 @@ export async function getBookingById(bookingId: string) {
     .eq("id", bookingId)
     .eq("user_id", user.id)
     .single()
-  
+
   if (error) {
     return { booking: null, error: error.message }
   }
-  
-  // Get payment history
+
   const { data: payments } = await supabase
     .from("cb_booking_payments")
     .select("*")
     .eq("booking_id", bookingId)
     .order("created_at", { ascending: false })
-  
+
   return { booking, payments: payments || [] }
 }
 
 export async function cancelBooking(bookingId: string) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  
+
   if (!user) return { error: "Not authenticated" }
-  
-  // Check ownership
+
   const { data: booking } = await supabase
     .from("cb_bookings")
     .select("id, status, user_id, event_date")
     .eq("id", bookingId)
     .eq("user_id", user.id)
     .single()
-  
+
   if (!booking) return { error: "Booking not found" }
-  
-  // Only allow cancellation for inquiry/pending/confirmed status
+
   if (!["inquiry", "pending", "confirmed"].includes(booking.status)) {
     return { error: "Cannot cancel booking at this stage" }
   }
-  
+
   const { error } = await supabase
     .from("cb_bookings")
-    .update({ 
+    .update({
       status: "cancelled",
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
     })
     .eq("id", bookingId)
-  
+
   if (error) return { error: error.message }
-  
+
   revalidatePath("/dashboard/my-bookings")
   return { success: true }
 }
@@ -1086,8 +1004,7 @@ export async function cancelBooking(bookingId: string) {
 
 export async function getBookedDates(startDate: string, endDate: string) {
   const supabase = await createClient()
-  
-  // Get all confirmed/deposit_paid bookings in the date range
+
   const { data: bookings, error } = await supabase
     .from("cb_bookings")
     .select("event_date, start_time, end_time, guest_count, status")
@@ -1095,15 +1012,14 @@ export async function getBookedDates(startDate: string, endDate: string) {
     .lte("event_date", endDate)
     .in("status", ["confirmed", "deposit_paid", "completed"])
     .order("event_date", { ascending: true })
-  
+
   if (error) {
     console.error("[Availability] Error fetching booked dates:", error)
     return { bookedDates: [], partialDates: [] }
   }
-  
-  // Group by date and determine availability
+
   const dateMap = new Map<string, { count: number; timeSlots: string[] }>()
-  
+
   bookings?.forEach(booking => {
     const date = booking.event_date
     const existing = dateMap.get(date) || { count: 0, timeSlots: [] }
@@ -1113,12 +1029,10 @@ export async function getBookedDates(startDate: string, endDate: string) {
     }
     dateMap.set(date, existing)
   })
-  
-  // Dates with 2+ bookings are fully booked
-  // Dates with 1 booking are partially available
+
   const bookedDates: string[] = []
   const partialDates: string[] = []
-  
+
   dateMap.forEach((info, date) => {
     if (info.count >= 2) {
       bookedDates.push(date)
@@ -1126,56 +1040,52 @@ export async function getBookedDates(startDate: string, endDate: string) {
       partialDates.push(date)
     }
   })
-  
+
   return { bookedDates, partialDates }
 }
 
 export async function checkDateAvailability(date: string, startTime?: string) {
   const supabase = await createClient()
-  
-  // Check existing bookings for this date
+
   const { data: bookings, error } = await supabase
     .from("cb_bookings")
     .select("start_time, end_time, guest_count")
     .eq("event_date", date)
     .in("status", ["confirmed", "deposit_paid"])
-  
+
   if (error) {
     return { available: false, error: error.message }
   }
-  
-  // If 2 or more bookings, date is fully booked
+
   if (bookings && bookings.length >= 2) {
-    return { 
-      available: false, 
+    return {
+      available: false,
       reason: "This date is fully booked",
-      existingBookings: bookings.length
+      existingBookings: bookings.length,
     }
   }
-  
-  // If we have a specific time, check for conflicts
+
   if (startTime && bookings && bookings.length > 0) {
     const requestedHour = parseInt(startTime.split(":")[0])
-    
+
     for (const booking of bookings) {
       if (booking.start_time) {
         const bookedHour = parseInt(booking.start_time.split(":")[0])
-        // Assume 4-hour events, check for overlap
         if (Math.abs(requestedHour - bookedHour) < 4) {
           return {
             available: false,
             reason: "Time slot conflicts with existing booking",
-            suggestedTimes: getSuggestedTimes(bookings)
+            suggestedTimes: getSuggestedTimes(bookings),
           }
         }
       }
     }
   }
-  
-  return { 
+
+  return {
     available: true,
     existingBookings: bookings?.length || 0,
-    note: bookings && bookings.length > 0 ? "Limited availability" : undefined
+    note: bookings && bookings.length > 0 ? "Limited availability" : undefined,
   }
 }
 
@@ -1183,8 +1093,8 @@ function getSuggestedTimes(existingBookings: any[]) {
   const bookedHours = existingBookings
     .filter(b => b.start_time)
     .map(b => parseInt(b.start_time.split(":")[0]))
-  
-  const allSlots = [10, 12, 14, 16, 18, 20] // 10am to 8pm
+
+  const allSlots = [10, 12, 14, 16, 18, 20]
   return allSlots
     .filter(hour => !bookedHours.some(bh => Math.abs(hour - bh) < 4))
     .map(h => `${h.toString().padStart(2, "0")}:00`)
