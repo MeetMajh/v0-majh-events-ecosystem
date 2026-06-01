@@ -1,19 +1,19 @@
 import { Suspense } from "react"
 import { createClient } from "@/lib/supabase/server"
-import { requireRole } from "@/lib/roles"
+import { requireStaff } from "@/lib/auth/require-staff"
 import { getPlatformAnalytics } from "@/lib/analytics-pipeline"
 import { formatCents } from "@/lib/format"
 import { AnalyticsDashboard } from "@/components/admin/analytics-dashboard"
-import { 
-  BarChart3, 
-  Users, 
-  Eye, 
-  TrendingUp, 
-  DollarSign, 
+import {
+  BarChart3,
+  Users,
+  Eye,
+  TrendingUp,
+  DollarSign,
   MousePointerClick,
   Calendar,
   Activity,
-  Loader2
+  Loader2,
 } from "lucide-react"
 
 export const metadata = { title: "Analytics - Admin - MAJH EVENTS" }
@@ -21,7 +21,7 @@ export const metadata = { title: "Analytics - Admin - MAJH EVENTS" }
 async function getAnalyticsData(period: "today" | "7d" | "30d") {
   const supabase = await createClient()
   const now = new Date()
-  
+
   let startDate: Date
   switch (period) {
     case "today":
@@ -35,10 +35,8 @@ async function getAnalyticsData(period: "today" | "7d" | "30d") {
       break
   }
 
-  // Get platform analytics from pipeline
   const platformAnalytics = await getPlatformAnalytics(period)
 
-  // Get user metrics
   const [
     { count: totalUsers },
     { count: newUsers },
@@ -59,7 +57,6 @@ async function getAnalyticsData(period: "today" | "7d" | "30d") {
     supabase.from("player_media").select("id, title, view_count, like_count").eq("visibility", "public").order("view_count", { ascending: false }).limit(10),
   ])
 
-  // Get revenue data
   const { data: orders } = await supabase
     .from("orders")
     .select("total_cents, created_at, status")
@@ -69,7 +66,6 @@ async function getAnalyticsData(period: "today" | "7d" | "30d") {
   const totalRevenue = orders?.reduce((sum, o) => sum + (o.total_cents || 0), 0) || 0
   const orderCount = orders?.length || 0
 
-  // Get tournament prize pools
   const { data: tournaments } = await supabase
     .from("tournaments")
     .select("prize_pool_cents, created_at")
@@ -77,11 +73,9 @@ async function getAnalyticsData(period: "today" | "7d" | "30d") {
 
   const totalPrizePool = tournaments?.reduce((sum, t) => sum + (t.prize_pool_cents || 0), 0) || 0
 
-  // Generate time series data for charts
   const signupsByDay: Record<string, number> = {}
   const revenueByDay: Record<string, number> = {}
-  
-  // Initialize all days in the period
+
   const days = period === "today" ? 1 : period === "7d" ? 7 : 30
   for (let i = 0; i < days; i++) {
     const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000)
@@ -90,7 +84,6 @@ async function getAnalyticsData(period: "today" | "7d" | "30d") {
     revenueByDay[key] = 0
   }
 
-  // Fill in signup data
   recentSignups?.forEach((user: any) => {
     const key = user.created_at?.split("T")[0]
     if (key && signupsByDay[key] !== undefined) {
@@ -98,7 +91,6 @@ async function getAnalyticsData(period: "today" | "7d" | "30d") {
     }
   })
 
-  // Fill in revenue data
   orders?.forEach((order: any) => {
     const key = order.created_at?.split("T")[0]
     if (key && revenueByDay[key] !== undefined) {
@@ -106,7 +98,6 @@ async function getAnalyticsData(period: "today" | "7d" | "30d") {
     }
   })
 
-  // Convert to chart-friendly format
   const signupsChartData = Object.entries(signupsByDay)
     .map(([date, count]) => ({ date, signups: count }))
     .sort((a, b) => a.date.localeCompare(b.date))
@@ -162,7 +153,7 @@ export default async function AdminAnalyticsPage({
 }: {
   searchParams: Promise<{ period?: string }>
 }) {
-  await requireRole(["owner", "manager"])
+  await requireStaff("manager")
   const params = await searchParams
   const period = (params.period as "today" | "7d" | "30d") || "7d"
 
@@ -175,8 +166,7 @@ export default async function AdminAnalyticsPage({
             Track platform performance, user engagement, and revenue metrics.
           </p>
         </div>
-        
-        {/* Period Selector */}
+
         <div className="flex items-center gap-2 rounded-lg border border-border bg-card p-1">
           <PeriodButton period="today" currentPeriod={period} />
           <PeriodButton period="7d" currentPeriod={period} label="7 Days" />
@@ -191,20 +181,20 @@ export default async function AdminAnalyticsPage({
   )
 }
 
-function PeriodButton({ 
-  period, 
-  currentPeriod, 
-  label 
-}: { 
+function PeriodButton({
+  period,
+  currentPeriod,
+  label,
+}: {
   period: string
   currentPeriod: string
-  label?: string 
+  label?: string
 }) {
   const isActive = period === currentPeriod
   const displayLabel = label || (period === "today" ? "Today" : period)
-  
+
   return (
-    <a
+    
       href={`/dashboard/admin/analytics?period=${period}`}
       className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
         isActive
