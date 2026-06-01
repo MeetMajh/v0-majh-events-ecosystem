@@ -1,8 +1,8 @@
-import { requireRole } from "@/lib/roles"
+import { requireStaff } from "@/lib/auth/require-staff"
 
 export const metadata = { title: "Admin - MAJH EVENTS" }
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  await requireRole(["owner", "manager", "staff"])
+  await requireStaff("staff")
   return <>{children}</>
 }
