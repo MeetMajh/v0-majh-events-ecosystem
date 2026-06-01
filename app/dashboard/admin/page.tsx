@@ -1,11 +1,11 @@
 import { createClient } from "@/lib/supabase/server"
-import { requireRole } from "@/lib/roles"
+import { requireStaff } from "@/lib/auth/require-staff"
 import { formatCents } from "@/lib/format"
 import Link from "next/link"
 import { Package, ShoppingCart, AlertTriangle, Users, Trophy, Play, Calendar, DollarSign, Scale, Video } from "lucide-react"
 
 export default async function AdminOverviewPage() {
-  const { role } = await requireRole(["owner", "manager", "staff"])
+  const { role } = await requireStaff("staff")
   const supabase = await createClient()
 
   const [
@@ -80,7 +80,6 @@ export default async function AdminOverviewPage() {
         ))}
       </div>
 
-      {/* Match Disputes Alert */}
       {disputedMatches && disputedMatches.length > 0 && (
         <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-5">
           <div className="flex items-center justify-between">
@@ -103,7 +102,6 @@ export default async function AdminOverviewPage() {
         </div>
       )}
 
-      {/* Low Stock Alerts */}
       {lowStock && lowStock.length > 0 && (
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-5">
           <h2 className="mb-3 flex items-center gap-2 font-semibold text-amber-600">
