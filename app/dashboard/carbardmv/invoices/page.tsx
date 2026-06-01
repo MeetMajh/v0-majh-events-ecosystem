@@ -30,7 +30,7 @@ const STATUS_ACTIONS: Record<string, Array<{ status: string; label: string; vari
 }
 
 export default async function InvoicesPage() {
-  await requireRole(["owner", "manager", "staff"])
+  await requireStaff("staff")
   const supabase = await createClient()
 
   const [{ data: invoices }, { data: clients }] = await Promise.all([
@@ -98,7 +98,6 @@ export default async function InvoicesPage() {
                 </div>
               </div>
 
-              {/* Payment Progress */}
               {inv.total_cents > 0 && inv.status !== "draft" && (
                 <div className="mt-3">
                   <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
