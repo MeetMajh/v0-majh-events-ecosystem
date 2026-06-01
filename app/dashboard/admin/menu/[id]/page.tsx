@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
-import { requireRole } from "@/lib/roles"
+import { requireStaff } from "@/lib/auth/require-staff"
 import { updateMenuItem } from "@/lib/admin-actions"
 import { MenuItemForm } from "@/components/admin/menu-item-form"
 import { notFound } from "next/navigation"
@@ -9,21 +9,21 @@ export default async function EditMenuItemPage({
 }: {
   params: Promise<{ id: string }>
 }) {
-  await requireRole(["owner", "manager"])
+  await requireStaff("manager")
   const { id } = await params
   const supabase = await createClient()
-  
+
   const { data: categories } = await supabase
     .from("categories")
     .select("id, name, slug")
     .order("sort_order")
-  
+
   const { data: item } = await supabase
     .from("menu_items")
     .select("*, inventory(*)")
     .eq("id", id)
     .single()
-  
+
   if (!item) {
     notFound()
   }
@@ -45,10 +45,10 @@ export default async function EditMenuItemPage({
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-foreground">Edit Menu Item</h1>
-      <MenuItemForm 
-        categories={categories ?? []} 
-        action={updateMenuItem} 
-        defaultValues={defaultValues} 
+      <MenuItemForm
+        categories={categories ?? []}
+        action={updateMenuItem}
+        defaultValues={defaultValues}
       />
     </div>
   )
