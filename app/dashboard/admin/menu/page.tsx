@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
-import { requireRole } from "@/lib/roles"
+import { requireStaff } from "@/lib/auth/require-staff"
 import { formatCents } from "@/lib/format"
 import { deleteMenuItem } from "@/lib/admin-actions"
 import { Button } from "@/components/ui/button"
@@ -7,7 +7,7 @@ import Link from "next/link"
 import { Plus, Pencil, Trash2, Star } from "lucide-react"
 
 export default async function MenuAdminPage() {
-  await requireRole(["owner", "manager"])
+  await requireStaff("manager")
   const supabase = await createClient()
 
   const { data: categories } = await supabase.from("categories").select("*").order("sort_order")
