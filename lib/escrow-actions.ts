@@ -4,7 +4,33 @@ import { createClient } from "@/lib/supabase/server"
 import { stripe } from "@/lib/stripe"
 import { redirect } from "next/navigation"
 import { revalidatePath } from "next/cache"
+import { requireStaffAction } from "@/lib/auth/require-staff"
+import { getUserPermissions } from "@/lib/authorization"
 import type { PrizeDistribution } from "./tournament-financial-actions"
+
+// Soft elevation check — returns true if user is manager+; does NOT redirect.
+async function isManagerOrAbove(): Promise<boolean> {
+  const permissions = await getUserPermissions()
+  if (!permissions) return false
+  if (permissions.isPlatformLevel) return true
+  const role = permissions.unifiedRole ?? ""
+  return [
+    "owner", "manager",
+    "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_ADMIN", "TENANT_MANAGER",
+  ].includes(role)
+}
+
+// Soft elevation check for organizer+ tier.
+async function isOrganizerOrAbove(): Promise<boolean> {
+  const permissions = await getUserPermissions()
+  if (!permissions) return false
+  if (permissions.isPlatformLevel) return true
+  const role = permissions.unifiedRole ?? ""
+  return [
+    "owner", "manager", "organizer",
+    "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_ADMIN", "TENANT_MANAGER", "TENANT_STAFF",
+  ].includes(role)
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Sponsored Tournament Creation
@@ -30,20 +56,7 @@ export interface CreateSponsoredTournamentData {
 }
 
 export async function createSponsoredTournament(data: CreateSponsoredTournamentData) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: "Must be signed in" }
-
-  // Check organizer permissions
-  const { data: staffRole } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .single()
-
-  if (!staffRole || !["owner", "manager", "organizer"].includes(staffRole.role)) {
-    return { error: "Not authorized to create sponsored tournaments" }
-  }
+  const { supabase, userId } = await requireStaffAction("organizer")
 
   // Validate prize distributions sum to 100%
   const totalPercentage = data.prizeDistributions.reduce((sum, d) => sum + d.percentage, 0)
@@ -53,7 +66,6 @@ export async function createSponsoredTournament(data: CreateSponsoredTournamentD
 
   const slug = data.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")
 
-  // Create tournament
   const { data: tournament, error: tournamentError } = await supabase
     .from("tournaments")
     .insert({
@@ -75,20 +87,19 @@ export async function createSponsoredTournament(data: CreateSponsoredTournamentD
       sponsor_logo_url: data.sponsorLogoUrl,
       escrow_status: "pending",
       platform_fee_percent: 5.00,
-      created_by: user.id,
-      status: "draft", // Stays draft until escrow is funded
+      created_by: userId,
+      status: "draft",
     })
     .select()
     .single()
 
   if (tournamentError) return { error: tournamentError.message }
 
-  // Create escrow account
   const { error: escrowError } = await supabase
     .from("escrow_accounts")
     .insert({
       tournament_id: tournament.id,
-      funded_by: user.id,
+      funded_by: userId,
       amount_cents: data.prizePoolCents,
       funded_amount_cents: 0,
       status: "pending",
@@ -96,12 +107,10 @@ export async function createSponsoredTournament(data: CreateSponsoredTournamentD
     })
 
   if (escrowError) {
-    // Rollback tournament creation
     await supabase.from("tournaments").delete().eq("id", tournament.id)
     return { error: escrowError.message }
   }
 
-  // Create prize distributions
   const distributions = data.prizeDistributions.map((d) => ({
     tournament_id: tournament.id,
     placement: d.placement,
@@ -115,10 +124,8 @@ export async function createSponsoredTournament(data: CreateSponsoredTournamentD
 
   if (distError) {
     console.error("Failed to create prize distributions:", distError)
-    // Continue anyway - can be added later
   }
 
-  // Create default phase
   await supabase.from("tournament_phases").insert({
     tournament_id: tournament.id,
     name: "Main Bracket",
@@ -141,7 +148,6 @@ export async function createEscrowFundingCheckout(tournamentId: string) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: "Must be signed in" }
 
-  // Get tournament and escrow
   const { data: tournament } = await supabase
     .from("tournaments")
     .select("id, name, prize_pool_cents, created_by, escrow_status")
@@ -149,17 +155,13 @@ export async function createEscrowFundingCheckout(tournamentId: string) {
     .single()
 
   if (!tournament) return { error: "Tournament not found" }
-  if (tournament.created_by !== user.id) {
-    // Check staff role
-    const { data: staffRole } = await supabase
-      .from("staff_roles")
-      .select("role")
-      .eq("user_id", user.id)
-      .single()
 
-    if (!staffRole || !["owner", "manager"].includes(staffRole.role)) {
-      return { error: "Not authorized to fund this tournament" }
-    }
+  // Either the creator or a manager+ can fund the escrow
+  const isCreator = tournament.created_by === user.id
+  const isStaff = await isManagerOrAbove()
+
+  if (!isCreator && !isStaff) {
+    return { error: "Not authorized to fund this tournament" }
   }
 
   if (tournament.escrow_status === "funded") {
@@ -176,7 +178,6 @@ export async function createEscrowFundingCheckout(tournamentId: string) {
 
   const amountToFund = escrow.amount_cents - escrow.funded_amount_cents
 
-  // Create Stripe checkout session for escrow funding
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
     payment_method_types: ["card"],
@@ -204,7 +205,6 @@ export async function createEscrowFundingCheckout(tournamentId: string) {
     cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/tournaments/${tournamentId}?escrow=cancelled`,
   })
 
-  // Update escrow with payment intent
   await supabase
     .from("escrow_accounts")
     .update({
@@ -221,12 +221,11 @@ export async function confirmEscrowFunded(tournamentId: string, paymentIntentId:
 
   // Verify payment with Stripe
   const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId)
-  
+
   if (paymentIntent.status !== "succeeded") {
     return { error: "Payment not completed" }
   }
 
-  // Update escrow
   const { error: escrowError } = await supabase
     .from("escrow_accounts")
     .update({
@@ -240,19 +239,17 @@ export async function confirmEscrowFunded(tournamentId: string, paymentIntentId:
 
   if (escrowError) return { error: escrowError.message }
 
-  // Update tournament
   const { error: tournamentError } = await supabase
     .from("tournaments")
     .update({
       escrow_status: "funded",
       escrow_funded_at: new Date().toISOString(),
-      status: "registration", // Now open for registration
+      status: "registration",
     })
     .eq("id", tournamentId)
 
   if (tournamentError) return { error: tournamentError.message }
 
-  // Create financial alert for organizer
   const { data: tournament } = await supabase
     .from("tournaments")
     .select("created_by, name")
@@ -289,7 +286,6 @@ export async function submitExternalFundsProof(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: "Must be signed in" }
 
-  // Verify ownership
   const { data: tournament } = await supabase
     .from("tournaments")
     .select("created_by")
@@ -313,7 +309,6 @@ export async function submitExternalFundsProof(
 
   if (error) return { error: error.message }
 
-  // Alert admins
   await supabase.from("financial_alerts").insert({
     tournament_id: tournamentId,
     alert_type: "escrow_funded",
@@ -332,29 +327,15 @@ export async function verifyExternalFunds(
   approved: boolean,
   notes?: string
 ) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect("/auth/login")
-
-  // Check admin role
-  const { data: staffRole } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .single()
-
-  if (!staffRole || !["owner", "manager"].includes(staffRole.role)) {
-    return { error: "Not authorized" }
-  }
+  const { supabase, userId } = await requireStaffAction("manager")
 
   if (approved) {
-    // Mark as funded
     await supabase
       .from("escrow_accounts")
       .update({
         status: "funded",
         verification_status: "verified",
-        verified_by: user.id,
+        verified_by: userId,
         verified_at: new Date().toISOString(),
         admin_notes: notes,
       })
@@ -369,19 +350,17 @@ export async function verifyExternalFunds(
       })
       .eq("id", tournamentId)
   } else {
-    // Reject
     await supabase
       .from("escrow_accounts")
       .update({
         verification_status: "rejected",
-        verified_by: user.id,
+        verified_by: userId,
         verified_at: new Date().toISOString(),
         admin_notes: notes,
       })
       .eq("tournament_id", tournamentId)
   }
 
-  // Notify organizer
   const { data: tournament } = await supabase
     .from("tournaments")
     .select("created_by, name")
@@ -416,7 +395,6 @@ export async function createPrizePayouts(tournamentId: string) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect("/auth/login")
 
-  // Check authorization
   const { data: tournament } = await supabase
     .from("tournaments")
     .select("id, name, prize_pool_cents, escrow_status, status, created_by, platform_fee_percent")
@@ -431,21 +409,14 @@ export async function createPrizePayouts(tournamentId: string) {
     return { error: "Escrow not funded" }
   }
 
-  // Check if organizer or admin
-  const { data: staffRole } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .single()
-
+  // Tournament organizer (creator) OR manager+ can release payouts
   const isOrganizer = tournament.created_by === user.id
-  const isAdmin = staffRole && ["owner", "manager"].includes(staffRole.role)
+  const isAdmin = await isManagerOrAbove()
 
   if (!isOrganizer && !isAdmin) {
     return { error: "Not authorized" }
   }
 
-  // Get prize distributions
   const { data: distributions } = await supabase
     .from("prize_distributions")
     .select("*")
@@ -456,7 +427,6 @@ export async function createPrizePayouts(tournamentId: string) {
     return { error: "No prize distributions configured" }
   }
 
-  // Get final standings
   const { data: standings } = await supabase
     .from("tournament_registrations")
     .select("player_id, final_placement")
@@ -468,14 +438,12 @@ export async function createPrizePayouts(tournamentId: string) {
     return { error: "No final placements recorded" }
   }
 
-  // Get escrow
   const { data: escrow } = await supabase
     .from("escrow_accounts")
     .select("id")
     .eq("tournament_id", tournamentId)
     .single()
 
-  // Create payouts for each winner
   const payouts = []
   for (const dist of distributions) {
     const winner = standings.find((s) => s.final_placement === dist.placement)
@@ -493,7 +461,7 @@ export async function createPrizePayouts(tournamentId: string) {
       gross_amount_cents: grossAmount,
       platform_fee_cents: platformFee,
       net_amount_cents: netAmount,
-      payout_method: "platform_balance", // Default, player can change
+      payout_method: "platform_balance",
       status: "awaiting_details",
     })
   }
@@ -508,7 +476,6 @@ export async function createPrizePayouts(tournamentId: string) {
 
   if (insertError) return { error: insertError.message }
 
-  // Update escrow status
   await supabase
     .from("escrow_accounts")
     .update({ status: "releasing" })
@@ -519,7 +486,6 @@ export async function createPrizePayouts(tournamentId: string) {
     .update({ escrow_status: "releasing" })
     .eq("id", tournamentId)
 
-  // Notify winners
   for (const payout of payouts) {
     await supabase.from("financial_alerts").insert({
       user_id: payout.user_id,
@@ -573,7 +539,6 @@ export async function checkMinimumPlayersAndAct(tournamentId: string) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: "Not authenticated" }
 
-  // Get tournament
   const { data: tournament } = await supabase
     .from("tournaments")
     .select("id, name, min_players, min_players_action, tournament_type, escrow_status, created_by")
@@ -582,15 +547,9 @@ export async function checkMinimumPlayersAndAct(tournamentId: string) {
 
   if (!tournament) return { error: "Tournament not found" }
 
-  // Verify authorization
-  const { data: staffRole } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .single()
-
+  // Tournament organizer (creator) OR manager+ can perform this check
   const isOrganizer = tournament.created_by === user.id
-  const isAdmin = staffRole && ["owner", "manager"].includes(staffRole.role)
+  const isAdmin = await isManagerOrAbove()
 
   if (!isOrganizer && !isAdmin) {
     return { error: "Not authorized" }
@@ -600,7 +559,6 @@ export async function checkMinimumPlayersAndAct(tournamentId: string) {
     return { canStart: true, currentPlayers: 0, minPlayers: 0 }
   }
 
-  // Count registered players
   const { count } = await supabase
     .from("tournament_registrations")
     .select("*", { count: "exact", head: true })
@@ -643,14 +601,12 @@ export async function handleMinimumNotMet(
   if (!tournament) return { error: "Tournament not found" }
 
   if (action === "cancel" || action === "refund") {
-    // Get all paid registrations
     const { data: registrations } = await supabase
       .from("tournament_registrations")
       .select("id, player_id, payment_status, payment_amount_cents, stripe_payment_intent")
       .eq("tournament_id", tournamentId)
       .eq("payment_status", "paid")
 
-    // Process refunds
     if (registrations?.length) {
       for (const reg of registrations) {
         if (reg.stripe_payment_intent) {
@@ -664,7 +620,6 @@ export async function handleMinimumNotMet(
           }
         }
 
-        // Update registration
         await supabase
           .from("tournament_registrations")
           .update({
@@ -674,7 +629,6 @@ export async function handleMinimumNotMet(
           })
           .eq("id", reg.id)
 
-        // Notify player
         await supabase.from("financial_alerts").insert({
           user_id: reg.player_id,
           tournament_id: tournamentId,
@@ -686,7 +640,6 @@ export async function handleMinimumNotMet(
       }
     }
 
-    // Refund escrow if sponsored
     if (tournament.tournament_type === "sponsored") {
       const { data: escrow } = await supabase
         .from("escrow_accounts")
@@ -710,7 +663,6 @@ export async function handleMinimumNotMet(
         .eq("tournament_id", tournamentId)
     }
 
-    // Update tournament status
     await supabase
       .from("tournaments")
       .update({
