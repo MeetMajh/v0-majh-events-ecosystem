@@ -19,7 +19,6 @@ import {
   ArrowUpRight,
   Key,
   BarChart3,
-  Settings,
   User,
   ChevronDown,
   Bell,
@@ -70,9 +69,7 @@ export default function FinancialDashboardLayout({
 
   return (
     <div className="flex min-h-screen bg-background">
-      {/* Sidebar */}
       <aside className="fixed inset-y-0 left-0 z-50 w-64 border-r border-border bg-card">
-        {/* Logo */}
         <div className="flex h-16 items-center gap-2 border-b border-border px-6">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary/80">
             <CreditCard className="h-4 w-4 text-primary-foreground" />
@@ -83,14 +80,13 @@ export default function FinancialDashboardLayout({
           </div>
         </div>
 
-        {/* Environment Badge */}
         <div className="px-4 py-3 border-b border-border">
-          <Badge 
-            variant="outline" 
+          <Badge
+            variant="outline"
             className={cn(
               "w-full justify-center py-1.5 font-mono text-xs",
-              isLive 
-                ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-500" 
+              isLive
+                ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-500"
                 : "border-amber-500/50 bg-amber-500/10 text-amber-500"
             )}
           >
@@ -98,12 +94,11 @@ export default function FinancialDashboardLayout({
           </Badge>
         </div>
 
-        {/* Navigation */}
         <nav className="flex-1 space-y-1 px-3 py-4">
           {sidebarNav.map((item) => {
-            const isActive = pathname === item.href || 
+            const isActive = pathname === item.href ||
               (item.href !== "/dashboard/financial" && pathname.startsWith(item.href))
-            
+
             return (
               <Link
                 key={item.href}
@@ -133,7 +128,6 @@ export default function FinancialDashboardLayout({
           })}
         </nav>
 
-        {/* Back to Dashboard */}
         <div className="border-t border-border p-3">
           <Link
             href="/dashboard"
@@ -142,31 +136,21 @@ export default function FinancialDashboardLayout({
             <Home className="h-4 w-4" />
             Back to Dashboard
           </Link>
-          <Link
-            href="/dashboard/financial/settings"
-            className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-all"
-          >
-            <Settings className="h-4 w-4" />
-            Settings
-          </Link>
         </div>
       </aside>
 
-      {/* Main Content */}
       <div className="flex-1 pl-64">
-        {/* Top Bar */}
         <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-border bg-card/95 backdrop-blur px-6">
           <div className="flex items-center gap-4">
             <h1 className="text-lg font-semibold text-foreground">
-              {sidebarNav.find(item => 
-                pathname === item.href || 
+              {sidebarNav.find(item =>
+                pathname === item.href ||
                 (item.href !== "/dashboard/financial" && pathname.startsWith(item.href))
               )?.title || "Financial Dashboard"}
             </h1>
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Quick Actions */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm">
@@ -192,12 +176,10 @@ export default function FinancialDashboardLayout({
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Notifications */}
             <Button variant="ghost" size="icon" className="relative">
               <Bell className="h-5 w-5" />
             </Button>
 
-            {/* User Menu */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="rounded-full">
@@ -208,7 +190,6 @@ export default function FinancialDashboardLayout({
                 <DropdownMenuLabel>My Account</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem>Profile</DropdownMenuItem>
-                <DropdownMenuItem>Settings</DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem className="text-destructive">
                   Sign Out
@@ -218,7 +199,6 @@ export default function FinancialDashboardLayout({
           </div>
         </header>
 
-        {/* Page Content */}
         <main className="p-6 min-h-[calc(100vh-4rem)]">
           {children}
         </main>
