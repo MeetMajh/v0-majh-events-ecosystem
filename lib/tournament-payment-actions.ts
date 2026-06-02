@@ -4,6 +4,32 @@ import { createClient } from "@/lib/supabase/server"
 import { stripe } from "@/lib/stripe"
 import { redirect } from "next/navigation"
 import { revalidatePath } from "next/cache"
+import { requireStaffAction } from "@/lib/auth/require-staff"
+import { getUserPermissions } from "@/lib/authorization"
+
+// Soft check — true for manager+. Does NOT redirect.
+async function isManagerOrAbove(): Promise<boolean> {
+  const permissions = await getUserPermissions()
+  if (!permissions) return false
+  if (permissions.isPlatformLevel) return true
+  const role = permissions.unifiedRole ?? ""
+  return [
+    "owner", "manager",
+    "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_ADMIN", "TENANT_MANAGER",
+  ].includes(role)
+}
+
+// Soft check — true for organizer+. Does NOT redirect.
+async function isOrganizerOrAbove(): Promise<boolean> {
+  const permissions = await getUserPermissions()
+  if (!permissions) return false
+  if (permissions.isPlatformLevel) return true
+  const role = permissions.unifiedRole ?? ""
+  return [
+    "owner", "manager", "organizer",
+    "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_ADMIN", "TENANT_MANAGER", "TENANT_STAFF",
+  ].includes(role)
+}
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Tournament Registration Payment
@@ -20,7 +46,6 @@ export async function createTournamentCheckoutSession(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: "Must be signed in" }
 
-  // Get tournament details
   const { data: tournament } = await supabase
     .from("tournaments")
     .select("id, name, slug, entry_fee_cents, games(name)")
@@ -32,7 +57,6 @@ export async function createTournamentCheckoutSession(
     return { error: "Tournament has no entry fee" }
   }
 
-  // Get or create registration
   let { data: registration } = await supabase
     .from("tournament_registrations")
     .select("id, payment_status")
@@ -45,7 +69,6 @@ export async function createTournamentCheckoutSession(
   }
 
   if (!registration) {
-    // Create pending registration
     const { data: newReg, error: regError } = await supabase
       .from("tournament_registrations")
       .insert({
@@ -62,18 +85,10 @@ export async function createTournamentCheckoutSession(
     registration = newReg
   }
 
-  // Get user profile for prefilling
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("first_name, last_name")
-    .eq("id", user.id)
-    .single()
-
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
   const successUrl = options?.successUrl || `${baseUrl}/esports/tournaments/${tournament.slug}?payment=success`
   const cancelUrl = options?.cancelUrl || `${baseUrl}/esports/tournaments/${tournament.slug}?payment=cancelled`
 
-  // Create Stripe checkout session
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
     payment_method_types: ["card"],
@@ -99,10 +114,9 @@ export async function createTournamentCheckoutSession(
     },
     success_url: successUrl,
     cancel_url: cancelUrl,
-    expires_at: Math.floor(Date.now() / 1000) + 30 * 60, // 30 minutes
+    expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
   })
 
-  // Update registration with checkout session ID
   await supabase
     .from("tournament_registrations")
     .update({
@@ -124,7 +138,6 @@ export async function createTournamentPaymentIntent(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: "Must be signed in" }
 
-  // Get tournament
   const { data: tournament } = await supabase
     .from("tournaments")
     .select("id, name, entry_fee_cents")
@@ -135,7 +148,6 @@ export async function createTournamentPaymentIntent(
     return { error: "Tournament not found or has no entry fee" }
   }
 
-  // Get or create Stripe customer
   const { data: profile } = await supabase
     .from("profiles")
     .select("stripe_customer_id")
@@ -157,7 +169,6 @@ export async function createTournamentPaymentIntent(
       .eq("id", user.id)
   }
 
-  // Create payment intent
   const paymentIntent = await stripe.paymentIntents.create({
     amount: tournament.entry_fee_cents,
     currency: "usd",
@@ -185,14 +196,13 @@ export async function refundTournamentRegistration(
   registrationId: string,
   options?: {
     reason?: string
-    refundAmount?: number // Partial refund amount in cents
+    refundAmount?: number
   }
 ) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect("/auth/login")
 
-  // Get registration
   const { data: registration } = await supabase
     .from("tournament_registrations")
     .select("*, tournaments(id, name, refund_policy, created_by)")
@@ -201,15 +211,9 @@ export async function refundTournamentRegistration(
 
   if (!registration) return { error: "Registration not found" }
 
-  // Check authorization (staff or tournament creator)
-  const { data: staffRole } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .single()
-
-  const isStaff = staffRole && ["owner", "manager"].includes(staffRole.role)
+  // Tournament creator OR manager+ can refund
   const isCreator = registration.tournaments?.created_by === user.id
+  const isStaff = await isManagerOrAbove()
 
   if (!isStaff && !isCreator) {
     return { error: "Not authorized to process refunds" }
@@ -219,11 +223,9 @@ export async function refundTournamentRegistration(
     return { error: "No payment to refund" }
   }
 
-  // Calculate refund amount
   const refundAmount = options?.refundAmount ?? registration.payment_amount_cents
 
   try {
-    // Create Stripe refund
     const refund = await stripe.refunds.create({
       payment_intent: registration.stripe_payment_intent,
       amount: refundAmount,
@@ -235,7 +237,6 @@ export async function refundTournamentRegistration(
       },
     })
 
-    // Update registration
     const isFullRefund = refundAmount >= (registration.payment_amount_cents ?? 0)
 
     await supabase
@@ -264,7 +265,6 @@ export async function requestRefund(tournamentId: string, reason?: string) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: "Must be signed in" }
 
-  // Get registration
   const { data: registration } = await supabase
     .from("tournament_registrations")
     .select("*, tournaments(refund_policy, refund_deadline, start_date)")
@@ -277,7 +277,6 @@ export async function requestRefund(tournamentId: string, reason?: string) {
     return { error: "No payment to refund" }
   }
 
-  // Check refund policy
   const tournament = registration.tournaments
   const now = new Date()
 
@@ -293,7 +292,6 @@ export async function requestRefund(tournamentId: string, reason?: string) {
     return { error: "Cannot request refund after tournament has started" }
   }
 
-  // Create refund request
   const { error } = await supabase.from("tournament_refund_requests").insert({
     registration_id: registration.id,
     tournament_id: tournamentId,
@@ -304,7 +302,6 @@ export async function requestRefund(tournamentId: string, reason?: string) {
 
   if (error) return { error: error.message }
 
-  // Update registration status
   await supabase
     .from("tournament_registrations")
     .update({
@@ -332,7 +329,6 @@ export async function markPaymentManually(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect("/auth/login")
 
-  // Get registration
   const { data: registration } = await supabase
     .from("tournament_registrations")
     .select("tournament_id, tournaments(created_by)")
@@ -341,15 +337,9 @@ export async function markPaymentManually(
 
   if (!registration) return { error: "Registration not found" }
 
-  // Check authorization
-  const { data: staffRole } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .single()
-
-  const isStaff = staffRole && ["owner", "manager", "organizer"].includes(staffRole.role)
+  // Tournament creator OR organizer+ can mark payment
   const isCreator = registration.tournaments?.created_by === user.id
+  const isStaff = await isOrganizerOrAbove()
 
   if (!isStaff && !isCreator) {
     return { error: "Not authorized" }
@@ -384,7 +374,7 @@ export async function getPaymentSummary(tournamentId: string) {
     totalRefunded: 0,
     netRevenue: 0,
   }
-  
+
   try {
     const supabase = await createClient()
 
@@ -419,20 +409,10 @@ export async function getPaymentSummary(tournamentId: string) {
 }
 
 export async function getPendingRefundRequests(tournamentId?: string) {
+  const isStaff = await isOrganizerOrAbove()
+  if (!isStaff) return []
+
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return []
-
-  // Check staff status
-  const { data: staffRole } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .single()
-
-  if (!staffRole || !["owner", "manager", "organizer"].includes(staffRole.role)) {
-    return []
-  }
 
   let query = supabase
     .from("tournament_refund_requests")
@@ -461,11 +441,8 @@ export async function processRefundRequest(
     notes?: string
   }
 ) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect("/auth/login")
+  const { supabase, userId } = await requireStaffAction("manager")
 
-  // Get request
   const { data: request } = await supabase
     .from("tournament_refund_requests")
     .select("*, tournament_registrations(*)")
@@ -474,19 +451,7 @@ export async function processRefundRequest(
 
   if (!request) return { error: "Request not found" }
 
-  // Check authorization
-  const { data: staffRole } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .single()
-
-  if (!staffRole || !["owner", "manager"].includes(staffRole.role)) {
-    return { error: "Not authorized" }
-  }
-
   if (action === "approve") {
-    // Process the refund
     const result = await refundTournamentRegistration(
       request.registration_id,
       {
@@ -498,18 +463,16 @@ export async function processRefundRequest(
     if ("error" in result) return result
   }
 
-  // Update request status
   await supabase
     .from("tournament_refund_requests")
     .update({
       status: action === "approve" ? "approved" : "denied",
-      processed_by: user.id,
+      processed_by: userId,
       processed_at: new Date().toISOString(),
       admin_notes: options?.notes,
     })
     .eq("id", requestId)
 
-  // Update registration if denied
   if (action === "deny") {
     await supabase
       .from("tournament_registrations")
