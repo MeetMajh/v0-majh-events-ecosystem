@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
+import { getUserPermissions } from "@/lib/authorization"
 import { generateInvoicePDF } from "@/lib/pdf-utils"
 import { NextResponse } from "next/server"
 
@@ -9,26 +10,26 @@ export async function GET(
   const { id } = await params
   const supabase = await createClient()
 
-  // Check if user is staff
   const {
     data: { user },
   } = await supabase.auth.getUser()
-
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const { data: staffRole } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .single()
+  const permissions = await getUserPermissions()
+  const allowedRoles = [
+    "owner", "manager", "staff",
+    "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_ADMIN", "TENANT_MANAGER", "TENANT_STAFF",
+  ]
+  const isAllowed =
+    permissions?.isPlatformLevel ||
+    (permissions?.unifiedRole && allowedRoles.includes(permissions.unifiedRole))
 
-  if (!staffRole || !["admin", "staff"].includes(staffRole.role)) {
+  if (!isAllowed) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
-  // Fetch invoice with items and client
   const { data: invoice, error } = await supabase
     .from("cb_invoices")
     .select(`
@@ -45,7 +46,6 @@ export async function GET(
 
   try {
     const pdfBuffer = await generateInvoicePDF(invoice)
-
     return new NextResponse(pdfBuffer, {
       headers: {
         "Content-Type": "application/pdf",
