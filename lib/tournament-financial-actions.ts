@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 import { stripe } from "@/lib/stripe"
 import { redirect } from "next/navigation"
 import { revalidatePath } from "next/cache"
+import { requireStaffAction } from "@/lib/auth/require-staff"
 import Stripe from "stripe"
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -38,7 +39,7 @@ export interface TournamentFinancialConfig {
 
 export async function getOrCreateWallet(userId?: string) {
   const supabase = await createClient()
-  
+
   let targetUserId = userId
   if (!targetUserId) {
     const { data: { user } } = await supabase.auth.getUser()
@@ -46,7 +47,6 @@ export async function getOrCreateWallet(userId?: string) {
     targetUserId = user.id
   }
 
-  // Try to get existing wallet
   let { data: wallet } = await supabase
     .from("user_wallets")
     .select("*")
@@ -54,7 +54,6 @@ export async function getOrCreateWallet(userId?: string) {
     .single()
 
   if (!wallet) {
-    // Create new wallet
     const { data: newWallet, error } = await supabase
       .from("user_wallets")
       .insert({
@@ -116,7 +115,6 @@ export async function createConnectAccount() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: "Must be signed in" }
 
-  // Check if user already has a Connect account
   const { data: profile } = await supabase
     .from("profiles")
     .select("stripe_connect_account_id, stripe_connect_status")
@@ -124,7 +122,6 @@ export async function createConnectAccount() {
     .single()
 
   if (profile?.stripe_connect_account_id) {
-    // Return existing account link for incomplete accounts
     if (profile.stripe_connect_status !== "complete") {
       const accountLink = await stripe.accountLinks.create({
         account: profile.stripe_connect_account_id,
@@ -137,7 +134,6 @@ export async function createConnectAccount() {
     return { error: "Connect account already complete" }
   }
 
-  // Create new Express account
   const account = await stripe.accounts.create({
     type: "express",
     country: "US",
@@ -151,7 +147,6 @@ export async function createConnectAccount() {
     },
   })
 
-  // Store account ID
   await supabase
     .from("profiles")
     .update({
@@ -160,7 +155,6 @@ export async function createConnectAccount() {
     })
     .eq("id", user.id)
 
-  // Create account link
   const accountLink = await stripe.accountLinks.create({
     account: account.id,
     refresh_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/financials?connect=refresh`,
@@ -190,17 +184,15 @@ export async function getConnectAccountStatus() {
     }
   }
 
-  // Fetch latest status from Stripe
   try {
     const account = await stripe.accounts.retrieve(profile.stripe_connect_account_id)
-    
-    const status = account.details_submitted 
-      ? "complete" 
-      : account.requirements?.currently_due?.length 
-        ? "incomplete" 
+
+    const status = account.details_submitted
+      ? "complete"
+      : account.requirements?.currently_due?.length
+        ? "incomplete"
         : "pending"
 
-    // Update local status if changed
     if (status !== profile.stripe_connect_status || account.payouts_enabled !== profile.stripe_connect_payouts_enabled) {
       await supabase
         .from("profiles")
@@ -263,7 +255,6 @@ export async function addPayoutMethod(data: {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: "Must be signed in" }
 
-  // If setting as primary, unset other primaries
   if (data.setAsPrimary) {
     await supabase
       .from("payout_methods")
@@ -289,7 +280,6 @@ export async function addPayoutMethod(data: {
 
   if (error) return { error: error.message }
 
-  // Update profile preferred method if primary
   if (data.setAsPrimary) {
     await supabase
       .from("profiles")
@@ -321,7 +311,6 @@ export async function setPrimaryPayoutMethod(methodId: string) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: "Must be signed in" }
 
-  // Verify ownership
   const { data: method } = await supabase
     .from("payout_methods")
     .select("method_type")
@@ -331,19 +320,16 @@ export async function setPrimaryPayoutMethod(methodId: string) {
 
   if (!method) return { error: "Payout method not found" }
 
-  // Unset all primaries
   await supabase
     .from("payout_methods")
     .update({ is_primary: false })
     .eq("user_id", user.id)
 
-  // Set new primary
   await supabase
     .from("payout_methods")
     .update({ is_primary: true })
     .eq("id", methodId)
 
-  // Update profile
   await supabase
     .from("profiles")
     .update({ preferred_payout_method: method.method_type })
@@ -376,7 +362,7 @@ export async function deletePayoutMethod(methodId: string) {
 
 export async function getOrganizerEarnings(organizerId?: string) {
   const supabase = await createClient()
-  
+
   let targetId = organizerId
   if (!targetId) {
     const { data: { user } } = await supabase.auth.getUser()
@@ -384,7 +370,6 @@ export async function getOrganizerEarnings(organizerId?: string) {
     targetId = user.id
   }
 
-  // Get tournaments created by this organizer
   const { data: tournaments } = await supabase
     .from("tournaments")
     .select(`
@@ -446,7 +431,6 @@ export async function requestOrganizerPayout(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: "Must be signed in" }
 
-  // Get tournament and verify ownership
   const { data: tournament } = await supabase
     .from("tournaments")
     .select("id, name, created_by, status")
@@ -459,7 +443,6 @@ export async function requestOrganizerPayout(
     return { error: "Tournament must be completed before requesting payout" }
   }
 
-  // Calculate available payout
   const { data: payments } = await supabase
     .from("tournament_payments")
     .select("amount_cents, platform_fee_cents")
@@ -472,7 +455,6 @@ export async function requestOrganizerPayout(
   const platformFees = payments.reduce((sum, p) => sum + (p.platform_fee_cents ?? 0), 0)
   const netAmount = totalCollected - platformFees
 
-  // Check if payout already exists
   const { data: existingPayout } = await supabase
     .from("organizer_payouts")
     .select("id, status")
@@ -484,7 +466,6 @@ export async function requestOrganizerPayout(
     return { error: `Payout already ${existingPayout.status}` }
   }
 
-  // Get payout method
   let payoutMethod = options?.payoutMethod
   let payoutDestination = options?.payoutDestination
 
@@ -503,7 +484,6 @@ export async function requestOrganizerPayout(
     }
   }
 
-  // Create payout request
   const { data: payout, error } = await supabase
     .from("organizer_payouts")
     .insert({
@@ -531,22 +511,8 @@ export async function requestOrganizerPayout(
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export async function processOrganizerPayout(payoutId: string) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect("/auth/login")
+  const { supabase, userId } = await requireStaffAction("manager")
 
-  // Check staff role
-  const { data: staffRole } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .single()
-
-  if (!staffRole || !["owner", "manager"].includes(staffRole.role)) {
-    return { error: "Not authorized" }
-  }
-
-  // Get payout details
   const { data: payout } = await supabase
     .from("organizer_payouts")
     .select("*, profiles:organizer_id(stripe_connect_account_id)")
@@ -558,13 +524,11 @@ export async function processOrganizerPayout(payoutId: string) {
     return { error: `Payout already ${payout.status}` }
   }
 
-  // Update to processing
   await supabase
     .from("organizer_payouts")
-    .update({ status: "processing", processed_by: user.id, processed_at: new Date().toISOString() })
+    .update({ status: "processing", processed_by: userId, processed_at: new Date().toISOString() })
     .eq("id", payoutId)
 
-  // Process via Stripe Connect if available
   if (payout.payout_method === "stripe_connect" && payout.profiles?.stripe_connect_account_id) {
     try {
       const transfer = await stripe.transfers.create({
@@ -600,7 +564,6 @@ export async function processOrganizerPayout(payoutId: string) {
     }
   }
 
-  // For non-Stripe methods, mark as processing (manual handling required)
   return { success: true, message: "Payout marked for manual processing" }
 }
 
@@ -613,7 +576,6 @@ export async function initiateKYCVerification() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: "Must be signed in" }
 
-  // Check if already verified
   const { data: profile } = await supabase
     .from("profiles")
     .select("kyc_verified")
@@ -624,7 +586,6 @@ export async function initiateKYCVerification() {
     return { error: "Already verified" }
   }
 
-  // Create Stripe Identity verification session
   const verificationSession = await stripe.identity.verificationSessions.create({
     type: "document",
     metadata: {
@@ -638,7 +599,6 @@ export async function initiateKYCVerification() {
     return_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/financials?kyc=complete`,
   })
 
-  // Store verification record
   await supabase.from("kyc_verifications").insert({
     user_id: user.id,
     verification_type: "identity",
@@ -665,7 +625,6 @@ export async function checkKYCStatus() {
     return { status: "verified", verifiedAt: profile.kyc_verified_at }
   }
 
-  // Check latest verification
   const { data: verification } = await supabase
     .from("kyc_verifications")
     .select("status, provider_session_id, created_at")
@@ -678,7 +637,6 @@ export async function checkKYCStatus() {
     return { status: "not_started" }
   }
 
-  // If pending, check with Stripe
   if (verification.status === "pending" && verification.provider_session_id) {
     try {
       const session = await stripe.identity.verificationSessions.retrieve(
@@ -686,7 +644,6 @@ export async function checkKYCStatus() {
       )
 
       if (session.status === "verified") {
-        // Update both records
         await supabase
           .from("kyc_verifications")
           .update({ status: "verified" })
