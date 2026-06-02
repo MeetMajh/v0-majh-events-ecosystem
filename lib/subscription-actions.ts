@@ -4,6 +4,19 @@ import { createClient } from "@/lib/supabase/server"
 import { stripe } from "@/lib/stripe"
 import { redirect } from "next/navigation"
 import { revalidatePath } from "next/cache"
+import { getUserPermissions } from "@/lib/authorization"
+
+// Soft check — returns true if user is manager+. Does NOT redirect.
+async function isManagerOrAbove(): Promise<boolean> {
+  const permissions = await getUserPermissions()
+  if (!permissions) return false
+  if (permissions.isPlatformLevel) return true
+  const role = permissions.unifiedRole ?? ""
+  return [
+    "owner", "manager",
+    "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_ADMIN", "TENANT_MANAGER",
+  ].includes(role)
+}
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Membership/Subscription Plans
@@ -38,7 +51,7 @@ export const MEMBERSHIP_PLANS: MembershipPlan[] = [
     id: "competitor",
     name: "Competitor",
     description: "For dedicated tournament players",
-    priceInCents: 999, // $9.99/month
+    priceInCents: 999,
     interval: "month",
     features: [
       "Everything in Free",
@@ -54,7 +67,7 @@ export const MEMBERSHIP_PLANS: MembershipPlan[] = [
     id: "competitor_annual",
     name: "Competitor (Annual)",
     description: "Best value - save 20%",
-    priceInCents: 9590, // $95.90/year ($7.99/month effective)
+    priceInCents: 9590,
     interval: "year",
     features: [
       "Everything in Competitor",
@@ -67,7 +80,7 @@ export const MEMBERSHIP_PLANS: MembershipPlan[] = [
     id: "pro",
     name: "Pro",
     description: "For serious competitors and streamers",
-    priceInCents: 2499, // $24.99/month
+    priceInCents: 2499,
     interval: "month",
     features: [
       "Everything in Competitor",
@@ -95,7 +108,6 @@ export async function createSubscriptionCheckout(planId: string) {
     return { error: "Invalid plan selected" }
   }
 
-  // Check if user already has an active subscription
   const { data: profile } = await supabase
     .from("profiles")
     .select("stripe_customer_id, subscription_status, subscription_plan")
@@ -106,7 +118,6 @@ export async function createSubscriptionCheckout(planId: string) {
     return { error: "You already have this subscription" }
   }
 
-  // Get or create Stripe customer
   let customerId = profile?.stripe_customer_id
 
   if (!customerId) {
@@ -124,8 +135,6 @@ export async function createSubscriptionCheckout(planId: string) {
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
 
-  // Create or get the price in Stripe
-  // In production, you'd create these prices in Stripe Dashboard and store the IDs
   const price = await stripe.prices.create({
     currency: "usd",
     unit_amount: plan.priceInCents,
@@ -136,7 +145,6 @@ export async function createSubscriptionCheckout(planId: string) {
     },
   })
 
-  // Create subscription checkout session
   const session = await stripe.checkout.sessions.create({
     mode: "subscription",
     customer: customerId,
@@ -213,7 +221,6 @@ export async function cancelSubscription() {
   }
 
   try {
-    // Cancel at period end (so they keep access until the end of billing period)
     await stripe.subscriptions.update(profile.stripe_subscription_id, {
       cancel_at_period_end: true,
     })
@@ -255,7 +262,7 @@ export async function getSubscriptionStatus() {
 
   return {
     status: profile.subscription_status || "inactive",
-    plan: plan || MEMBERSHIP_PLANS[0], // Default to free
+    plan: plan || MEMBERSHIP_PLANS[0],
     periodEnd: profile.subscription_period_end,
   }
 }
@@ -278,7 +285,6 @@ export async function calculatePrizePool(tournamentId: string): Promise<{
 }> {
   const supabase = await createClient()
 
-  // Get tournament details
   const { data: tournament } = await supabase
     .from("tournaments")
     .select("id, name, prize_pool_cents, entry_fee_cents, prize_distribution")
@@ -289,21 +295,16 @@ export async function calculatePrizePool(tournamentId: string): Promise<{
     return { totalPrizeCents: 0, distribution: [], error: "Tournament not found" }
   }
 
-  // Get paid registrations
-  const { data: registrations, count } = await supabase
+  const { data: registrations } = await supabase
     .from("tournament_registrations")
     .select("id, payment_amount_cents", { count: "exact" })
     .eq("tournament_id", tournamentId)
     .eq("payment_status", "paid")
 
   const entryFeeTotal = registrations?.reduce((sum, r) => sum + (r.payment_amount_cents ?? 0), 0) ?? 0
-  
-  // Total prize = base prize pool + entry fees (configurable split)
-  // Typically 70-80% of entry fees go to prize pool
   const entryFeeContribution = Math.floor(entryFeeTotal * 0.7)
   const totalPrizeCents = (tournament.prize_pool_cents ?? 0) + entryFeeContribution
 
-  // Default prize distribution if not specified
   const defaultDistribution: PrizeDistribution[] = [
     { place: 1, percentage: 50 },
     { place: 2, percentage: 25 },
@@ -313,7 +314,6 @@ export async function calculatePrizePool(tournamentId: string): Promise<{
 
   const distribution = (tournament.prize_distribution as PrizeDistribution[] | null) ?? defaultDistribution
 
-  // Calculate actual amounts
   const distributionWithAmounts = distribution.map((d) => ({
     ...d,
     amountCents: Math.floor((totalPrizeCents * d.percentage) / 100),
@@ -337,7 +337,6 @@ export async function initiatePrizePayout(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: "Must be signed in" }
 
-  // Verify user is tournament organizer or admin
   const { data: tournament } = await supabase
     .from("tournaments")
     .select("id, name, created_by, status")
@@ -347,24 +346,17 @@ export async function initiatePrizePayout(
   if (!tournament) return { error: "Tournament not found" }
   if (tournament.status !== "completed") return { error: "Tournament must be completed" }
 
-  const { data: staffRole } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .single()
-
-  const isAuthorized = 
+  // Tournament creator OR manager+ can initiate payouts
+  const isAuthorized =
     tournament.created_by === user.id ||
-    (staffRole && ["owner", "manager"].includes(staffRole.role))
+    (await isManagerOrAbove())
 
   if (!isAuthorized) return { error: "Not authorized" }
 
-  // Process payouts
   const results: Array<{ playerId: string; success: boolean; error?: string }> = []
 
   for (const payout of payouts) {
     try {
-      // Get player's Stripe account (they must have connected Stripe for payouts)
       const { data: profile } = await supabase
         .from("profiles")
         .select("stripe_connect_account_id, first_name, last_name")
@@ -372,7 +364,6 @@ export async function initiatePrizePayout(
         .single()
 
       if (!profile?.stripe_connect_account_id) {
-        // Record as pending - player needs to connect Stripe
         await supabase.from("tournament_payouts").insert({
           tournament_id: tournamentId,
           player_id: payout.playerId,
@@ -390,7 +381,6 @@ export async function initiatePrizePayout(
         continue
       }
 
-      // Create Stripe transfer
       const transfer = await stripe.transfers.create({
         amount: payout.amountCents,
         currency: "usd",
@@ -404,7 +394,6 @@ export async function initiatePrizePayout(
         description: `${tournament.name} - ${getPlaceLabel(payout.place)} place prize`,
       })
 
-      // Record successful payout
       await supabase.from("tournament_payouts").insert({
         tournament_id: tournamentId,
         player_id: payout.playerId,
@@ -419,8 +408,7 @@ export async function initiatePrizePayout(
       results.push({ playerId: payout.playerId, success: true })
     } catch (error) {
       console.error(`[Payout Error] Player ${payout.playerId}:`, error)
-      
-      // Record failed payout
+
       await supabase.from("tournament_payouts").insert({
         tournament_id: tournamentId,
         player_id: payout.playerId,
@@ -471,7 +459,6 @@ export async function createConnectOnboardingLink() {
 
   let accountId = profile?.stripe_connect_account_id
 
-  // Create Connect account if needed
   if (!accountId) {
     const account = await stripe.accounts.create({
       type: "express",
@@ -489,7 +476,6 @@ export async function createConnectOnboardingLink() {
       .eq("id", user.id)
   }
 
-  // Create onboarding link
   const accountLink = await stripe.accountLinks.create({
     account: accountId,
     refresh_url: `${baseUrl}/dashboard/settings?connect=refresh`,
@@ -555,13 +541,8 @@ export async function getPayoutHistory(options?: { tournamentId?: string; player
     query = query.eq("player_id", options.playerId)
   } else {
     // Show only user's own payouts unless they're staff
-    const { data: staffRole } = await supabase
-      .from("staff_roles")
-      .select("role")
-      .eq("user_id", user.id)
-      .single()
-
-    if (!staffRole || !["owner", "manager"].includes(staffRole.role)) {
+    const isStaff = await isManagerOrAbove()
+    if (!isStaff) {
       query = query.eq("player_id", user.id)
     }
   }
