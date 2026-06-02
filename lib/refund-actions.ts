@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { stripe } from "@/lib/stripe"
 import { createServiceClient } from "@/lib/supabase/service"
+import { requireStaffAction } from "@/lib/auth/require-staff"
 
 interface RefundResult {
   success: boolean
@@ -42,43 +43,24 @@ export async function initiateRefund(
   amountCents: number,
   reason: string = "Customer requested refund"
 ): Promise<RefundResult> {
-  const supabase = await createClient()
+  const { userId } = await requireStaffAction("manager")
   const serviceClient = await createServiceClient()
-
-  // Check authorization - only staff can initiate refunds
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    return { success: false, error: "Unauthorized" }
-  }
-
-  // Check if user is staff
-  const { data: staffRole } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .in("role", ["owner", "manager", "finance", "support"])
-    .single()
-
-  if (!staffRole) {
-    return { success: false, error: "Only staff members can process refunds" }
-  }
 
   // Step 1: Create refund intent via service client
   const { data: intentResult, error: intentError } = await serviceClient.rpc("create_refund_intent", {
     p_original_intent_id: originalIntentId,
     p_amount_cents: amountCents,
     p_reason: reason,
-    p_initiated_by: user.id,
+    p_initiated_by: userId,
   })
 
   if (intentError || !intentResult?.success) {
-    return { 
-      success: false, 
-      error: intentError?.message || intentResult?.error || "Failed to create refund intent" 
+    return {
+      success: false,
+      error: intentError?.message || intentResult?.error || "Failed to create refund intent"
     }
   }
 
-  // Check if idempotent (already processed)
   if (intentResult.idempotent) {
     return {
       success: true,
@@ -87,7 +69,6 @@ export async function initiateRefund(
     }
   }
 
-  // Step 2: Get the original intent to find Stripe payment info
   const { data: originalIntent } = await serviceClient
     .from("financial_intents")
     .select("stripe_payment_intent_id, stripe_checkout_session_id, stripe_charge_id")
@@ -98,18 +79,16 @@ export async function initiateRefund(
     return { success: false, error: "Original payment not found" }
   }
 
-  // Step 3: Call Stripe to process the refund
   try {
     let chargeId = originalIntent.stripe_charge_id
 
-    // If we don't have a charge ID, get it from the payment intent
     if (!chargeId && originalIntent.stripe_payment_intent_id) {
       const paymentIntent = await stripe.paymentIntents.retrieve(
         originalIntent.stripe_payment_intent_id,
         { expand: ["latest_charge"] }
       )
-      chargeId = typeof paymentIntent.latest_charge === "string" 
-        ? paymentIntent.latest_charge 
+      chargeId = typeof paymentIntent.latest_charge === "string"
+        ? paymentIntent.latest_charge
         : paymentIntent.latest_charge?.id
     }
 
@@ -117,7 +96,6 @@ export async function initiateRefund(
       return { success: false, error: "No charge found for this payment" }
     }
 
-    // Create Stripe refund with metadata linking to our refund intent
     const stripeRefund = await stripe.refunds.create({
       charge: chargeId,
       amount: amountCents,
@@ -125,18 +103,16 @@ export async function initiateRefund(
       metadata: {
         refund_intent_id: intentResult.refund_intent_id,
         original_intent_id: originalIntentId,
-        initiated_by: user.id,
+        initiated_by: userId,
       },
     })
 
-    // Step 4: Process the refund intent (ledger entries)
     const { data: processResult, error: processError } = await serviceClient.rpc("process_refund_intent", {
       p_refund_intent_id: intentResult.refund_intent_id,
       p_stripe_refund_id: stripeRefund.id,
     })
 
     if (processError || !processResult?.success) {
-      // Log the error but the Stripe refund was already processed
       console.error("[Refund] Ledger processing failed:", processError || processResult?.error)
       return {
         success: true,
@@ -155,7 +131,6 @@ export async function initiateRefund(
     }
 
   } catch (stripeError: any) {
-    // Mark the refund intent as failed
     await serviceClient
       .from("financial_intents")
       .update({
