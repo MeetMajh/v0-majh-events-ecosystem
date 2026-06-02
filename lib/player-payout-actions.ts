@@ -4,7 +4,21 @@ import { createClient } from "@/lib/supabase/server"
 import { stripe } from "@/lib/stripe"
 import { redirect } from "next/navigation"
 import { revalidatePath } from "next/cache"
+import { requireStaffAction } from "@/lib/auth/require-staff"
+import { getUserPermissions } from "@/lib/authorization"
 import type { PayoutMethod } from "./tournament-financial-actions"
+
+// Soft check — returns true if user is manager+. Does NOT redirect.
+async function isManagerOrAbove(): Promise<boolean> {
+  const permissions = await getUserPermissions()
+  if (!permissions) return false
+  if (permissions.isPlatformLevel) return true
+  const role = permissions.unifiedRole ?? ""
+  return [
+    "owner", "manager",
+    "TENANT_OWNER", "TENANT_SUPER_ADMIN", "TENANT_ADMIN", "TENANT_MANAGER",
+  ].includes(role)
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Get Player Winnings
@@ -26,7 +40,7 @@ export async function getPlayerWinnings() {
 
   if (!payouts) return { pending: [], claimed: [], total: 0 }
 
-  const pending = payouts.filter((p) => 
+  const pending = payouts.filter((p) =>
     ["pending", "awaiting_details", "processing"].includes(p.status)
   )
   const claimed = payouts.filter((p) => p.status === "completed")
@@ -74,7 +88,6 @@ export async function selectPayoutMethod(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: "Must be signed in" }
 
-  // Get payout and verify ownership
   const { data: payout } = await supabase
     .from("player_payouts")
     .select("id, status, net_amount_cents, tournament_id")
@@ -90,7 +103,6 @@ export async function selectPayoutMethod(
     return { error: `Cannot change payout method when status is ${payout.status}` }
   }
 
-  // Get destination from saved payout methods if not provided
   let destination = options?.payoutDestination
   if (!destination && method !== "platform_balance") {
     const { data: savedMethod } = await supabase
@@ -106,9 +118,7 @@ export async function selectPayoutMethod(
     }
   }
 
-  // Validate method has required info
   if (method !== "platform_balance" && method !== "stripe_connect" && !destination) {
-    // Check if user has this method saved
     const { data: anyMethod } = await supabase
       .from("payout_methods")
       .select("id, account_email, account_handle")
@@ -123,14 +133,11 @@ export async function selectPayoutMethod(
     destination = anyMethod.account_email || anyMethod.account_handle || undefined
   }
 
-  // Calculate instant payout fee if applicable
   let instantFee = 0
   if (options?.instantPayout) {
-    // 1.5% fee for instant payouts, minimum $0.50
     instantFee = Math.max(50, Math.floor(payout.net_amount_cents * 0.015))
   }
 
-  // Update payout
   const { error } = await supabase
     .from("player_payouts")
     .update({
@@ -160,7 +167,6 @@ export async function claimToPlatformBalance(payoutId: string) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: "Must be signed in" }
 
-  // Get payout
   const { data: payout } = await supabase
     .from("player_payouts")
     .select("*, tournaments(name)")
@@ -173,7 +179,6 @@ export async function claimToPlatformBalance(payoutId: string) {
     return { error: "Already claimed" }
   }
 
-  // Get or create wallet
   let { data: wallet } = await supabase
     .from("user_wallets")
     .select("*")
@@ -196,7 +201,6 @@ export async function claimToPlatformBalance(payoutId: string) {
     wallet = newWallet
   }
 
-  // Update wallet balance
   const newBalance = wallet.balance_cents + payout.net_amount_cents
   const newLifetime = wallet.lifetime_earnings_cents + payout.net_amount_cents
 
@@ -211,7 +215,6 @@ export async function claimToPlatformBalance(payoutId: string) {
 
   if (updateError) return { error: updateError.message }
 
-  // Create wallet transaction
   await supabase.from("wallet_transactions").insert({
     wallet_id: wallet.id,
     user_id: user.id,
@@ -225,7 +228,6 @@ export async function claimToPlatformBalance(payoutId: string) {
     description: `Prize winnings from ${payout.tournaments?.name || "tournament"}`,
   })
 
-  // Update payout status
   await supabase
     .from("player_payouts")
     .update({
@@ -236,13 +238,11 @@ export async function claimToPlatformBalance(payoutId: string) {
     })
     .eq("id", payoutId)
 
-  // Update profile earnings
   await supabase.rpc("increment_profile_earnings", {
     p_user_id: user.id,
     p_amount: payout.net_amount_cents,
   })
 
-  // Notify user
   await supabase.from("financial_alerts").insert({
     user_id: user.id,
     tournament_id: payout.tournament_id,
@@ -262,22 +262,8 @@ export async function claimToPlatformBalance(payoutId: string) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export async function processPlayerPayout(payoutId: string) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect("/auth/login")
+  const { supabase } = await requireStaffAction("manager")
 
-  // Check admin role
-  const { data: staffRole } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .single()
-
-  if (!staffRole || !["owner", "manager"].includes(staffRole.role)) {
-    return { error: "Not authorized" }
-  }
-
-  // Get payout
   const { data: payout } = await supabase
     .from("player_payouts")
     .select(`
@@ -299,18 +285,16 @@ export async function processPlayerPayout(payoutId: string) {
     return { error: `Cannot process payout with status ${payout.status}` }
   }
 
-  // Update to processing
   await supabase
     .from("player_payouts")
-    .update({ 
-      status: "processing", 
-      processed_at: new Date().toISOString() 
+    .update({
+      status: "processing",
+      processed_at: new Date().toISOString(),
     })
     .eq("id", payoutId)
 
   const netAmount = payout.net_amount_cents - (payout.instant_fee_cents ?? 0)
 
-  // Process based on method
   if (payout.payout_method === "stripe_connect" && payout.profiles?.stripe_connect_account_id) {
     try {
       const transfer = await stripe.transfers.create({
@@ -324,7 +308,6 @@ export async function processPlayerPayout(payoutId: string) {
         },
       })
 
-      // Trigger instant payout if requested
       if (payout.instant_payout) {
         await stripe.payouts.create(
           {
@@ -347,7 +330,6 @@ export async function processPlayerPayout(payoutId: string) {
         })
         .eq("id", payoutId)
 
-      // Notify player
       await supabase.from("financial_alerts").insert({
         user_id: payout.user_id,
         tournament_id: payout.tournament_id,
@@ -370,10 +352,8 @@ export async function processPlayerPayout(payoutId: string) {
     }
   }
 
-  // For non-Stripe methods, mark as processing (manual handling)
-  // In production, you would integrate PayPal Payouts, etc.
-  return { 
-    success: true, 
+  return {
+    success: true,
     message: "Payout marked for manual processing",
     method: payout.payout_method,
     destination: payout.payout_destination,
@@ -385,20 +365,7 @@ export async function markPayoutComplete(
   payoutId: string,
   externalReference?: string
 ) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect("/auth/login")
-
-  // Check admin role
-  const { data: staffRole } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .single()
-
-  if (!staffRole || !["owner", "manager"].includes(staffRole.role)) {
-    return { error: "Not authorized" }
-  }
+  const { supabase } = await requireStaffAction("manager")
 
   const { data: payout } = await supabase
     .from("player_payouts")
@@ -418,7 +385,6 @@ export async function markPayoutComplete(
     })
     .eq("id", payoutId)
 
-  // Notify player
   await supabase.from("financial_alerts").insert({
     user_id: payout.user_id,
     tournament_id: payout.tournament_id,
@@ -436,20 +402,7 @@ export async function markPayoutFailed(
   payoutId: string,
   reason: string
 ) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect("/auth/login")
-
-  // Check admin role
-  const { data: staffRole } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .single()
-
-  if (!staffRole || !["owner", "manager"].includes(staffRole.role)) {
-    return { error: "Not authorized" }
-  }
+  const { supabase } = await requireStaffAction("manager")
 
   const { data: payout } = await supabase
     .from("player_payouts")
@@ -468,7 +421,6 @@ export async function markPayoutFailed(
     })
     .eq("id", payoutId)
 
-  // Notify player
   await supabase.from("financial_alerts").insert({
     user_id: payout.user_id,
     tournament_id: payout.tournament_id,
@@ -496,12 +448,10 @@ export async function withdrawFromWallet(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: "Must be signed in" }
 
-  // Minimum withdrawal: $5
   if (amountCents < 500) {
     return { error: "Minimum withdrawal is $5.00" }
   }
 
-  // Get wallet
   const { data: wallet } = await supabase
     .from("user_wallets")
     .select("*")
@@ -513,7 +463,6 @@ export async function withdrawFromWallet(
     return { error: "Insufficient balance" }
   }
 
-  // Get payout destination
   let payoutDestination = destination
   if (!payoutDestination) {
     const { data: savedMethod } = await supabase
@@ -530,11 +479,10 @@ export async function withdrawFromWallet(
     payoutDestination = savedMethod.account_email || savedMethod.account_handle || undefined
   }
 
-  // Create pending payout record
   const { data: payout, error: payoutError } = await supabase
     .from("player_payouts")
     .insert({
-      tournament_id: null, // Wallet withdrawal, not tournament
+      tournament_id: null,
       user_id: user.id,
       placement: 0,
       gross_amount_cents: amountCents,
@@ -550,7 +498,6 @@ export async function withdrawFromWallet(
 
   if (payoutError) return { error: payoutError.message }
 
-  // Deduct from wallet immediately (hold)
   const newBalance = wallet.balance_cents - amountCents
   const newPending = wallet.pending_cents + amountCents
 
@@ -563,7 +510,6 @@ export async function withdrawFromWallet(
     })
     .eq("id", wallet.id)
 
-  // Create wallet transaction
   await supabase.from("wallet_transactions").insert({
     wallet_id: wallet.id,
     user_id: user.id,
@@ -585,20 +531,10 @@ export async function withdrawFromWallet(
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export async function getPendingPayouts(options?: { tournamentId?: string }) {
+  const isStaff = await isManagerOrAbove()
+  if (!isStaff) return []
+
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return []
-
-  // Check admin role
-  const { data: staffRole } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .single()
-
-  if (!staffRole || !["owner", "manager"].includes(staffRole.role)) {
-    return []
-  }
 
   let query = supabase
     .from("player_payouts")
@@ -619,20 +555,10 @@ export async function getPendingPayouts(options?: { tournamentId?: string }) {
 }
 
 export async function getPayoutStats() {
+  const isStaff = await isManagerOrAbove()
+  if (!isStaff) return null
+
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
-
-  // Check admin role
-  const { data: staffRole } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .single()
-
-  if (!staffRole || !["owner", "manager"].includes(staffRole.role)) {
-    return null
-  }
 
   const { data: payouts } = await supabase
     .from("player_payouts")
@@ -675,7 +601,6 @@ export async function addPayoutMethod(data: {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: "Must be signed in" }
 
-  // If setting as primary, unset other primary methods first
   if (data.is_primary) {
     await supabase
       .from("payout_methods")
@@ -734,13 +659,11 @@ export async function setPrimaryPayoutMethod(methodId: string) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: "Must be signed in" }
 
-  // Unset all other primary methods
   await supabase
     .from("payout_methods")
     .update({ is_primary: false })
     .eq("user_id", user.id)
 
-  // Set this one as primary
   const { error } = await supabase
     .from("payout_methods")
     .update({ is_primary: true, updated_at: new Date().toISOString() })
