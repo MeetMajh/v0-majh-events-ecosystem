@@ -1,14 +1,14 @@
 import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { requireStaff } from "@/lib/auth/require-staff"
 import { createUserManually, deleteUser } from "@/lib/admin-actions"
-import { AssignProfileRoleDialog } from "@/components/admin/assign-profile-role-dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Users, UserPlus, Calendar, ShieldCheck, Shield, User, Trash2, CheckCircle2, Clock, Search } from "lucide-react"
+import { Users, UserPlus, Calendar, ShieldCheck, Shield, User, Trash2, CheckCircle2, Clock, Search, History, Settings2 } from "lucide-react"
 import { formatDistanceToNow, format } from "date-fns"
+import Link from "next/link"
 
 const ROLE_ICONS: Record<string, any> = {
   owner: ShieldCheck,
@@ -112,9 +112,17 @@ export default async function UsersAdminPage({
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">User Management</h1>
-        <p className="text-sm text-muted-foreground">View and manage all platform users</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">User Management</h1>
+          <p className="text-sm text-muted-foreground">View and manage all platform users</p>
+        </div>
+        <Link href="/dashboard/admin/users/audit">
+          <Button variant="outline" size="sm" className="gap-2">
+            <History className="h-4 w-4" />
+            Role Audit Log
+          </Button>
+        </Link>
       </div>
 
       {params.error && (
@@ -263,8 +271,13 @@ export default async function UsersAdminPage({
               const name = user.profile?.display_name || firstAndLast
               const initial = name?.[0]?.toUpperCase() || user.email?.[0]?.toUpperCase() || "?"
 
+              // Highlight drift: if staff_role and profile.role don't agree
+              const hasDrift = user.staff_role && user.profile?.role && 
+                user.staff_role.toLowerCase() !== user.profile.role.toLowerCase() &&
+                !(user.staff_role === "PLATFORM_OWNER" && user.profile.role === "PLATFORM_OWNER")
+
               return (
-                <tr key={user.id} className="border-b border-border last:border-0 hover:bg-muted/20">
+                <tr key={user.id} className={`border-b border-border last:border-0 hover:bg-muted/20 ${hasDrift ? "bg-amber-500/5" : ""}`}>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-sm font-medium text-primary">
@@ -294,7 +307,7 @@ export default async function UsersAdminPage({
                   </td>
                   <td className="px-4 py-3 text-center hidden sm:table-cell">
                     {user.staff_role ? (
-                      <Badge className={ROLE_COLORS[user.staff_role]} variant="outline">
+                      <Badge className={ROLE_COLORS[user.staff_role] ?? "bg-secondary text-secondary-foreground"} variant="outline">
                         {RoleIcon && <RoleIcon className="mr-1 h-3 w-3" />}
                         {user.staff_role}
                       </Badge>
@@ -328,11 +341,12 @@ export default async function UsersAdminPage({
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-2">
-                      <AssignProfileRoleDialog
-                        userId={user.id}
-                        userName={name || user.email || "User"}
-                        currentRole={user.profile?.role || null}
-                      />
+                      <Link href={`/dashboard/admin/users/${user.id}/roles`}>
+                        <Button variant="ghost" size="sm" className="gap-1" title="Manage roles">
+                          <Settings2 className="h-3.5 w-3.5" />
+                          Manage Roles
+                        </Button>
+                      </Link>
                       <form action={deleteUser}>
                         <input type="hidden" name="user_id" value={user.id} />
                         <Button
@@ -351,7 +365,7 @@ export default async function UsersAdminPage({
             })}
             {users.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">
+                <td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">
                   {params.search ? "No users found matching your search." : "No users yet."}
                 </td>
               </tr>
