@@ -31,8 +31,8 @@ export async function GET(request: Request) {
     const { data: tenants, error: tenantsError } = await supabase
       .from("tenants")
       .select("id, name")
-      .eq("status", "active")
-
+      is("deleted_at", null)
+      .in("subscription_status", ["active", "trialing"])
     if (tenantsError) {
       throw new Error(`Failed to fetch tenants: ${tenantsError.message}`)
     }
