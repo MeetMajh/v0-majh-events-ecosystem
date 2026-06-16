@@ -8,3 +8,9 @@ node_modules/
 .next/
 .env*.local
 .DS_Store
+
+# Environment files — never commit
+.env
+
+# Backup files
+*.backup.*
