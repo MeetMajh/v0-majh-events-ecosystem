@@ -8,7 +8,7 @@ code is wrong.
 
 **Last updated:** June 25, 2026
 
-**Version:** 2.0.0
+**Version:** 2.1.0 (UI surfaces section added; sections 14-17 renumbered)
 
 **Supersedes:** `docs/ARCHITECTURE.md` v1.x (April 28, 2026). The prior
 document remains in the repo as historical reference. Where it and this
@@ -2025,13 +2025,312 @@ event volume beyond cron-frequency), consider BullMQ on Upstash Redis
 or a similar dedicated worker layer. This is a future decision, not
 current.
 
-## 14. What's built vs. designed vs. not started
+## 14. UI surfaces
+
+MAJH OS is a multi-tenant platform. Different users see different
+surfaces of it depending on their role and scope. This section names
+the surfaces explicitly because their existence — or non-existence —
+has architectural consequences for how RLS is designed, how modules
+declare their UI contributions, and how the platform's own operation
+is distinguished from the operation of any specific tenant.
+
+Three UI surfaces exist in the architecture:
+
+### 14.1 Platform admin surface
+
+**Who uses it:** MAJH OS platform operator (currently the founder;
+eventually may include trusted platform-level staff or delegated
+operators).
+
+**What it is:** The root-level operator interface. Non-tenant-scoped.
+The platform-as-product surface.
+
+**What it does:**
+
+- Tenant lifecycle management: provision new tenants, deactivate
+  tenants, view all tenants across the platform
+- Module registry management: mark modules as `built` / `partial` /
+  `designed` / `not_started`; declare substrate and module
+  dependencies; add new modules to the registry
+- Base vocabulary overlay management: create, edit, and version
+  the platform-provided base overlays (events, construction,
+  church, label, hospitality, professional services)
+- Platform-level configuration: settings that apply across all
+  tenants (feature flags, default values, platform-wide policies)
+- Cross-tenant observability: aggregate metrics for platform
+  operation (total transaction volume, aggregate error rates,
+  aggregate tenant count) — never row-level tenant data without
+  explicit purpose
+- Ralph approval queue for platform-level actions: when Ralph
+  proposes changes at the substrate or platform level, they land
+  here for operator review
+- Audit log review at platform scope: platform-wide operational
+  events, security events, and deployment integrity checks
+
+**What it does NOT do:**
+
+- Read or modify individual tenant operational data (that's the
+  tenant admin surface's job, and cross-tenant reads violate the
+  data sovereignty principle in §2.2)
+- Bypass RLS for convenience: even the platform operator queries
+  tenant data through the tenant admin surface, not through this
+  surface
+- Provide a "god mode" that lets the operator impersonate a tenant
+  admin without an audit trail (impersonation, when needed for
+  support, is a separate audited flow, not a UI-level shortcut)
+
+**Access control:**
+
+- Only users with a `PLATFORM_OWNER` role (or equivalent per
+  membership consolidation resolution) can access this surface
+- Access requires MFA (Option 1.5a when real MFA lands; password
+  re-authentication in the interim per Option 1.5c)
+- Every action taken on this surface writes to `audit_log` with
+  actor_type = `user` and metadata identifying it as a platform
+  admin action
+
+**Implementation status:** Not yet built. Currently platform admin
+tasks are performed via direct database access or via founder-only
+routes embedded in the main application. Extracting to a distinct
+surface is post-Phase-1 work.
+
+**Location in code:** Recommend `app/(platform)/*` route group in
+the Next.js app, with layout enforcing `PLATFORM_OWNER` role.
+Separated from `app/(tenant)/*` (tenant admin) and `app/(public)/*`
+(tenant user) route groups. Middleware enforces the boundary.
+
+### 14.2 Tenant admin surface
+
+**Who uses it:** Users with admin-level roles within a specific
+tenant. For MAJH Events today, this includes the founder as owner
+plus any users the founder promotes to admin. For future tenants,
+each tenant designates their own admins.
+
+**What it is:** The tenant-scoped operator interface. Everything an
+admin needs to run their tenant.
+
+**What it does:**
+
+- Department and location management within the tenant
+- User and participant management: invite users, assign roles,
+  manage participant records for non-user participants
+- Module configuration: for modules the tenant has activated, admin
+  configures module-specific settings (tournament defaults,
+  broadcast layouts, F&B menus, service scheduling rules)
+- Financial management via the finance module UI (when active):
+  chart of accounts, invoicing, AR/AP, reports
+- Vocabulary customization: override specific base overlay labels
+  where the tenant's language differs from the base
+- Escrow management: view escrow accounts, authorize releases
+  (subject to the auth gate in §7.2)
+- Ralph interaction: chat with Ralph in tenant scope; view Ralph's
+  proposals in the tenant-scoped approval queue
+- Audit log review at tenant scope
+- Adapter configuration: connect external systems (Monday,
+  QuickBooks, Plaid, PMS) and manage sync
+
+**What it does NOT do:**
+
+- View or modify other tenants' data (RLS enforces this at the
+  database)
+- Modify substrate configuration (that's platform admin's job)
+- Access modules the tenant has not activated
+
+**Access control:**
+
+- Users must be in `organization_members` for the tenant with an
+  appropriate role
+- Some actions (financial releases, escrow authorization, user
+  role changes) require the auth gate
+- Every action writes to tenant-scoped audit log
+
+**Implementation status:** Partially built. MAJH Events today has
+tenant admin functionality mixed into the main application (T-204
+authorization migration in progress). Extraction to a distinct
+tenant admin surface is progressive: as modules mature, their admin
+UIs get organized into the tenant admin surface.
+
+**Location in code:** Recommend `app/(tenant)/*` route group with
+layout enforcing tenant membership and admin role. Sub-routes
+per module (`app/(tenant)/finance/*`, `app/(tenant)/tournament/*`,
+etc.), with feature-flag gating so only activated modules render.
+
+### 14.3 Tenant user surface
+
+**Who uses it:** End users of a tenant's operational business.
+Players in MAJH Esports tournaments. Ticket buyers for MAJH Studio
+events. Guests booking Tradewinds RB. Customers at TRS. For future
+tenants, whatever their user population looks like.
+
+**What it is:** The tenant's public-and-user-facing product. This
+is what most people think of when they think of "MAJH Events" —
+the actual application people register on, buy tickets on, play
+tournaments on.
+
+**What it does:**
+
+- Whatever the tenant's activated modules provide to end users
+- Registration and account management
+- Tenant-specific branded experience with vocabulary overlay
+  applied
+- Payment flows (via the substrate financial primitives and the
+  finance module or module-specific payment flows)
+- User-facing views of tenant operations (tournament brackets,
+  event tickets, service bookings, retail products, etc.)
+- Notifications and communications
+- Support and help resources
+
+**What it does NOT do:**
+
+- Expose admin functionality (RLS and role-based UI hides admin
+  routes from regular users)
+- Show data from other tenants (RLS enforces at database; UI
+  respects tenant context)
+- Modify substrate configuration
+- Modify module configuration
+
+**Access control:**
+
+- Anyone can access the public-facing parts (registration pages,
+  tournament pages that are marked public, etc.)
+- Authenticated users see their own data plus tenant public data
+- RLS ensures a user in Tenant A cannot see Tenant B's data even
+  if they somehow navigate there
+
+**Implementation status:** This is what's currently in production
+as `www.majhevents.com`. Substantially built. The primary surface
+users have interacted with since MAJH Events launched.
+
+**Location in code:** `app/(public)/*` and non-grouped root
+routes. Tenant identification via subdomain (future) or path
+prefix (current, since MAJH Events is currently the only tenant
+on the domain).
+
+### 14.4 The three surfaces on one platform
+
+All three surfaces run on the same MAJH OS platform, on the same
+Vercel deployment, backed by the same Supabase database. They are
+route groups within a single Next.js app, not separate applications.
+
+**Why one app, not three:**
+
+- Shared authentication (a user with multiple roles across
+  surfaces has one login)
+- Shared database with RLS as the primary boundary (rather than
+  network-level isolation)
+- Shared component library (a chart of accounts editor may appear
+  on both tenant admin and platform admin surfaces with slight
+  variations)
+- Simpler deployment and monitoring
+- Lower operational overhead for a founder-run platform
+
+**Why route groups matter:**
+
+- Route groups make the surface distinction visible in code
+  organization
+- Layouts per route group enforce role checks at the layout level,
+  not at every page
+- Middleware can enforce group-level access control declaratively
+- Future extraction to separate apps (if scale or contract
+  requirements demand it) is a well-scoped refactor
+
+**Cross-surface features:**
+
+Some capabilities span multiple surfaces:
+
+- Ralph's approval queue exists in both tenant admin scope (for
+  tenant-affecting proposals) and platform admin scope (for
+  platform-level proposals). Different UIs; same substrate table.
+- Audit log review exists on all three surfaces but shows
+  different subsets: tenant admin sees tenant-scoped events;
+  platform admin sees platform-scoped events; tenant users don't
+  see audit log at all (they see their own activity in narrower
+  views like order history).
+- Adapter management exists in tenant admin scope (tenants
+  configure their own external integrations) but adapter framework
+  configuration is platform admin scope.
+
+### 14.5 The platform admin surface as a distinct concern
+
+The most important architectural point in this section: **the
+platform admin surface must exist as a distinct concern, not as a
+special mode of the tenant admin surface.**
+
+This matters because:
+
+**Compliance and audit clarity.** When you're operating on the
+platform (activating a module, managing tenants), that action is
+categorically different from operating on a specific tenant's data.
+Mixing them makes audit trails harder to interpret and creates
+opportunities for accidental cross-tenant contamination.
+
+**Substrate/module boundary in UI.** Platform admin operates on
+substrate configuration (module registry, base overlays, tenant
+provisioning). Tenant admin operates on module features scoped to
+their tenant. The surface separation reinforces the substrate/module
+discipline documented in §2.5 and §6.
+
+**Future delegation.** As the platform grows, some platform-level
+operations may be delegated to trusted staff who are not tenant
+admins for any specific tenant. A dedicated platform admin surface
+makes this delegation possible without granting cross-tenant access.
+
+**Product identity.** MAJH OS as a product needs its own surface.
+The construction firm evaluating MAJH OS as their operational
+platform should be able to see "here's what MAJH OS looks like as
+a platform" without conflating it with "here's what MAJH Events
+looks like as a tenant on MAJH OS." The platform admin surface,
+when built, becomes part of that product identity.
+
+### 14.6 Build sequence for platform admin surface
+
+Not Phase 1 work. But the sequence is worth naming so it doesn't
+get lost:
+
+**Prerequisite:** Phase 1 substrate landed (universal primitives,
+module registry, vocabulary overlays exist). Without Phase 1, the
+platform admin surface has nothing to administer.
+
+**First iteration:** Simple pages under `app/(platform)/*` for the
+most-needed operator actions. Not designed. Not polished. Functional
+tables and forms. Purpose: extract platform admin work out of ad-hoc
+database queries into a real UI, even if the UI is minimal.
+
+**Second iteration:** Add observability. Aggregate metrics. Module
+registry visualization. Tenant list with health indicators. Ralph
+approval queue for platform-level proposals.
+
+**Third iteration:** Design pass. This is when the platform admin
+surface becomes a product demonstration surface as well as an
+operator tool. Construction firm evaluating MAJH OS as their
+platform sees this.
+
+**Fourth iteration:** Delegation, if needed. Support for platform
+admin roles beyond the founder. Fine-grained platform-level
+permissions. Not needed until the operator team grows beyond one
+person.
+
+Each iteration is a distinct workstream. Total effort probably
+comparable to building one substantial module (weeks, not days).
+
+### 14.7 Related documents and open questions
+
+- `docs/RALPH_BLUEPRINT.md` — Ralph interacts with different
+  surfaces per phase (founder-facing in Phase 5, tenant-facing in
+  Phase 6)
+- `docs/CAPABILITY_MAP.md` §5 — the substrate/module boundary
+  discipline that the surface separation reinforces
+- `docs/ARCHITECTURE_OPEN_QUESTIONS.md` — no current entry for
+  platform admin surface implementation approach; add if this
+  becomes a live question during Phase 1.5 or later
+
+## 15. What's built vs. designed vs. not started
 
 Honest accounting as of June 25, 2026. This section exists because
 the April audit documented a real gap between architecture and
 reality; naming that gap explicitly is how it gets closed.
 
-### 14.1 Built and working
+### 15.1 Built and working
 
 - MAJH Events platform live at www.majhevents.com with 25 users,
   11 verified, 2 staff
@@ -2051,7 +2350,7 @@ reality; naming that gap explicitly is how it gets closed.
   critical audit C1)
 - Wallet RLS lockdown interim (T-101, April 30)
 
-### 14.2 Partial
+### 15.2 Partial
 
 - Payout system consolidation. Two coexisting incomplete systems.
   `cron/process-payouts` paused since June 17 (commit `13655a0`)
@@ -2067,7 +2366,7 @@ reality; naming that gap explicitly is how it gets closed.
 - Ralph. Slash-command interface working; agent loop and grounding
   not yet built. See `docs/RALPH_BLUEPRINT.md`.
 
-### 14.3 Designed but not built
+### 15.3 Designed but not built
 
 - Universal financial spine unified pattern (T-005 target)
 - Vocabulary overlay rendering pipeline
@@ -2086,7 +2385,7 @@ reality; naming that gap explicitly is how it gets closed.
 - Native four-level dashboards (Platform → Tenant → Department →
   Location)
 
-### 14.4 Not started
+### 15.4 Not started
 
 - Fleet module
 - Hospitality module
@@ -2098,7 +2397,7 @@ reality; naming that gap explicitly is how it gets closed.
 - Terms of service and privacy documents codifying the compliance
   boundary in §2.4
 
-### 14.5 Why this section matters
+### 15.5 Why this section matters
 
 Every agent working on the codebase reads this section before
 committing to a new feature. If the feature depends on something in
@@ -2110,7 +2409,7 @@ module ships, it moves from §14.3 to §14.1. When the module registry
 is built, it moves. This section is a living inventory, not a
 retrospective.
 
-## 15. Decision log
+## 16. Decision log
 
 Architecture-specific decisions. Strategic decisions live in
 `docs/STRATEGIC_DIRECTION.md`.
@@ -2153,7 +2452,17 @@ Architecture-specific decisions. Strategic decisions live in
   Modules can depend on substrate (always) and optionally on other
   modules. Activation flow validates dependencies.
 
-## 16. Related documents
+- **July 12, 2026:** UI surfaces section added (§14). Three surfaces
+  named explicitly: platform admin (operator-facing, non-tenant-
+  scoped, currently unbuilt), tenant admin (tenant operator-facing,
+  partial), tenant user (end-user-facing, substantially built as
+  MAJH Events). Platform admin surface identified as distinct
+  architectural concern that must not be conflated with tenant admin.
+  Build sequence for platform admin surface documented as post-Phase-1
+  work with prerequisites and iteration path. Sections 15 (formerly
+  14) through 17 (formerly 16) renumbered accordingly.
+
+## 17. Related documents
 
 - `docs/STRATEGIC_DIRECTION.md` (v1.1.1) — strategic frame,
   commercial priorities, MAJH OS vs. MAJH Events distinction

@@ -11,9 +11,9 @@ architecture.
 conditions that make each concern real emerge, this document is where
 future-us and future-agents look to remember what was already considered.
 
-**Last updated:** June 25, 2026
+**Last updated:** July 12, 2026
 
-**Version:** 1.0.0
+**Version:** 1.1.0 (Q14: Canonical field vocabulary for adapter mappings)
 
 ---
 
@@ -534,6 +534,53 @@ formal invariants documented.
   balance requirements
 - Consider a test suite that verifies invariants hold across
   operations
+
+---
+
+## Q14: Canonical field vocabulary for adapter mappings
+
+**Concern:** When external system adapters (Monday.com, QuickBooks, Square, POS, etc.) describe their data mappings, both sides of the mapping need stable canonical references. E.g., Monday adapter documentation says "Monday Item Name → Entity name" — but "Entity name" needs to be unambiguous and versioned. Currently, the substrate side of adapter mappings has no canonical reference vocabulary.
+
+A concrete example: the Monday adapter's README might say:
+```
+Monday Column            → MAJH OS Substrate
+Item Name               → Entity.name
+Item Status             → Entity.status  
+Item Assignee           → Participant.role (assignee context)
+```
+
+The right side of each arrow must be explicit and stable so documentation doesn't drift from code.
+
+**Raised by:** Founder (Malchijah), emphasizing that universal primitives must bridge to external systems without contaminating the substrate. Point 4 of execution directive.
+
+**Deferred because:**
+
+- No external adapters are built yet; this is documentation infrastructure without urgent code impact
+- The vocabulary overlay system (§5) already provides the rendering layer (how substrate primitives appear to end users); adapter mappings are the reverse — how external systems map INTO substrate
+- Designing this formally now would require commits on undefined adapters; better to emerge the pattern from the first real adapter (likely Monday.com or QuickBooks)
+
+**Revisit when:**
+
+- First external adapter (Monday.com, QuickBooks, or Square) is in active design/build
+- Or: Second external adapter is requested (pattern will be clear from one example)
+
+**What to do when revisiting:**
+
+- Create `docs/ADAPTER_MAPPINGS.md` with a canonical field reference template:
+  ```
+  ## {ExternalSystem} Adapter Field Mappings
+  
+  **Substrate version:** {ARCHITECTURE.md version this maps to}
+  **Adapter module:** `modules/adapters/{externalSystem}/`
+  **Last verified:** {date}
+  
+  | External System | External Field | MAJH OS Substrate | Substrate Field | Data Type | Notes |
+  |---|---|---|---|---|---|
+  | Monday.com | Item Name | Entity | name | TEXT | Read on sync, write on entity update |
+  | ... | ... | ... | ... | ... | ... |
+  ```
+- Define the canonical substrate field names explicitly (e.g., `Entity.name`, `Participant.user_id`, `Payments_In.amount_cents`) so adapters always reference them the same way
+- Add a test suite (`modules/adapters/{externalSystem}/tests/mappings.test.ts`) that verifies each mapping is valid against the current substrate schema
 
 ---
 
