@@ -1,43 +1,51 @@
 # MAJH OS Architecture and Placement Review
 
-## Decision
+## Assessment
 
-MAJH OS should be developed as a substrate-first platform in the current repository and current production Supabase project during Phase 1. MAJH Events remains the proving-ground tenant and must continue operating unchanged while `core.*` and `platform.*` are introduced alongside existing `public.*` legacy tables.
+MAJH OS should be built as a substrate-first operating platform whose primary job is reconciliation: absorb fractured legacy conventions, retain lineage and ambiguity, and expose coherent operational views without forcing MAJH Events to become a preset. MAJH Events is therefore the proving ground, not the architecture template.
 
-Do not rebuild MAJH Events separately yet. Do not make `gyyswaidsfjstterckrc.supabase.co` the Phase 1 target. The separate project can become an extraction or staging target only after the current substrate has passed R28 and production verification.
+## Recommended placement
 
-## Why this placement is correct
+For Phase 1, keep the platform in the current repository and current MAJH Events Supabase project. Build the shared substrate in `core.*` and `platform.*`, while preserving existing `public.*` tables unless v1.1.0 explicitly requires a bounded relocation such as `public.entities` to `core.entities`. This is the lowest-risk way to test the philosophy against live legacy data and avoids inventing a second source of truth.
 
-The thesis is reconciliation, not preset fitting. Keeping the tenant and substrate in one operational environment exposes the real seams: three membership vocabularies, overlapping payout systems, fragmented payment records, and incomplete lineage. A premature split would add migration risk and could hide precisely the legacy friction Phase 1 must prove it can absorb.
+Do not rebuild MAJH Events separately during substrate work. Do not use the separate Supabase project for Phase 1. The separate project can become a later extraction target only after reconciliation, RLS, lineage, drift, and R28 verification are demonstrated in the current project.
 
-The eventual monorepo is still the right destination: `apps/platform` for operators, `apps/majh-events` for the tenant, and shared `packages/*` for substrate clients, modules, vocabulary, adapters, Ralph, and UI. That is an extraction boundary, not a prerequisite for proving the database substrate.
+## Future placement
 
-## Architectural principles
+After substrate stabilization, extract into the proposed monorepo:
 
-- Preserve legacy tables and application paths; reconcile beside them.
-- Use `core.*` for universal substrate data and `platform.*` for registries.
-- Every bridged row carries exact source-row lineage, bridge version, run time, and explicit conflict/ambiguity state.
-- Semantic mappings are tenant-scoped and queryable; they are not hidden in bridge code.
-- R26 makes reconciliation visible, R27 makes drift detectable, and mandatory R28 determines whether the thesis actually holds.
-- RLS is enforced at tenant and hierarchy scope without assuming that legacy membership tables can be consolidated in Phase 1.
-- Adapter scaffolding tables are deferred; Phase 1 proves substrate reconciliation before adapter-framework design.
+```text
+apps/platform       # MAJH OS operator surface
+apps/majh-events    # tenant surface
+packages/substrate-client
+packages/modules
+packages/vocabulary
+packages/adapters
+packages/ralph-client
+packages/ui
+supabase/            # shared migrations
+```
 
-## Execution gates
+Deploy `apps/platform` and `apps/majh-events` as separate Vercel projects/domains only after the extraction is verified. This creates product separation without prematurely creating database separation. A shared substrate with strict tenant isolation is the correct default; physical database isolation is a later compliance or data-residency decision.
 
-The agent's review is a document and does not authorize SQL. Claude's architectural review is a written approval against the complete drafted SQL, verification script, backfill plan, and rollback plan; only that written approval unblocks staging execution. Production requires successful staging verification plus explicit founder and Claude approval.
+## Architectural test
 
-## Risks to manage
+The test is not whether MAJH Events fits six tables. The test is whether the primitives can represent:
 
-The highest risks are incorrect identity correlation, accidental legacy writes, over-broad RLS, hash-chain backfill mistakes, and bridge triggers that mutate payment behavior. Drafting must use idempotent functions, service-role-only mutation where required, explicit transaction boundaries, and literal verification output. The paused payout cron must remain paused and must never be coupled to bridge activation.
+- multiple membership vocabularies without collapsing legitimate identities;
+- payments and payouts distributed across several legacy tables;
+- changed conventions and unfinished work;
+- source lineage, confidence, conflict, and drift;
+- stable canonical views while legacy tables remain intact.
 
-## Recommended sequence
+R20 must reconcile identity into `core.participants`; R21/R22 must correlate payment and payout records; R26/R27 must preserve lineage and detect divergence; R28 must prove coherent identity behavior. Adapter scaffolding tables are explicitly out of Phase 1 and deferred to adapter framework work.
 
-1. Reconnaissance and decision closure.
-2. Draft SQL, backfill, verification, and rollback artifacts.
-3. Obtain Claude's written architectural approval.
-4. Apply to a database branch/staging environment and run all checks, including R28.
-5. Obtain founder and Claude written production approval.
-6. Apply the exact reviewed migration to current production.
-7. Extract the monorepo and separate Vercel surfaces only after substrate stability.
+## Review gates
 
-This placement preserves speed and safety while making MAJH Events a genuine stress test rather than a sanitized demo tenant.
+The agent's architecture review and gap matrix are documentation deliverables only. They do not authorize database execution. Execution is blocked until the complete Phase 1 SQL draft receives Claude's written architectural approval; staging verification follows that approval, and production requires written approval from both founder and Claude after staging passes.
+
+## Recommendation
+
+Proceed current-project-first, substrate-first, and extract-later. The current codebase is the correct laboratory because it contains the fracture the platform must solve. Preserve the legacy surface, add canonical substrate primitives and explicit bridges, and make R28 the completion gate before treating the platform as proven.
+
+**Status:** Rechecked against complete v1.1.0 (R1-R28). No SQL executed.
