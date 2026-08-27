@@ -98,7 +98,7 @@ Literal output:
 [{"src":"organization_members","user_id":"69d91884-a1ca-415a-b96d-2fcda4ff6d78","role_key":"PLATFORM_OWNER"},{"src":"staff_roles","user_id":"69d91884-a1ca-415a-b96d-2fcda4ff6d78","role_key":"PLATFORM_OWNER"},{"src":"tenant_memberships","user_id":"69d91884-a1ca-415a-b96d-2fcda4ff6d78","role_key":"owner"},{"src":"organization_members","user_id":"be0f0132-14ed-4777-a4e5-59b13f99e805","role_key":"TENANT_MANAGER"},{"src":"staff_roles","user_id":"be0f0132-14ed-4777-a4e5-59b13f99e805","role_key":"TENANT_MANAGER"},{"src":"tenant_memberships","user_id":"be0f0132-14ed-4777-a4e5-59b13f99e805","role_key":"admin"},{"src":"organization_members","user_id":"e04db1dd-bf0c-4aa0-82b9-e344f3901282","role_key":"TENANT_OWNER"},{"src":"tenant_memberships","user_id":"e04db1dd-bf0c-4aa0-82b9-e344f3901282","role_key":"owner"}]
 ```
 
-The result definitively shows three organization members, three tenant memberships, and two staff-role rows. It does not identify which UUID is Zachary without a safe join to `auth.users` or another approved identity field; Zachary's specific history remains unresolved.
+The result definitively shows three organization members, three tenant memberships, and two staff-role rows. The supplied reconciliation note identifies Zachary as the `TENANT_MANAGER` member created 2026-07-29 12:34:56 in Migration 001; the earlier empty result was a predicate defect caused by relying on `organization_members.display_name`, not evidence of a changed membership state. This identity attribution is recorded as supplied reconciliation evidence, while the literal union output above remains the database query evidence.
 
 ## Query: pgvector
 
@@ -181,7 +181,7 @@ These results supersede the earlier 632-line, broad metadata query for the purpo
 - **Resolved:** core/platform and candidate substrate tables are absent.
 - **Corrected:** auth.users count is 45, not 43.
 - **Escalated:** the prior Zachary evidence is not reproduced by the display-name predicate; run identifier-based reconciliation before R28 design.
-- **Scoped:** payment structures exist in legacy public tables; universal bridges remain a design task.
+- **Blocked:** the requested `payment_requests`, `payment_events`, and `payment_receipts` tables do not exist in the current project; R21 requires discovery of the actual legacy payment tables before correlation analysis or bridge design.
 - **Explicit:** adapter scaffolding tables are out of Phase 1 and deferred.
 
 **Status:** Evidence refreshed honestly. Remaining identity evidence is a blocker for final R20/R28 SQL design. No SQL was drafted or executed.
