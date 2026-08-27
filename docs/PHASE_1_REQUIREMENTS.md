@@ -16,9 +16,11 @@ translating architecture into scope.
 **Implementation agent:** Production-connected agent with direct
 schema visibility
 
-**Last updated:** July 11, 2026
+**Last updated:** August 1, 2026
 
-**Version:** 1.0.0
+**Version:** 1.1.0
+
+**Authoritative update:** This document contains 28 mandatory requirements, R1 through R28. R26, R27, and R28 are new in v1.1.0 and are not optional. R28 is the Phase 1 completion gate.
 
 **Reading order for the drafting agent:**
 
@@ -1404,7 +1406,7 @@ psql script that produces a summary at the end.
 
 **Verification query intent:**
 
-- This IS the verification query intent — the meta-requirement
+- This IS the verification query intent �� the meta-requirement
 
 **Reference:** Testing discipline; ARCHITECTURE.md v2 §14
 
@@ -1511,7 +1513,7 @@ protected tables.
 **Phase 1g (data reconciliation and backfill):**
 
 21. R20 — `organization_members` completeness check and backfill
-22. R23 — participant backfill from user_profiles
+22. R23 — participant backfill from auth.users
 23. R21 — payment_in backfill from payment_requests
 24. R22 — payment_out backfill from payout_requests
 25. R10 (continued) — ledger_entries hash chain backfill
@@ -1639,6 +1641,24 @@ which Phase 1.5 escrow work can safely land.
 - `docs/BACKLOG.md` (April) — historical T-numbered task context
 
 ---
+
+## 8. v1.1.0 reconciliation requirements
+
+### R26: Reconciliation reporting
+
+Create `core.reconciliation_report(p_tenant_id UUID)` as a queryable function or view. It must report coverage for `core.participants`, `core.payments_in`, and `core.payments_out`; conflicts on reconciled participants; ambiguous payment and payout rows; flagged semantic mappings; and orphaned legacy rows that do not appear in substrate provenance. The report must expose gaps honestly and return zero orphaned rows for every legacy table that Phase 1 bridges.
+
+### R27: Drift detection
+
+Create `core.check_drift(p_tenant_id UUID)` callable on demand or by a future scheduled job. For every reconciled row with provenance, compare the current legacy source state with the reconciliation result. Unchanged rows update `provenance_drift_checked_at`; changed rows are flagged and surfaced through R26 without silently overwriting the substrate row. Automatic healing is out of scope.
+
+### R28: Mandatory coherent-identity verification
+
+R28 is mandatory and is the Phase 1 completion gate. Against actual production or staging data, verify the Malchijah test (exactly three distinct `core.participants` rows, one per known auth identity, with correct non-cross-contaminated lineage and role/conflict state), the Zachary test (exactly one row with all three membership tables checked and correct conflict state), and the payment coherence test (one coherent `core.payments_in` row or an explicit ambiguity flag with complete lineage). The completion report must include the literal query output, not a summary such as “passed.” Phase 1 is not complete unless R28 passes.
+
+### v1.1 scope clarification
+
+Adapter scaffolding tables are explicitly out of Phase 1 scope. They are deferred to the adapter framework work; Phase 1 provides substrate primitives, provenance, semantic mappings, reconciliation reporting, and drift detection without inferring or rebuilding adapter-specific tables.
 
 *Requirements are what Phase 1 must accomplish. SQL is how it does
 it. Verification queries are how we know it worked. Rollback is
