@@ -61,6 +61,8 @@ Interpretation: the current count is 45 auth users, not the previously reported 
 
 ## Query: Zachary cross-table evidence
 
+Exact predicate previously run:
+
 ```sql
 select 'organization_members' source,user_id,role_key role
 from public.organization_members where lower(display_name) like '%zach%'
@@ -79,7 +81,24 @@ Literal output:
 []
 ```
 
-Interpretation: this predicate found no organization member whose `display_name` contains “zach”; it does not prove Zachary is absent. The earlier claim about Zachary's three-table role history is therefore not independently reproduced by this query and must not be treated as verified until a safe identifier-based query is run.
+This predicate was insufficient because it depended on `organization_members.display_name`. It did not definitively resolve Zachary's identity or role history.
+
+## Query: complete membership role union
+
+```sql
+SELECT 'organization_members' AS src, user_id, role_key FROM public.organization_members
+UNION ALL SELECT 'tenant_memberships', user_id, role FROM public.tenant_memberships
+UNION ALL SELECT 'staff_roles', user_id, role FROM public.staff_roles
+ORDER BY user_id, src;
+```
+
+Literal output:
+
+```json
+[{"src":"organization_members","user_id":"69d91884-a1ca-415a-b96d-2fcda4ff6d78","role_key":"PLATFORM_OWNER"},{"src":"staff_roles","user_id":"69d91884-a1ca-415a-b96d-2fcda4ff6d78","role_key":"PLATFORM_OWNER"},{"src":"tenant_memberships","user_id":"69d91884-a1ca-415a-b96d-2fcda4ff6d78","role_key":"owner"},{"src":"organization_members","user_id":"be0f0132-14ed-4777-a4e5-59b13f99e805","role_key":"TENANT_MANAGER"},{"src":"staff_roles","user_id":"be0f0132-14ed-4777-a4e5-59b13f99e805","role_key":"TENANT_MANAGER"},{"src":"tenant_memberships","user_id":"be0f0132-14ed-4777-a4e5-59b13f99e805","role_key":"admin"},{"src":"organization_members","user_id":"e04db1dd-bf0c-4aa0-82b9-e344f3901282","role_key":"TENANT_OWNER"},{"src":"tenant_memberships","user_id":"e04db1dd-bf0c-4aa0-82b9-e344f3901282","role_key":"owner"}]
+```
+
+The result definitively shows three organization members, three tenant memberships, and two staff-role rows. It does not identify which UUID is Zachary without a safe join to `auth.users` or another approved identity field; Zachary's specific history remains unresolved.
 
 ## Query: pgvector
 
@@ -112,30 +131,49 @@ Literal output:
 
 Interpretation: no matching Phase 1 migration records are present in tracking. This is evidence only for matching records, not a complete migration-history count.
 
-## Query: payment structures
+## Query: payment structures — scoped rerun
 
 ```sql
-select table_name,column_name,data_type from information_schema.columns
-where table_schema='public'
-and table_name in ('payment_requests','payment_events','payment_receipts','tenant_payment_settings','financial_intents','tournament_payments','payout_requests','player_payouts','organizer_payouts')
-order by table_name,ordinal_position;
+SELECT table_name, column_name, data_type
+FROM information_schema.columns
+WHERE table_schema = 'public'
+  AND table_name IN ('payment_requests','payment_events','payment_receipts')
+ORDER BY table_name, ordinal_position;
 ```
 
-Literal output summary: 632 output lines were produced; the complete output includes existing `financial_intents`, `organizer_payouts`, `player_payouts`, `payout_requests`, and `tournament_payments` columns. The first rows were:
+Literal output:
 
 ```json
-[
-  {"table_name":"financial_intents","column_name":"id","data_type":"uuid"},
-  {"table_name":"financial_intents","column_name":"idempotency_key","data_type":"text"},
-  {"table_name":"financial_intents","column_name":"user_id","data_type":"uuid"},
-  {"table_name":"financial_intents","column_name":"tenant_id","data_type":"uuid"},
-  {"table_name":"financial_intents","column_name":"intent_type","data_type":"text"},
-  {"table_name":"financial_intents","column_name":"amount_cents","data_type":"integer"},
-  {"table_name":"financial_intents","column_name":"currency","data_type":"text"}
-]
+[]
 ```
 
-The four proposed tables `payment_requests`, `payment_events`, `payment_receipts`, and `tenant_payment_settings` did not appear in the output. The terminal output was truncated by the tool after line 202; therefore this report does not claim to reproduce all 632 lines inline.
+The scoped structure query returned no rows: none of the three requested tables exists in `public`.
+
+## Query: payment rows — complete table checks
+
+Requested queries:
+
+```sql
+SELECT * FROM public.payment_requests;
+SELECT * FROM public.payment_events;
+SELECT * FROM public.payment_receipts;
+```
+
+Literal outputs:
+
+```text
+ERROR: 42P01: relation "public.payment_requests" does not exist
+```
+
+```text
+ERROR: 42P01: relation "public.payment_events" does not exist
+```
+
+```text
+ERROR: 42P01: relation "public.payment_receipts" does not exist
+```
+
+These results supersede the earlier 632-line, broad metadata query for the purposes of R21. R21 cannot currently be analyzed through those three named tables because they are absent from the connected current project. Existing payment-related legacy tables require a separately scoped query before any correlation design is drafted.
 
 ## Contradictions resolved or escalated
 
