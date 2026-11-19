@@ -1,8 +1,41 @@
 "use server"
 
-import { createClient } from "@/lib/supabase/server"
+/*
+  BUILD FIX 2026-11-19.
+
+  These two files imported `createServiceClient` from "@/lib/supabase/service".
+  That module has NEVER existed — checked across all branches in git history.
+  Because lib/auth/role-grant.ts is reachable from both
+  app/api/access/code/route.ts and
+  app/dashboard/admin/users/[id]/roles/page.tsx, this was a fatal
+  module-not-found and `next build` has failed on origin/main since the
+  import was introduced on 2026-06-04 (5a22262).
+
+  No new module was written, because the thing it wanted already exists:
+  `createAdminClient()` in @/lib/supabase/server — service-role key,
+  persistSession false, autoRefreshToken false, and it throws a clear error
+  when SUPABASE_SERVICE_ROLE_KEY is absent. It is the established pattern,
+  already used by app/dashboard/admin/users/page.tsx,
+  app/dashboard/my-events/page.tsx, app/dashboard/player-controller/page.tsx
+  and - decisively - by app/dashboard/admin/users/[id]/roles/page.tsx, the
+  page that imports THIS file. The page was already doing it right while the
+  module it depends on reached for a file that was never created.
+
+  Writing lib/supabase/service.ts would have created a second service-role
+  client alongside a working one: two declarations of the same fact, which is
+  the defect pattern this whole review keeps finding.
+
+  `createAdminClient()` is synchronous, so the `await` is dropped. It was
+  harmless (await on a non-promise resolves it) but it implied an async
+  contract that does not exist.
+
+  THIS CLIENT BYPASSES RLS. Authorization is the caller's responsibility, and
+  both entry points here do enforce it first via requireStaffAction("manager")
+  before any service-role call. That ordering is load-bearing: do not move a
+  createAdminClient() call above its authorization check.
+*/
+import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { stripe } from "@/lib/stripe"
-import { createServiceClient } from "@/lib/supabase/service"
 import { requireStaffAction } from "@/lib/auth/require-staff"
 
 interface RefundResult {
@@ -20,7 +53,7 @@ export async function validateRefund(
   originalIntentId: string,
   amountCents: number
 ): Promise<{ success: boolean; error?: string; maxAvailable?: number }> {
-  const supabase = await createServiceClient()
+  const supabase = createAdminClient()
 
   const { data, error } = await supabase.rpc("validate_refund", {
     p_original_intent_id: originalIntentId,
@@ -44,7 +77,7 @@ export async function initiateRefund(
   reason: string = "Customer requested refund"
 ): Promise<RefundResult> {
   const { userId } = await requireStaffAction("manager")
-  const serviceClient = await createServiceClient()
+  const serviceClient = createAdminClient()
 
   // Step 1: Create refund intent via service client
   const { data: intentResult, error: intentError } = await serviceClient.rpc("create_refund_intent", {

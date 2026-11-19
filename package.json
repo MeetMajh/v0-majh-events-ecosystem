@@ -1,6 +1,7 @@
 {
   "name": "my-project",
   "version": "0.1.0",
+  "packageManager": "pnpm@10.34.9",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -17,8 +18,8 @@
     "cap:sync": "cap sync",
     "cap:open:ios": "cap open ios",
     "cap:open:android": "cap open android",
-    "cap:build:ios": "npm run export && cap sync ios",
-    "cap:build:android": "npm run export && cap sync android",
+    "cap:build:ios": "pnpm run export && cap sync ios",
+    "cap:build:android": "pnpm run export && cap sync android",
     "cap:run:ios": "cap run ios",
     "cap:run:android": "cap run android"
   },
@@ -98,6 +99,7 @@
     "react-error-boundary": "^6.1.1",
     "react-hook-form": "^7.54.1",
     "react-intersection-observer": "^10.0.3",
+    "react-markdown": "^10.1.0",
     "react-resizable-panels": "^2.1.7",
     "recharts": "2.15.0",
     "resend": "^6.10.0",

@@ -38,9 +38,9 @@
     * counts that went down  (and prints the command to re-baseline)
 
   USAGE
-    npm run typecheck          plain tsc, full output
-    npm run typecheck:gate     the gate — use this in CI
-    npm run typecheck:baseline accept current counts as the new baseline
+    pnpm run typecheck          plain tsc, full output
+    pnpm run typecheck:gate     the gate — use this in CI
+    pnpm run typecheck:baseline accept current counts as the new baseline
 
   The baseline is committed, so the number going down is visible in review.
 */
@@ -54,16 +54,39 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const BASELINE = join(root, ".typecheck-baseline.json");
 const update = process.argv.includes("--update");
 
+/*
+  Resolve the project's own tsc rather than going through npx.
+
+  Under pnpm, node_modules is a tree of symlinks into node_modules/.pnpm, and
+  `npx tsc` has been observed resolving its own download instead of the
+  project's binary — which would typecheck against different library versions
+  than the build uses. The local binary is unambiguous. npx stays only as a
+  fallback for an environment where the bin link is missing.
+*/
+const localTsc = join(
+  root,
+  "node_modules",
+  ".bin",
+  process.platform === "win32" ? "tsc.cmd" : "tsc"
+);
+const useLocal = existsSync(localTsc);
+
 // tsc exits non-zero when it finds errors, which is the normal case here.
-const run = spawnSync("npx", ["tsc", "--noEmit", "--pretty", "false"], {
-  cwd: root,
-  encoding: "utf8",
-  shell: process.platform === "win32",
-});
+const run = spawnSync(
+  useLocal ? localTsc : "npx",
+  useLocal
+    ? ["--noEmit", "--pretty", "false"]
+    : ["tsc", "--noEmit", "--pretty", "false"],
+  {
+    cwd: root,
+    encoding: "utf8",
+    shell: process.platform === "win32",
+  }
+);
 
 if (run.error) {
   console.error(`Could not run tsc: ${run.error.message}`);
-  console.error("Is TypeScript installed? Try: npm ci");
+  console.error("Is TypeScript installed? Try: pnpm install --frozen-lockfile");
   process.exit(2);
 }
 
@@ -72,14 +95,36 @@ const output = `${run.stdout ?? ""}${run.stderr ?? ""}`;
 // path/to/file.ts(12,34): error TS2304: Cannot find name 'x'.
 const ERROR_LINE = /^(.+?)\((\d+),(\d+)\): error (TS\d+): (.*)$/;
 
+/*
+  Generated output is not source, and counting it would make this gate lie.
+
+  tsconfig.json includes the generated ".next/types" route-type declarations,
+  which Next writes during a build. They exist on a machine that has run `next
+  build` and not in a fresh clone, so counting them would mean the gate
+  reports "newly broken" purely because someone built locally, and passes in
+  CI where no build has run. A gate that fires on where it ran is a gate that
+  gets switched off. .next is gitignored, which is the test for "not source".
+*/
+const GENERATED = /^\.next\//;
+
 const counts = new Map();
 const samples = new Map();
+let generatedSkipped = 0;
 for (const line of output.split("\n")) {
   const m = ERROR_LINE.exec(line.trim());
   if (!m) continue;
   const file = m[1].replace(/\\/g, "/");
+  if (GENERATED.test(file)) {
+    generatedSkipped += 1;
+    continue;
+  }
   counts.set(file, (counts.get(file) ?? 0) + 1);
   if (!samples.has(file)) samples.set(file, `${m[4]}: ${m[5]}`.slice(0, 110));
+}
+if (generatedSkipped) {
+  console.log(
+    `(ignored ${generatedSkipped} error(s) in generated .next/ output)\n`
+  );
 }
 
 const total = [...counts.values()].reduce((a, b) => a + b, 0);
@@ -100,7 +145,7 @@ if (update || !existsSync(BASELINE)) {
   const record = {
     _comment:
       "Per-file tsc error counts. The gate fails if any file's count rises " +
-      "or a file absent here gains errors. Regenerate with: npm run " +
+      "or a file absent here gains errors. Regenerate with: pnpm run " +
       "typecheck:baseline",
     _generated: new Date().toISOString().slice(0, 10),
     _total: total,
@@ -163,14 +208,14 @@ if (improved.length) {
 }
 
 if (newlyBroken.length || regressed.length) {
-  console.error("Run `npx tsc --noEmit` to see the full errors.");
+  console.error("Run `pnpm exec tsc --noEmit` to see the full errors.");
   console.error("These must be fixed — the backlog may shrink, never grow.");
   process.exit(1);
 }
 
 if (improved.length) {
   console.log("Lock it in so it cannot come back:");
-  console.log("    npm run typecheck:baseline && git add .typecheck-baseline.json\n");
+  console.log("    pnpm run typecheck:baseline && git add .typecheck-baseline.json\n");
 }
 
 console.log("✓ no new type errors.");

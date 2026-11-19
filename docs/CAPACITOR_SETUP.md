@@ -21,23 +21,23 @@ This guide explains how to build native iOS and Android apps from the MAJH EVENT
 ### 1. Install Capacitor CLI and Core
 
 ```bash
-npm install @capacitor/cli @capacitor/core
-npm install @capacitor/ios @capacitor/android
+pnpm add @capacitor/cli @capacitor/core
+pnpm add @capacitor/ios @capacitor/android
 ```
 
 ### 2. Install Capacitor Plugins (Optional but Recommended)
 
 ```bash
 # Core plugins
-npm install @capacitor/app @capacitor/haptics @capacitor/keyboard
-npm install @capacitor/status-bar @capacitor/splash-screen
+pnpm add @capacitor/app @capacitor/haptics @capacitor/keyboard
+pnpm add @capacitor/status-bar @capacitor/splash-screen
 
 # Push notifications
-npm install @capacitor/push-notifications
+pnpm add @capacitor/push-notifications
 
 # Other useful plugins
-npm install @capacitor/browser @capacitor/share @capacitor/toast
-npm install @capacitor/device @capacitor/network @capacitor/storage
+pnpm add @capacitor/browser @capacitor/share @capacitor/toast
+pnpm add @capacitor/device @capacitor/network @capacitor/storage
 ```
 
 ### 3. Configure Next.js for Static Export
@@ -57,10 +57,10 @@ const nextConfig = {
 
 ```bash
 # Add iOS platform
-npm run cap:add:ios
+pnpm run cap:add:ios
 
 # Add Android platform  
-npm run cap:add:android
+pnpm run cap:add:android
 ```
 
 ## Building for Development
@@ -69,29 +69,29 @@ npm run cap:add:android
 
 ```bash
 # Build the Next.js app and sync to native projects
-npm run cap:build:ios
+pnpm run cap:build:ios
 # or
-npm run cap:build:android
+pnpm run cap:build:android
 ```
 
 ### Open in Native IDE
 
 ```bash
 # Open in Xcode (iOS)
-npm run cap:open:ios
+pnpm run cap:open:ios
 
 # Open in Android Studio (Android)
-npm run cap:open:android
+pnpm run cap:open:android
 ```
 
 ### Run on Device/Simulator
 
 ```bash
 # Run on iOS simulator or connected device
-npm run cap:run:ios
+pnpm run cap:run:ios
 
 # Run on Android emulator or connected device
-npm run cap:run:android
+pnpm run cap:run:android
 ```
 
 ## iOS-Specific Setup
@@ -179,7 +179,7 @@ server: {
 }
 ```
 
-2. Run `npm run dev` on your computer
+2. Run `pnpm run dev` on your computer
 3. Run the app on your device - it will load from your dev server
 
 ## Environment Variables
@@ -216,22 +216,22 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://majhevents.com'
 - Invalidate caches: File → Invalidate Caches
 
 ### Web Assets Not Updating
-- Run `npm run cap:sync` after any web changes
+- Run `pnpm run cap:sync` after any web changes
 - Delete `out/` folder and rebuild
 
 ## Useful Commands
 
 ```bash
 # Sync web assets to native projects
-npm run cap:sync
+pnpm run cap:sync
 
 # List available devices
-npx cap run ios --list
-npx cap run android --list
+pnpm exec cap run ios --list
+pnpm exec cap run android --list
 
 # Update Capacitor
-npm install @capacitor/cli@latest @capacitor/core@latest
-npx cap sync
+pnpm add @capacitor/cli@latest @capacitor/core@latest
+pnpm exec cap sync
 ```
 
 ## Resources

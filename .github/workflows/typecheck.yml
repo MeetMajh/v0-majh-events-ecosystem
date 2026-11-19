@@ -1,16 +1,19 @@
 # Type-check gate.
 #
 # This repository sets `typescript: { ignoreBuildErrors: true }` in
-# next.config.mjs, so `next build` does not type-check. On 2026-11-18 the
-# first `tsc --noEmit` run found 377 errors, two of which were shipping
-# bugs that had been invisible for months:
+# next.config.mjs, so `next build` does not type-check. The first
+# `tsc --noEmit` run on it (2026-11-18) found 377 errors, and three were
+# shipping bugs that had been invisible for months:
 #
 #   * app/api/stripe/webhook/route.ts referenced `supabaseAdmin` out of
 #     scope in all 17 handlers, so every handler would have thrown
 #     ReferenceError on the first real payment;
 #   * lib/role-actions.ts called `createClient(cookieStore)` — an argument
 #     the function does not take — and never awaited it, so every
-#     permission change was a property access on a Promise.
+#     permission change was a property access on a Promise;
+#   * lib/auth/role-grant.ts imported "@/lib/supabase/service", a module
+#     that has never existed, which made `next build` FAIL on origin/main
+#     from 2026-06-04 until 2026-11-19.
 #
 # This workflow does not demand a clean tree. It enforces a per-file
 # ratchet: the backlog may shrink, never grow. See
@@ -26,7 +29,6 @@ on:
     branches: [main]
   pull_request:
 
-# A newer push to the same branch makes an in-flight run obsolete.
 concurrency:
   group: typecheck-${{ github.ref }}
   cancel-in-progress: true
@@ -39,20 +41,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The version comes from package.json's `packageManager` field, so CI,
+      # Vercel and a developer's machine cannot drift to different pnpm
+      # versions. Do not hardcode a version here.
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
+          cache: pnpm
 
-      # `npm ci` installs exactly the lockfile and never rewrites it, so CI
-      # cannot silently drift from what a developer has locally.
+      # --frozen-lockfile fails rather than silently updating the lockfile,
+      # so CI cannot drift from what is committed.
       - name: Install
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Type-check gate
-        run: npm run typecheck:gate
+        run: pnpm run typecheck:gate
 
-      # On failure, the full error list is more useful than the summary.
+      # On failure the full list is more useful than the summary.
       - name: Full type-check output (on failure)
         if: failure()
-        run: npx tsc --noEmit || true
+        run: pnpm exec tsc --noEmit || true
