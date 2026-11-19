@@ -1,11 +1,26 @@
 'use server'
 
+/*
+  FIXED 2026-11-18 — six call sites, 26 type errors, two linked mistakes.
+
+  `createClient` in @/lib/supabase/server is `async` and takes NO arguments:
+  it calls `await cookies()` itself. This file was calling
+  `createClient(cookieStore)` — passing an argument the function does not
+  accept, and never awaiting the promise it returns. So `supabase` was a
+  Promise<SupabaseClient>, and every `supabase.from(...)` and
+  `supabase.auth` in this file was a property access on a Promise:
+  undefined at runtime, not a query.
+
+  These are the role functions — submitRoleRequest, approveRoleRequest,
+  denyRoleRequest, assignProfileRole. Permission changes that could not
+  have been reaching the database.
+
+  Invisible because next.config.mjs sets typescript.ignoreBuildErrors.
+*/
 import { createClient } from '@/lib/supabase/server'
-import { cookies } from 'next/headers'
 
 export async function submitRoleRequest(requestedRole: string, reason: string) {
-  const cookieStore = await cookies()
-  const supabase = createClient(cookieStore)
+  const supabase = await createClient()
 
   const {
     data: { user },
@@ -56,8 +71,7 @@ export async function submitRoleRequest(requestedRole: string, reason: string) {
 }
 
 export async function getUserRoleRequest(userId: string) {
-  const cookieStore = await cookies()
-  const supabase = createClient(cookieStore)
+  const supabase = await createClient()
 
   const { data, error } = await supabase
     .from('role_requests')
@@ -77,8 +91,7 @@ export async function getUserRoleRequest(userId: string) {
 }
 
 export async function getUserProfile(userId: string) {
-  const cookieStore = await cookies()
-  const supabase = createClient(cookieStore)
+  const supabase = await createClient()
 
   const { data: profile, error } = await supabase
     .from('profiles')
@@ -94,8 +107,7 @@ export async function getUserProfile(userId: string) {
 }
 
 export async function approveRoleRequest(requestId: string, newRole: string) {
-  const cookieStore = await cookies()
-  const supabase = createClient(cookieStore)
+  const supabase = await createClient()
 
   // Verify admin privileges
   const {
@@ -155,8 +167,7 @@ export async function approveRoleRequest(requestId: string, newRole: string) {
 }
 
 export async function denyRoleRequest(requestId: string, reason: string) {
-  const cookieStore = await cookies()
-  const supabase = createClient(cookieStore)
+  const supabase = await createClient()
 
   // Verify admin privileges
   const {
@@ -197,8 +208,7 @@ export async function denyRoleRequest(requestId: string, reason: string) {
 
 // Admin direct role assignment (no request needed)
 export async function assignProfileRole(targetUserId: string, newRole: string) {
-  const cookieStore = await cookies()
-  const supabase = createClient(cookieStore)
+  const supabase = await createClient()
 
   // Verify admin privileges
   const {

@@ -1,0 +1,58 @@
+# Type-check gate.
+#
+# This repository sets `typescript: { ignoreBuildErrors: true }` in
+# next.config.mjs, so `next build` does not type-check. On 2026-11-18 the
+# first `tsc --noEmit` run found 377 errors, two of which were shipping
+# bugs that had been invisible for months:
+#
+#   * app/api/stripe/webhook/route.ts referenced `supabaseAdmin` out of
+#     scope in all 17 handlers, so every handler would have thrown
+#     ReferenceError on the first real payment;
+#   * lib/role-actions.ts called `createClient(cookieStore)` — an argument
+#     the function does not take — and never awaited it, so every
+#     permission change was a property access on a Promise.
+#
+# This workflow does not demand a clean tree. It enforces a per-file
+# ratchet: the backlog may shrink, never grow. See
+# scripts/typecheck-gate.mjs for why per-file rather than a total.
+#
+# When .typecheck-baseline.json reaches zero, remove ignoreBuildErrors from
+# next.config.mjs and this gate becomes redundant.
+
+name: typecheck
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same branch makes an in-flight run obsolete.
+concurrency:
+  group: typecheck-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # `npm ci` installs exactly the lockfile and never rewrites it, so CI
+      # cannot silently drift from what a developer has locally.
+      - name: Install
+        run: npm ci
+
+      - name: Type-check gate
+        run: npm run typecheck:gate
+
+      # On failure, the full error list is more useful than the summary.
+      - name: Full type-check output (on failure)
+        if: failure()
+        run: npx tsc --noEmit || true
