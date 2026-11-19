@@ -1,5 +1,31 @@
 "use server"
 
+/*
+  FIXED 2026-11-19 — `.catch()` on a Supabase query builder.
+
+  Verified by running it against @supabase/supabase-js rather than reasoning
+  about it:
+
+      typeof builder.then   -> "function"
+      typeof builder.catch  -> "undefined"
+      builder.catch(fn)     -> TypeError: ....catch is not a function
+      await builder         -> RESOLVES, with the failure in `.error`
+
+  Two bugs in one line, therefore.
+
+  First, PostgrestFilterBuilder is a thenable, not a Promise. It implements
+  `then` and nothing else, so `.catch(...)` threw a TypeError the moment the
+  line executed — taking down the whole surrounding action, which is the
+  opposite of the "don't let this failure block the operation" intent the
+  comments state.
+
+  Second, and why `.then(undefined, handler)` would NOT have been a fix
+  either: supabase-js does not reject. It catches transport and Postgres
+  errors internally and resolves with `{ data: null, error: {...} }`. A
+  rejection handler would never have fired even if `.catch` had existed. The
+  only way to see a failure is to read `error` off the resolved result.
+*/
+
 import { createClient } from "@/lib/supabase/server"
 import { stripe } from "@/lib/stripe"
 import { revalidatePath } from "next/cache"
@@ -893,28 +919,27 @@ export async function reverseTransaction(transactionId: string, reason: string) 
       .eq("user_id", transaction.user_id)
 
     // Use RPC or direct update for atomic balance change
-    await supabase.rpc("adjust_wallet_balance", {
+    const { error: adjustError } = await supabase.rpc("adjust_wallet_balance", {
       p_user_id: transaction.user_id,
-      p_amount: reversalAmount
-    }).catch(() => {
-      // Fallback: manual update if RPC doesn't exist
-      return supabase
+      p_amount: reversalAmount,
+    })
+    if (adjustError) {
+      // Fallback: manual update if the RPC is absent in this deployment.
+      const { data: wallet } = await supabase
         .from("wallets")
         .select("balance_cents")
         .eq("user_id", transaction.user_id)
         .single()
-        .then(({ data: wallet }) => {
-          if (wallet) {
-            return supabase
-              .from("wallets")
-              .update({ 
-                balance_cents: wallet.balance_cents + reversalAmount,
-                updated_at: new Date().toISOString()
-              })
-              .eq("user_id", transaction.user_id)
-          }
-        })
-    })
+      if (wallet) {
+        await supabase
+          .from("wallets")
+          .update({
+            balance_cents: wallet.balance_cents + reversalAmount,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("user_id", transaction.user_id)
+      }
+    }
   }
 
   revalidatePath("/dashboard")

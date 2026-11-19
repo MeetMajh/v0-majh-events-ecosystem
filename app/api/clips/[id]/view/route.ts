@@ -1,3 +1,17 @@
+/*
+  FIXED 2026-11-19 — dynamic route params are a Promise in Next 15+/16.
+
+  This handler declared `{ params }: { params: { id: string } }` and
+  destructured it synchronously. In Next 16 `params` IS a Promise, so
+  `const { id } = params` yielded undefined and the route could never find
+  its resource — a runtime bug, not just a type complaint.
+
+  It surfaced only as an error inside .next/types/validator.ts, which Next
+  generates during a build, so `tsc --noEmit` on a fresh clone never showed
+  it. Every other dynamic route in this repository already declares
+  `Promise<{...}>` and awaits it; these two were the outliers.
+*/
+
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -11,10 +25,10 @@ function getSupabaseAdmin() {
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await params;
     const supabaseAdmin = getSupabaseAdmin();
 
     if (!id) {

@@ -1,5 +1,24 @@
 "use server"
 
+/*
+  FIXED 2026-11-19 — `.catch()` on a Supabase query builder.
+
+  Verified by running it against @supabase/supabase-js rather than reasoning
+  about it:
+
+      typeof builder.then   -> "function"
+      typeof builder.catch  -> "undefined"
+      builder.catch(fn)     -> TypeError: ....catch is not a function
+      await builder         -> RESOLVES, with the failure in `.error`
+
+  Two bugs in one line. PostgrestFilterBuilder is a thenable, not a Promise,
+  so `.catch(...)` threw a TypeError as soon as the line ran — taking down the
+  surrounding action, the opposite of the intent. And supabase-js does not
+  reject at all: it resolves with `{ data: null, error: {...} }`, so a
+  rejection handler would never have fired even if `.catch` existed. Reading
+  `error` off the resolved result is the only way to see a failure.
+*/
+
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 
@@ -169,12 +188,17 @@ export async function approveContent(contentId: string, contentType: string = "m
   }
   
   // Log the action
-  await supabase.from("moderation_logs").insert({
+  const { error: logError } = await supabase.from("moderation_logs").insert({
     media_id: contentId,
     moderator_id: user.id,
     action_taken: "approved",
     automated: false,
-  }).catch(() => {})
+  })
+  if (logError) {
+    // Non-fatal, but logged rather than swallowed: a moderation decision that
+    // was not recorded is worth knowing about.
+    console.warn("[moderation] approve not logged:", logError.message)
+  }
   
   revalidatePath("/admin/moderation")
   return { success: true }
@@ -207,13 +231,16 @@ export async function rejectContent(
   }
   
   // Log the action
-  await supabase.from("moderation_logs").insert({
+  const { error: logError } = await supabase.from("moderation_logs").insert({
     media_id: contentId,
     moderator_id: user.id,
     action_taken: "rejected",
     automated: false,
     notes: reason,
-  }).catch(() => {})
+  })
+  if (logError) {
+    console.warn("[moderation] reject not logged:", logError.message)
+  }
   
   revalidatePath("/admin/moderation")
   return { success: true }

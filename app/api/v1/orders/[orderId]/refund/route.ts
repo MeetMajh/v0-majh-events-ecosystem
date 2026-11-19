@@ -14,7 +14,7 @@ export async function POST(
     const { orderId } = await params
     const authResult = await validateApiKey(req)
     if (!authResult.valid) {
-      return apiError("authentication_error", authResult.error || "Invalid API key", 401)
+      return apiError("authentication_error", authResult.error || "Invalid API key")
     }
 
     if (!authResult.scopes?.includes("write")) {
@@ -48,14 +48,14 @@ export async function POST(
     }
 
     if (!["paid", "partially_refunded"].includes(order.status)) {
-      return apiError("invalid_request", "Order cannot be refunded", 400)
+      return apiError("invalid_request", "Order cannot be refunded")
     }
 
     const refundAmount = amount_cents || (order.total_cents - order.amount_refunded_cents)
     const maxRefundable = order.total_cents - order.amount_refunded_cents
 
     if (refundAmount > maxRefundable) {
-      return apiError("invalid_request", `Maximum refundable amount is ${maxRefundable} cents`, 400)
+      return apiError("invalid_request", `Maximum refundable amount is ${maxRefundable} cents`)
     }
 
     // Process Stripe refund if there's a payment intent
@@ -97,6 +97,6 @@ export async function POST(
     return apiSuccess(response)
   } catch (error) {
     console.error("[API] Order Refund error:", error)
-    return apiError("internal_error", "An unexpected error occurred", 500)
+    return apiError("internal_error", "An unexpected error occurred")
   }
 }

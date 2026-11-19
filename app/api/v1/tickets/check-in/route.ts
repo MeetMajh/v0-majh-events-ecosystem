@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
   try {
     const authResult = await validateApiKey(req)
     if (!authResult.valid) {
-      return apiError("authentication_error", authResult.error || "Invalid API key", 401)
+      return apiError("authentication_error", authResult.error || "Invalid API key")
     }
 
     if (!authResult.scopes?.includes("write")) {
@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
 
     const rateLimitResult = await checkRateLimit(authResult.api_key_id, 120) // Higher limit for check-ins
     if (!rateLimitResult.allowed) {
-      return apiError("rate_limit_exceeded", "Rate limit exceeded", 429)
+      return apiError("rate_limit_exceeded", "Rate limit exceeded")
     }
 
     const supabase = await createClient()
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     const { ticket_id, qr_code, location, performed_by } = body
 
     if (!ticket_id && !qr_code) {
-      return apiError("invalid_request", "ticket_id or qr_code is required", 400)
+      return apiError("invalid_request", "ticket_id or qr_code is required")
     }
 
     let result
@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
     })
   } catch (error) {
     console.error("[API] Ticket Check-in error:", error)
-    return apiError("internal_error", "An unexpected error occurred", 500)
+    return apiError("internal_error", "An unexpected error occurred")
   }
 }
 
@@ -82,7 +82,7 @@ export async function PUT(req: NextRequest) {
   try {
     const authResult = await validateApiKey(req)
     if (!authResult.valid) {
-      return apiError("authentication_error", authResult.error || "Invalid API key", 401)
+      return apiError("authentication_error", authResult.error || "Invalid API key")
     }
 
     if (!authResult.scopes?.includes("write")) {
@@ -95,11 +95,11 @@ export async function PUT(req: NextRequest) {
     const { ticket_ids, location, performed_by } = body
 
     if (!Array.isArray(ticket_ids) || ticket_ids.length === 0) {
-      return apiError("invalid_request", "ticket_ids array is required", 400)
+      return apiError("invalid_request", "ticket_ids array is required")
     }
 
     if (ticket_ids.length > 100) {
-      return apiError("invalid_request", "Maximum 100 tickets per batch", 400)
+      return apiError("invalid_request", "Maximum 100 tickets per batch")
     }
 
     const results = await Promise.all(
@@ -124,6 +124,6 @@ export async function PUT(req: NextRequest) {
     })
   } catch (error) {
     console.error("[API] Bulk Check-in error:", error)
-    return apiError("internal_error", "An unexpected error occurred", 500)
+    return apiError("internal_error", "An unexpected error occurred")
   }
 }

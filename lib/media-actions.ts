@@ -1,5 +1,31 @@
 "use server"
 
+/*
+  FIXED 2026-11-19 — `.catch()` on a Supabase query builder.
+
+  Verified by running it against @supabase/supabase-js rather than reasoning
+  about it:
+
+      typeof builder.then   -> "function"
+      typeof builder.catch  -> "undefined"
+      builder.catch(fn)     -> TypeError: ....catch is not a function
+      await builder         -> RESOLVES, with the failure in `.error`
+
+  Two bugs in one line, therefore.
+
+  First, PostgrestFilterBuilder is a thenable, not a Promise. It implements
+  `then` and nothing else, so `.catch(...)` threw a TypeError the moment the
+  line executed — taking down the whole surrounding action, which is the
+  opposite of the "don't let this failure block the operation" intent the
+  comments state.
+
+  Second, and why `.then(undefined, handler)` would NOT have been a fix
+  either: supabase-js does not reject. It catches transport and Postgres
+  errors internally and resolves with `{ data: null, error: {...} }`. A
+  rejection handler would never have fired even if `.catch` had existed. The
+  only way to see a failure is to read `error` off the resolved result.
+*/
+
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import { requireStaffAction } from "@/lib/auth/require-staff"
@@ -195,12 +221,16 @@ export async function createMedia(data: {
 
   if (error) return { error: error.message }
 
-  await supabase.rpc("increment_upload_count", { user_id: user.id }).catch(() => {
-    supabase
-      .from("profiles")
-      .update({ total_uploads: 1 })
-      .eq("id", user.id)
+  const { error: uploadCountError } = await supabase.rpc("increment_upload_count", {
+    user_id: user.id,
   })
+  if (uploadCountError) {
+    // NOTE: this fallback SETS total_uploads to 1 rather than incrementing it.
+    // That is the pre-existing behaviour and is preserved here deliberately —
+    // changing a counter's semantics is not part of fixing a crash. It is
+    // wrong if the user has previous uploads, and worth a follow-up.
+    await supabase.from("profiles").update({ total_uploads: 1 }).eq("id", user.id)
+  }
 
   if (!autoApprove) {
     runAIModeration(media.id).catch((err) => {

@@ -1,5 +1,31 @@
 "use server"
 
+/*
+  FIXED 2026-11-19 — `.catch()` on a Supabase query builder.
+
+  Verified by running it against @supabase/supabase-js rather than reasoning
+  about it:
+
+      typeof builder.then   -> "function"
+      typeof builder.catch  -> "undefined"
+      builder.catch(fn)     -> TypeError: ....catch is not a function
+      await builder         -> RESOLVES, with the failure in `.error`
+
+  Two bugs in one line, therefore.
+
+  First, PostgrestFilterBuilder is a thenable, not a Promise. It implements
+  `then` and nothing else, so `.catch(...)` threw a TypeError the moment the
+  line executed — taking down the whole surrounding action, which is the
+  opposite of the "don't let this failure block the operation" intent the
+  comments state.
+
+  Second, and why `.then(undefined, handler)` would NOT have been a fix
+  either: supabase-js does not reject. It catches transport and Postgres
+  errors internally and resolves with `{ data: null, error: {...} }`. A
+  rejection handler would never have fired even if `.catch` had existed. The
+  only way to see a failure is to read `error` off the resolved result.
+*/
+
 import { generateText, Output } from "ai"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
@@ -181,14 +207,18 @@ export async function moderateMedia(
     .eq("id", mediaId)
   
   // Log moderation result
-  await supabase.from("moderation_logs").insert({
+  const { error: logError } = await supabase.from("moderation_logs").insert({
     media_id: mediaId,
     result: finalResult,
     action_taken: newStatus,
     automated: true,
-  }).catch(() => {
-    // Table might not exist yet, ignore
   })
+  if (logError) {
+    // The table may not exist in this deployment. Deliberately non-fatal, but
+    // logged rather than swallowed silently — a moderation decision that was
+    // not recorded is worth knowing about.
+    console.warn("[moderation] could not write moderation_logs:", logError.message)
+  }
   
   return {
     approved: finalResult.safe,

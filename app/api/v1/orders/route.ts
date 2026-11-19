@@ -8,12 +8,12 @@ export async function GET(req: NextRequest) {
   try {
     const authResult = await validateApiKey(req)
     if (!authResult.valid) {
-      return apiError("authentication_error", authResult.error || "Invalid API key", 401)
+      return apiError("authentication_error", authResult.error || "Invalid API key")
     }
 
     const rateLimitResult = await checkRateLimit(authResult.api_key_id, 60)
     if (!rateLimitResult.allowed) {
-      return apiError("rate_limit_exceeded", "Rate limit exceeded", 429)
+      return apiError("rate_limit_exceeded", "Rate limit exceeded")
     }
 
     const supabase = await createClient()
@@ -79,6 +79,6 @@ export async function GET(req: NextRequest) {
     })
   } catch (error) {
     console.error("[API] Orders GET error:", error)
-    return apiError("internal_error", "An unexpected error occurred", 500)
+    return apiError("internal_error", "An unexpected error occurred")
   }
 }

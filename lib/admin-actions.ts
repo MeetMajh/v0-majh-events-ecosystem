@@ -1,5 +1,31 @@
 "use server"
 
+/*
+  FIXED 2026-11-19 — `.catch()` on a Supabase query builder.
+
+  Verified by running it against @supabase/supabase-js rather than reasoning
+  about it:
+
+      typeof builder.then   -> "function"
+      typeof builder.catch  -> "undefined"
+      builder.catch(fn)     -> TypeError: ....catch is not a function
+      await builder         -> RESOLVES, with the failure in `.error`
+
+  Two bugs in one line, therefore.
+
+  First, PostgrestFilterBuilder is a thenable, not a Promise. It implements
+  `then` and nothing else, so `.catch(...)` threw a TypeError the moment the
+  line executed — taking down the whole surrounding action, which is the
+  opposite of the "don't let this failure block the operation" intent the
+  comments state.
+
+  Second, and why `.then(undefined, handler)` would NOT have been a fix
+  either: supabase-js does not reject. It catches transport and Postgres
+  errors internally and resolves with `{ data: null, error: {...} }`. A
+  rejection handler would never have fired even if `.catch` had existed. The
+  only way to see a failure is to read `error` off the resolved result.
+*/
+
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
@@ -126,19 +152,26 @@ export async function updateOrderStatus(formData: FormData) {
           description: `Earned from order ${order.order_number}`,
         })
 
-        await supabase.rpc("increment_points", { uid: order.customer_id, pts: pointsToAward }).catch(() => {
-          supabase.from("profiles")
+        const { error: pointsError } = await supabase.rpc("increment_points", {
+          uid: order.customer_id,
+          pts: pointsToAward,
+        })
+        if (pointsError) {
+          // Fallback for a deployment where the RPC is absent. The inner
+          // queries are now awaited; previously they were floating thenables
+          // that may never have been sent.
+          const { data: profile } = await supabase
+            .from("profiles")
             .select("points_balance")
             .eq("id", order.customer_id)
             .single()
-            .then(({ data: profile }) => {
-              if (profile) {
-                supabase.from("profiles")
-                  .update({ points_balance: profile.points_balance + pointsToAward })
-                  .eq("id", order.customer_id)
-              }
-            })
-        })
+          if (profile) {
+            await supabase
+              .from("profiles")
+              .update({ points_balance: profile.points_balance + pointsToAward })
+              .eq("id", order.customer_id)
+          }
+        }
       }
     }
   }
@@ -574,7 +607,11 @@ export async function createPosOrder(formData: FormData) {
   await supabase.from("order_items").insert(orderItems)
 
   for (const item of items) {
-    await supabase.rpc("decrement_inventory", { item_id: item.id, qty: item.quantity }).catch(async () => {
+    const { error: decrementError } = await supabase.rpc("decrement_inventory", {
+      item_id: item.id,
+      qty: item.quantity,
+    })
+    if (decrementError) {
       const { data: inv } = await supabase
         .from("inventory")
         .select("quantity_on_hand")
@@ -586,7 +623,7 @@ export async function createPosOrder(formData: FormData) {
           .update({ quantity_on_hand: Math.max(0, inv.quantity_on_hand - item.quantity) })
           .eq("menu_item_id", item.id)
       }
-    })
+    }
   }
 
   revalidatePath("/dashboard/pos")

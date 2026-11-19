@@ -1,12 +1,30 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+/*
+  FIXED 2026-11-19 — dynamic route params are a Promise in Next 15+/16.
+
+  This page declared `{ params }: { params: { id: string } }` and read
+  `params.id` directly. In Next 16 `params` is a Promise, so `params.id` was
+  undefined: the lookup below could never match a record, and the effect's
+  dependency array watched a value that never changed.
+
+  These are 'use client' components, so they cannot `await`. React 19's
+  `use()` unwraps the promise during render, which is the documented pattern
+  for client pages.
+
+  Not reported by `tsc --noEmit` — Next's generated validator covers route
+  handlers, not page components, so this was found by grepping for the same
+  shape after fixing the two routes it did report.
+*/
+
+import { use, useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { ChevronLeft, ChevronRight, Share2, Copy, Check } from 'lucide-react'
 import Link from 'next/link'
 
-export default function ClipViewerPage({ params }: { params: { id: string } }) {
+export default function ClipViewerPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params)
   const [clip, setClip] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
@@ -26,7 +44,7 @@ export default function ClipViewerPage({ params }: { params: { id: string } }) {
 
       if (clips) {
         setAllClips(clips)
-        const index = clips.findIndex(c => c.id === params.id)
+        const index = clips.findIndex(c => c.id === id)
         setCurrentIndex(index >= 0 ? index : 0)
         
         // Fetch current clip
@@ -44,7 +62,7 @@ export default function ClipViewerPage({ params }: { params: { id: string } }) {
     }
 
     fetchClips()
-  }, [params.id, supabase])
+  }, [id, supabase])
 
   const handleNext = () => {
     if (currentIndex < allClips.length - 1) {

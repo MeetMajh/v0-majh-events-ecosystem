@@ -12,12 +12,12 @@ export async function GET(req: NextRequest) {
   try {
     const authResult = await validateApiKey(req)
     if (!authResult.valid) {
-      return apiError("authentication_error", authResult.error || "Invalid API key", 401)
+      return apiError("authentication_error", authResult.error || "Invalid API key")
     }
 
     const rateLimitResult = await checkRateLimit(authResult.api_key_id, 60)
     if (!rateLimitResult.allowed) {
-      return apiError("rate_limit_exceeded", "Rate limit exceeded", 429)
+      return apiError("rate_limit_exceeded", "Rate limit exceeded")
     }
 
     const supabase = await createClient()
@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
     })
   } catch (error) {
     console.error("[API] Features GET error:", error)
-    return apiError("internal_error", "An unexpected error occurred", 500)
+    return apiError("internal_error", "An unexpected error occurred")
   }
 }
 
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
   try {
     const authResult = await validateApiKey(req)
     if (!authResult.valid) {
-      return apiError("authentication_error", authResult.error || "Invalid API key", 401)
+      return apiError("authentication_error", authResult.error || "Invalid API key")
     }
 
     const supabase = await createClient()
@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
     const { feature } = body
 
     if (!feature) {
-      return apiError("invalid_request", "feature key is required", 400)
+      return apiError("invalid_request", "feature key is required")
     }
 
     const { data: isEnabled, error } = await supabase.rpc("has_feature", {
@@ -77,6 +77,6 @@ export async function POST(req: NextRequest) {
     })
   } catch (error) {
     console.error("[API] Feature check error:", error)
-    return apiError("internal_error", "An unexpected error occurred", 500)
+    return apiError("internal_error", "An unexpected error occurred")
   }
 }

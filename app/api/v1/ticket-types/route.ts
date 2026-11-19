@@ -8,12 +8,12 @@ export async function GET(req: NextRequest) {
   try {
     const authResult = await validateApiKey(req)
     if (!authResult.valid) {
-      return apiError("authentication_error", authResult.error || "Invalid API key", 401)
+      return apiError("authentication_error", authResult.error || "Invalid API key")
     }
 
     const rateLimitResult = await checkRateLimit(authResult.api_key_id, 60)
     if (!rateLimitResult.allowed) {
-      return apiError("rate_limit_exceeded", "Rate limit exceeded", 429)
+      return apiError("rate_limit_exceeded", "Rate limit exceeded")
     }
 
     const supabase = await createClient()
@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
     const eventId = searchParams.get("event_id")
 
     if (!eventId) {
-      return apiError("invalid_request", "event_id is required", 400)
+      return apiError("invalid_request", "event_id is required")
     }
 
     const { data: ticketTypes, error } = await supabase
@@ -59,7 +59,7 @@ export async function GET(req: NextRequest) {
     })
   } catch (error) {
     console.error("[API] Ticket Types GET error:", error)
-    return apiError("internal_error", "An unexpected error occurred", 500)
+    return apiError("internal_error", "An unexpected error occurred")
   }
 }
 
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
   try {
     const authResult = await validateApiKey(req)
     if (!authResult.valid) {
-      return apiError("authentication_error", authResult.error || "Invalid API key", 401)
+      return apiError("authentication_error", authResult.error || "Invalid API key")
     }
 
     if (!authResult.scopes?.includes("write")) {
@@ -94,7 +94,7 @@ export async function POST(req: NextRequest) {
     } = body
 
     if (!event_id || !name || quantity_total === undefined) {
-      return apiError("invalid_request", "event_id, name, and quantity_total are required", 400)
+      return apiError("invalid_request", "event_id, name, and quantity_total are required")
     }
 
     // Verify event belongs to tenant
@@ -137,6 +137,6 @@ export async function POST(req: NextRequest) {
     return apiSuccess(ticketType, {}, 201)
   } catch (error) {
     console.error("[API] Ticket Types POST error:", error)
-    return apiError("internal_error", "An unexpected error occurred", 500)
+    return apiError("internal_error", "An unexpected error occurred")
   }
 }

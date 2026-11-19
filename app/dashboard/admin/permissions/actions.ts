@@ -1,5 +1,31 @@
 "use server"
 
+/*
+  FIXED 2026-11-19 — `.catch()` on a Supabase query builder.
+
+  Verified by running it against @supabase/supabase-js rather than reasoning
+  about it:
+
+      typeof builder.then   -> "function"
+      typeof builder.catch  -> "undefined"
+      builder.catch(fn)     -> TypeError: ....catch is not a function
+      await builder         -> RESOLVES, with the failure in `.error`
+
+  Two bugs in one line, therefore.
+
+  First, PostgrestFilterBuilder is a thenable, not a Promise. It implements
+  `then` and nothing else, so `.catch(...)` threw a TypeError the moment the
+  line executed — taking down the whole surrounding action, which is the
+  opposite of the "don't let this failure block the operation" intent the
+  comments state.
+
+  Second, and why `.then(undefined, handler)` would NOT have been a fix
+  either: supabase-js does not reject. It catches transport and Postgres
+  errors internally and resolves with `{ data: null, error: {...} }`. A
+  rejection handler would never have fired even if `.catch` had existed. The
+  only way to see a failure is to read `error` off the resolved result.
+*/
+
 import { createClient } from "@/lib/supabase/server"
 import { getUserPermissions, getAssignableRoles, hasMinimumRole } from "@/lib/authorization"
 import { revalidatePath } from "next/cache"
@@ -116,22 +142,24 @@ export async function updateUserRole(
     }
 
     // Log the role change for audit
-    await supabase
-      .from("audit_logs")
-      .insert({
-        action: "role_change",
-        actor_id: permissions.userId,
-        target_id: userId,
-        details: {
-          new_role: newRole,
-          previous_staff_role: targetStaffRole?.role || null,
-          changed_by_role: permissions.unifiedRole,
-        },
-      })
-      .catch(() => {
-        // Audit log failure should not block the operation
-        console.warn("Failed to create audit log for role change")
-      })
+    const { error: auditError } = await supabase.from("audit_logs").insert({
+      action: "role_change",
+      actor_id: permissions.userId,
+      target_id: userId,
+      details: {
+        new_role: newRole,
+        previous_staff_role: targetStaffRole?.role || null,
+        changed_by_role: permissions.unifiedRole,
+      },
+    })
+    if (auditError) {
+      // Audit log failure should not block the operation. This now actually
+      // runs; the previous .catch() threw before it could.
+      console.warn(
+        "Failed to create audit log for role change:",
+        auditError.message
+      )
+    }
 
     revalidatePath("/dashboard/admin/permissions")
     revalidatePath("/dashboard")

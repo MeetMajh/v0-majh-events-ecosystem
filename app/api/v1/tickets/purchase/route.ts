@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
     const stripe = getStripe()
     const authResult = await validateApiKey(req)
     if (!authResult.valid) {
-      return apiError("authentication_error", authResult.error || "Invalid API key", 401)
+      return apiError("authentication_error", authResult.error || "Invalid API key")
     }
 
     if (!authResult.scopes?.includes("write")) {
@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
 
     const rateLimitResult = await checkRateLimit(authResult.api_key_id, 30) // Lower limit for purchases
     if (!rateLimitResult.allowed) {
-      return apiError("rate_limit_exceeded", "Rate limit exceeded", 429)
+      return apiError("rate_limit_exceeded", "Rate limit exceeded")
     }
 
     // Check idempotency
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
     } = body
 
     if (!event_id || !email || !items || !Array.isArray(items) || items.length === 0) {
-      return apiError("invalid_request", "event_id, email, and items are required", 400)
+      return apiError("invalid_request", "event_id, email, and items are required")
     }
 
     // Validate event
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (event.status !== "published") {
-      return apiError("invalid_request", "Event is not available for ticket sales", 400)
+      return apiError("invalid_request", "Event is not available for ticket sales")
     }
 
     // Check availability for all items first
@@ -184,6 +184,6 @@ export async function POST(req: NextRequest) {
     return apiSuccess(response, {}, 201)
   } catch (error) {
     console.error("[API] Ticket Purchase error:", error)
-    return apiError("internal_error", "An unexpected error occurred", 500)
+    return apiError("internal_error", "An unexpected error occurred")
   }
 }

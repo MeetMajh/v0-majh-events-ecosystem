@@ -12,12 +12,12 @@ export async function GET(
     const { eventId } = await params
     const authResult = await validateApiKey(req)
     if (!authResult.valid) {
-      return apiError("authentication_error", authResult.error || "Invalid API key", 401)
+      return apiError("authentication_error", authResult.error || "Invalid API key")
     }
 
     const rateLimitResult = await checkRateLimit(authResult.api_key_id, 60)
     if (!rateLimitResult.allowed) {
-      return apiError("rate_limit_exceeded", "Rate limit exceeded", 429)
+      return apiError("rate_limit_exceeded", "Rate limit exceeded")
     }
 
     const supabase = await createClient()
@@ -62,7 +62,7 @@ export async function GET(
     })
   } catch (error) {
     console.error("[API] Event GET error:", error)
-    return apiError("internal_error", "An unexpected error occurred", 500)
+    return apiError("internal_error", "An unexpected error occurred")
   }
 }
 
@@ -74,7 +74,7 @@ export async function PATCH(
     const { eventId } = await params
     const authResult = await validateApiKey(req)
     if (!authResult.valid) {
-      return apiError("authentication_error", authResult.error || "Invalid API key", 401)
+      return apiError("authentication_error", authResult.error || "Invalid API key")
     }
 
     if (!authResult.scopes?.includes("write")) {
@@ -130,7 +130,7 @@ export async function PATCH(
     return apiSuccess(event)
   } catch (error) {
     console.error("[API] Event PATCH error:", error)
-    return apiError("internal_error", "An unexpected error occurred", 500)
+    return apiError("internal_error", "An unexpected error occurred")
   }
 }
 
@@ -142,7 +142,7 @@ export async function DELETE(
     const { eventId } = await params
     const authResult = await validateApiKey(req)
     if (!authResult.valid) {
-      return apiError("authentication_error", authResult.error || "Invalid API key", 401)
+      return apiError("authentication_error", authResult.error || "Invalid API key")
     }
 
     if (!authResult.scopes?.includes("write")) {
@@ -175,6 +175,6 @@ export async function DELETE(
     return apiSuccess({ deleted: true, id: eventId })
   } catch (error) {
     console.error("[API] Event DELETE error:", error)
-    return apiError("internal_error", "An unexpected error occurred", 500)
+    return apiError("internal_error", "An unexpected error occurred")
   }
 }
