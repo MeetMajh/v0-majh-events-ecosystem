@@ -26,7 +26,48 @@
   only way to see a failure is to read `error` off the resolved result.
 */
 
-import { createClient } from "@/lib/supabase/server"
+/*
+  PRIVILEGED RPCs MOVED TO service_role, 2026-11-19.
+
+  Six SECURITY DEFINER functions had NO caller authorization check of any
+  kind — verified by reading every body for auth.uid(), a role predicate, or
+  anything equivalent:
+
+      adjust_wallet_balance        changes ANY user's balance
+      post_ledger_transaction      posts arbitrary ledger entries
+      trigger_emergency_lockdown   locks the platform down
+      lift_emergency_lockdown      unlocks it
+      toggle_system_control        flips system controls
+      run_chaos_suite              runs chaos tests against production
+
+  Each took the acting admin's identity as a PARAMETER (`p_admin_id`) rather
+  than reading it from the session, which is worth nothing as authorization
+  because the caller supplies it. And each was EXECUTE-able by `authenticated`,
+  so any signed-in user could call it directly over PostgREST as
+  POST /rest/v1/rpc/<name>, bypassing this route entirely.
+
+  The routes themselves were never the hole — they gate on auth.getUser()
+  plus profiles.is_admin. The hole was the direct RPC path around them.
+
+  THE FIX, in two halves that only work together:
+    1. this file now performs the privileged call with createAdminClient()
+       (service_role), AFTER its own admin gate above;
+    2. migration 20261119_010 revokes `authenticated` EXECUTE on all six,
+       which closes the direct PostgREST path.
+
+  Deliberately NOT fixed by adding an in-function check copied from the
+  neighbouring admin_* functions. Those test
+
+      staff_roles.role IN ('owner','manager','finance')
+
+  while staff_roles actually holds PLATFORM_OWNER and TENANT_MANAGER — so
+  that comparison cannot pass for any human, and those functions raise
+  'Unauthorized' for everyone except service_role. They are not secured by
+  design, they are secured by an always-false comparison, and normalising the
+  role vocabulary would arm all of them at once. Copying that pattern would
+  be fitting a lock already known not to turn. See majh-foundry D-011.
+*/
+import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { stripe } from "@/lib/stripe"
 import { revalidatePath } from "next/cache"
 import { headers } from "next/headers"
@@ -919,7 +960,7 @@ export async function reverseTransaction(transactionId: string, reason: string) 
       .eq("user_id", transaction.user_id)
 
     // Use RPC or direct update for atomic balance change
-    const { error: adjustError } = await supabase.rpc("adjust_wallet_balance", {
+    const { error: adjustError } = await createAdminClient().rpc("adjust_wallet_balance", {
       p_user_id: transaction.user_id,
       p_amount: reversalAmount,
     })
