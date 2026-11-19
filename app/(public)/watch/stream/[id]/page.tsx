@@ -30,9 +30,18 @@ export default function StreamViewerPage({ params }: { params: Promise<{ id: str
   const [copied, setCopied] = useState(false)
   const [allStreams, setAllStreams] = useState<any[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
-  const supabase = createClient()
 
   useEffect(() => {
+      /*
+        FIXED 2026-11-19. `const supabase = createClient()` used to sit in the
+        component body with `supabase` listed in this effect's dependency
+        array. createClient() returns a new object on every render, so the
+        dependency changed every render, so the effect re-ran every render —
+        and because the effect calls setState, each run scheduled another
+        render. Creating the client inside the effect removes the unstable
+        dependency entirely; `supabase` is used nowhere else in this file.
+      */
+      const supabase = createClient()
     const fetchStreams = async () => {
       // Fetch all stream sources ordered by priority
       const { data: streams } = await supabase
@@ -51,7 +60,7 @@ export default function StreamViewerPage({ params }: { params: Promise<{ id: str
     }
 
     fetchStreams()
-  }, [id, supabase])
+  }, [id])
 
   const handleNext = () => {
     if (currentIndex < allStreams.length - 1) {

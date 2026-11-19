@@ -225,11 +225,29 @@ export async function createMedia(data: {
     user_id: user.id,
   })
   if (uploadCountError) {
-    // NOTE: this fallback SETS total_uploads to 1 rather than incrementing it.
-    // That is the pre-existing behaviour and is preserved here deliberately —
-    // changing a counter's semantics is not part of fixing a crash. It is
-    // wrong if the user has previous uploads, and worth a follow-up.
-    await supabase.from("profiles").update({ total_uploads: 1 }).eq("id", user.id)
+    /*
+      FIXED 2026-11-19. This fallback used to SET total_uploads to 1, which
+      reset the counter to one for anybody who had uploaded before — so the
+      number was only ever correct for a user's first upload, and silently
+      wrong for everyone else. It now reads and increments, mirroring the
+      increment_points fallback in lib/admin-actions.ts.
+
+      This read-then-write is not atomic, so two concurrent uploads by the
+      same user can lose a count. That is inherent to a fallback that exists
+      precisely because the increment_upload_count RPC is absent, and it is
+      strictly better than the previous behaviour. The RPC is the correct
+      path; this runs only when it is missing.
+    */
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("total_uploads")
+      .eq("id", user.id)
+      .single()
+
+    await supabase
+      .from("profiles")
+      .update({ total_uploads: (profile?.total_uploads ?? 0) + 1 })
+      .eq("id", user.id)
   }
 
   if (!autoApprove) {
