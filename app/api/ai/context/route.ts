@@ -57,6 +57,17 @@ export async function POST(req: Request) {
         .map((t: any) => t.table)
         .filter((name: any) => typeof name === "string" && name.length > 0)
 
+      /*
+        SCOPE BUG FIXED 2026-11-18. `supabaseAdmin` was referenced in the
+        callback below but declared nowhere in this file — only the
+        getSupabaseAdmin() helper exists. Because the callback wraps the
+        call in try/catch, the resulting ReferenceError was swallowed and
+        every table silently became -1, so the "counts" scope of this
+        endpoint reported "unknown" for the entire database rather than
+        failing. A wrong answer that looks like an answer is the exact
+        failure the grounding work exists to prevent.
+      */
+      const supabaseAdmin = getSupabaseAdmin()
       const counts: Record<string, number> = {}
       await Promise.all(
         tableNames.map(async (table: string) => {

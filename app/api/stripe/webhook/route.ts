@@ -4,6 +4,38 @@ import { getStripe } from "@/lib/stripe"
 import { createClient } from "@supabase/supabase-js"
 import type Stripe from "stripe"
 
+/*
+  SCOPE BUG FIXED 2026-11-18.
+
+  `supabaseAdmin` was declared once, at the top of POST(), and then
+  referenced 50 times from the seventeen handler functions below — which are
+  separate top-level functions with no access to a const scoped to POST.
+  Every one of those handlers therefore threw
+
+      ReferenceError: supabaseAdmin is not defined
+
+  the moment it touched the database. That is the whole webhook: wallet
+  deposits, ticket sales, tournament entries, transfers, payouts, identity
+  verification, refunds and disputes. Stripe would have taken the money,
+  received a 500, retried, and failed again, while this database recorded
+  nothing.
+
+  It was invisible because next.config.mjs sets
+  `typescript: { ignoreBuildErrors: true }`, so `next build` never
+  type-checked. `npx tsc --noEmit` reports it 50 times.
+
+  NO MONEY WAS LOST. Verified in the database before touching this file:
+  financial_intents = 0, wallets = 0, ticket_orders = 0, payout_requests = 0,
+  ledger_transactions = 0, ledger_entries = 0. An intent is written by the
+  application BEFORE redirecting to Stripe, so zero intents means no checkout
+  has ever been started through this path. The bug was latent — it would have
+  fired on the first real payment.
+
+  THE FIX is the author's own pattern, applied per handler:
+  `const supabaseAdmin = getSupabaseAdmin()` as the first statement. The
+  helper must stay lazy — it throws when the env vars are absent, so hoisting
+  it to module scope would move that failure to build time.
+*/
 // Lazy initialization for service role client
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -173,6 +205,7 @@ export async function POST(req: Request) {
 }
 
 async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
+  const supabaseAdmin = getSupabaseAdmin()
   const metadata = session.metadata
   if (!metadata) {
     console.log("[Stripe Webhook] No metadata in session")
@@ -489,6 +522,7 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
 // ══════════════════════════════════════════════════════════════════════════════
 
 async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
+  const supabaseAdmin = getSupabaseAdmin()
   const userId = subscription.metadata?.user_id
   const planId = subscription.metadata?.plan_id
 
@@ -516,6 +550,7 @@ async function updateUserSubscription(
   subscription: Stripe.Subscription,
   planId?: string
 ) {
+  const supabaseAdmin = getSupabaseAdmin()
   const status = subscription.status === "active" || subscription.status === "trialing"
     ? "active"
     : subscription.status === "past_due"
@@ -545,6 +580,7 @@ async function updateUserSubscription(
 }
 
 async function handleSubscriptionCanceled(subscription: Stripe.Subscription) {
+  const supabaseAdmin = getSupabaseAdmin()
   const userId = subscription.metadata?.user_id
 
   if (!userId) {
@@ -563,6 +599,7 @@ async function handleSubscriptionCanceled(subscription: Stripe.Subscription) {
 }
 
 async function cancelUserSubscription(userId: string) {
+  const supabaseAdmin = getSupabaseAdmin()
   const { error } = await supabaseAdmin
     .from("profiles")
     .update({
@@ -582,6 +619,7 @@ async function cancelUserSubscription(userId: string) {
 }
 
 async function handleSubscriptionPaymentFailed(invoice: Stripe.Invoice) {
+  const supabaseAdmin = getSupabaseAdmin()
   const subscriptionId = invoice.subscription as string
 
   const { data: profile } = await supabaseAdmin
@@ -608,6 +646,7 @@ async function handleSubscriptionPaymentFailed(invoice: Stripe.Invoice) {
 // ══════════════════════════════════════════════════════════════════════════════
 
 async function handleConnectAccountUpdate(account: Stripe.Account) {
+  const supabaseAdmin = getSupabaseAdmin()
   const userId = account.metadata?.supabase_user_id
 
   if (!userId) return
@@ -633,6 +672,7 @@ async function handleConnectAccountUpdate(account: Stripe.Account) {
 // ══════════════════════════════════════════════════════════════════════════════
 
 async function handleIdentityVerified(session: Stripe.Identity.VerificationSession) {
+  const supabaseAdmin = getSupabaseAdmin()
   const userId = session.metadata?.user_id
 
   if (!userId) {
@@ -685,6 +725,7 @@ async function handleIdentityVerified(session: Stripe.Identity.VerificationSessi
 // ══════════════════════════════════════════════════════════════════════════════
 
 async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent) {
+  const supabaseAdmin = getSupabaseAdmin()
   const metadata = paymentIntent.metadata
   if (!metadata) return
 
@@ -767,6 +808,7 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
 }
 
 async function handleTransferCompleted(transfer: Stripe.Transfer) {
+  const supabaseAdmin = getSupabaseAdmin()
   const metadata = transfer.metadata
   if (!metadata) return
 
@@ -828,6 +870,7 @@ async function handleTransferCompleted(transfer: Stripe.Transfer) {
 }
 
 async function handleTransferFailed(transfer: Stripe.Transfer) {
+  const supabaseAdmin = getSupabaseAdmin()
   const metadata = transfer.metadata
   if (!metadata) return
 
@@ -898,6 +941,7 @@ async function reconcileFinancialIntent(
   session: Stripe.Checkout.Session,
   status: "succeeded" | "failed" | "expired" | "canceled"
 ) {
+  const supabaseAdmin = getSupabaseAdmin()
   const metadata = session.metadata
   
   // Only reconcile if this was created via financial_intents system
@@ -929,6 +973,7 @@ async function reconcileFinancialIntent(
 }
 
 async function handleTransferReversed(transfer: Stripe.Transfer) {
+  const supabaseAdmin = getSupabaseAdmin()
   const metadata = transfer.metadata
   if (!metadata) return
 
@@ -945,6 +990,7 @@ async function handleTransferReversed(transfer: Stripe.Transfer) {
 
 // ── Refund Handlers ──
 async function handleChargeRefunded(charge: Stripe.Charge) {
+  const supabaseAdmin = getSupabaseAdmin()
   // If we have a refund intent linked, process it
   const refunds = charge.refunds?.data || []
   
@@ -969,6 +1015,7 @@ async function handleChargeRefunded(charge: Stripe.Charge) {
 
 // ── Dispute Handlers ──
 async function handleDisputeCreated(dispute: Stripe.Dispute) {
+  const supabaseAdmin = getSupabaseAdmin()
   const { data, error } = await supabaseAdmin.rpc("handle_stripe_dispute", {
     p_stripe_dispute_id: dispute.id,
     p_stripe_charge_id: typeof dispute.charge === "string" ? dispute.charge : dispute.charge?.id,
@@ -985,6 +1032,7 @@ async function handleDisputeCreated(dispute: Stripe.Dispute) {
 }
 
 async function handleDisputeUpdated(dispute: Stripe.Dispute) {
+  const supabaseAdmin = getSupabaseAdmin()
   const { data, error } = await supabaseAdmin.rpc("handle_stripe_dispute", {
     p_stripe_dispute_id: dispute.id,
     p_stripe_charge_id: typeof dispute.charge === "string" ? dispute.charge : dispute.charge?.id,
@@ -1001,6 +1049,7 @@ async function handleDisputeUpdated(dispute: Stripe.Dispute) {
 }
 
 async function handleDisputeClosed(dispute: Stripe.Dispute) {
+  const supabaseAdmin = getSupabaseAdmin()
   // Map Stripe dispute status to our resolution
   const resolution = dispute.status === "won" ? "won" : dispute.status === "lost" ? "lost" : "resolved"
   

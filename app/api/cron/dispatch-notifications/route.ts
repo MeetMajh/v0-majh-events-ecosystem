@@ -154,6 +154,14 @@ async function logDelivery(
   response: object | null,
   error?: string
 ) {
+  /*
+    SCOPE BUG FIXED 2026-11-18. logDelivery is a top-level function, but
+    `supabaseAdmin` was declared inside the request handler above, so every
+    delivery log threw ReferenceError — notifications went out unlogged, and
+    since this call is awaited inside the dispatch loop it would abort the
+    rest of the batch.
+  */
+  const supabaseAdmin = getSupabaseAdmin()
   await supabaseAdmin.from("notification_logs").insert({
     user_id: userId,
     notification_id: notificationId,
