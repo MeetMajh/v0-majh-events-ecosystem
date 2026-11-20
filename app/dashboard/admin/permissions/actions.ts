@@ -26,7 +26,7 @@
   only way to see a failure is to read `error` off the resolved result.
 */
 
-import { createClient } from "@/lib/supabase/server"
+import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { getUserPermissions, getAssignableRoles, hasMinimumRole } from "@/lib/authorization"
 import { revalidatePath } from "next/cache"
 
@@ -59,7 +59,11 @@ export async function updateUserRole(
       .from("staff_roles")
       .select("role")
       .eq("user_id", userId)
-      .single()
+      // ACTIVE grant only. Revoked rows are kept as history since migration
+      // 20261119_012, and .single() would error the moment a user has more
+      // than one row.
+      .is("revoked_at", null)
+      .maybeSingle()
 
     // Check if target user has a higher role than current user
     if (targetStaffRole?.role && hasMinimumRole(targetStaffRole.role, permissions.unifiedRole || "user")) {
@@ -74,12 +78,15 @@ export async function updateUserRole(
     
     if (isStaffRole) {
       // Upsert into staff_roles table
-      const { error: staffError } = await supabase
-        .from("staff_roles")
-        .upsert(
-          { user_id: userId, role: newRole },
-          { onConflict: "user_id" }
-        )
+      // Transition, not overwrite — see migration 20261119_012. The unique
+      // index is partial on revoked_at IS NULL, so onConflict(user_id)
+      // cannot work, and an upsert would have destroyed the history anyway.
+      const { error: staffError } = await createAdminClient().rpc("grant_staff_role", {
+        p_user: userId,
+        p_role: newRole,
+        p_granted_by: permissions.userId,
+        p_tenant: null,
+      })
 
       if (staffError) {
         console.error("Error updating staff role:", staffError)
@@ -99,11 +106,17 @@ export async function updateUserRole(
         .eq("id", userId)
 
     } else if (newRole === "organizer") {
-      // Remove from staff_roles if exists
-      await supabase
-        .from("staff_roles")
-        .delete()
-        .eq("user_id", userId)
+      // Was a hard DELETE, which erased what the person had held. Revoking
+      // ends access and keeps the record. See migration 20261119_012.
+      const { error: revokeError } = await createAdminClient().rpc("revoke_staff_role", {
+        p_user: userId,
+        p_revoked_by: permissions.userId,
+        p_reason: "role_change",
+      })
+      if (revokeError) {
+        console.error("Error revoking staff role:", revokeError)
+        return { success: false, error: "Failed to revoke staff role" }
+      }
 
       // Update profile
       const { error: profileError } = await supabase
@@ -120,11 +133,16 @@ export async function updateUserRole(
       }
 
     } else if (newRole === "user") {
-      // Remove from staff_roles if exists
-      await supabase
-        .from("staff_roles")
-        .delete()
-        .eq("user_id", userId)
+      // Demotion to a non-staff account is a revocation, not a deletion.
+      const { error: revokeError } = await createAdminClient().rpc("revoke_staff_role", {
+        p_user: userId,
+        p_revoked_by: permissions.userId,
+        p_reason: "access_review",
+      })
+      if (revokeError) {
+        console.error("Error revoking staff role:", revokeError)
+        return { success: false, error: "Failed to revoke staff role" }
+      }
 
       // Reset profile to regular user
       const { error: profileError } = await supabase

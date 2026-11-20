@@ -30,7 +30,7 @@ import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { requireStaffAction } from "@/lib/auth/require-staff"
-import { toStaffRoleValue } from "@/lib/auth/role-grant"
+import { toStaffRoleValue } from "@/lib/auth/staff-roles"
 
 // ── Menu Items ──
 

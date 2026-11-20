@@ -35,6 +35,11 @@
   createAdminClient() call above its authorization check.
 */
 import { createClient, createAdminClient } from "@/lib/supabase/server"
+import {
+  STAFF_ROLE_VALUES,
+  type StaffRoleValue,
+  toStaffRoleValue,
+} from "@/lib/auth/staff-roles"
 import { requireStaffAction } from "@/lib/auth/require-staff"
 import { revalidatePath } from "next/cache"
 
@@ -91,66 +96,6 @@ function mapToTenantMembershipsRole(role: AssignableRole): string {
   return "member"
 }
 
-/*
-  THE ONLY VALUES staff_roles.role ACCEPTS, since 2026-11-19 (D-011 item 1).
-
-  Kept in sync with the staff_roles_role_check constraint in migration
-  20261119_011. Widening one without the other breaks grants at runtime, so
-  the constraint comment carries the same warning.
-
-  WHY the lowercase values were removed. Policies across public and core test
-  for lowercase role literals — 103 of them for 'owner', 84 for 'manager', 31
-  for 'organizer', 26 for 'admin', 21 for 'staff'. The old CHECK permitted all
-  of those while no row held any of them, so the policies were dormant purely
-  because the strings did not exist in the table. Writing one would have
-  activated them. The mapper below used to emit exactly those strings via its
-  `return role` fallthrough.
-*/
-export const STAFF_ROLE_VALUES = [
-  "PLATFORM_OWNER",
-  "PLATFORM_ADMIN",
-  "TENANT_OWNER",
-  "TENANT_SUPER_ADMIN",
-  "TENANT_ADMIN",
-  "TENANT_MANAGER",
-  "TENANT_ORGANIZER",
-  "TENANT_STAFF",
-] as const
-
-export type StaffRoleValue = (typeof STAFF_ROLE_VALUES)[number]
-
-/*
-  Normalise a role string from a legacy call site into a permitted value, or
-  return null if it cannot be mapped WITHOUT GUESSING AT A PRIVILEGE LEVEL.
-
-  Only the four unambiguous tenant-scoped names are translated. 'owner',
-  'superadmin' and 'moderator' deliberately return null even though the old
-  CHECK permitted them: choosing an uppercase equivalent for those would be a
-  decision about how much authority to grant, not a spelling change, and the
-  reviewers on D-011 were explicit that TENANT_MANAGER <-> manager is a
-  semantic mapping rather than a case conversion. A caller that means
-  TENANT_OWNER should say TENANT_OWNER.
-*/
-export function toStaffRoleValue(input: string | null | undefined): StaffRoleValue | null {
-  if (!input) return null
-  const raw = input.trim()
-  if ((STAFF_ROLE_VALUES as readonly string[]).includes(raw)) {
-    return raw as StaffRoleValue
-  }
-  switch (raw.toLowerCase()) {
-    case "platform_owner":  return "PLATFORM_OWNER"
-    case "platform_admin":  return "PLATFORM_ADMIN"
-    case "tenant_owner":    return "TENANT_OWNER"
-    case "tenant_admin":    return "TENANT_SUPER_ADMIN"
-    case "tenant_manager":
-    case "manager":         return "TENANT_MANAGER"
-    case "admin":           return "TENANT_ADMIN"
-    case "organizer":       return "TENANT_ORGANIZER"
-    case "staff":           return "TENANT_STAFF"
-    default:                return null
-  }
-}
-
 function mapToStaffRolesRole(role: AssignableRole): StaffRoleValue {
   const mapped = toStaffRoleValue(role)
   if (!mapped) {
@@ -181,6 +126,10 @@ async function captureRoleSnapshot(userId: string, serviceClient: any) {
         .from("staff_roles")
         .select("role")
         .eq("user_id", userId)
+        // ACTIVE grant only. staff_roles keeps revoked rows as history since
+        // migration 20261119_012, so without this filter maybeSingle() breaks
+        // as soon as anyone's role changes once.
+        .is("revoked_at", null)
         .maybeSingle(),
       serviceClient
         .from("tenant_memberships")
@@ -247,7 +196,18 @@ export async function grantRole(input: GrantRoleInput): Promise<GrantRoleResult>
   try {
     if (input.role === null) {
       // REVOKE — remove from staff_roles AND tenant_memberships, set profile to user
-      await serviceClient.from("staff_roles").delete().eq("user_id", input.targetUserId)
+      /*
+        Was a hard DELETE, which erased the record of what the person had
+        held. Revocation ends access — every authorization read filters
+        revoked_at IS NULL — while keeping the grant as history. See
+        migration 20261119_012.
+      */
+      const { error: revokeError } = await serviceClient.rpc("revoke_staff_role", {
+        p_user: input.targetUserId,
+        p_revoked_by: actingUserId,
+        p_reason: "administrative",
+      })
+      if (revokeError) throw new Error(`revoke_staff_role: ${revokeError.message}`)
       if (input.tenantId) {
         await serviceClient
           .from("tenant_memberships")
@@ -264,11 +224,18 @@ export async function grantRole(input: GrantRoleInput): Promise<GrantRoleResult>
       const staffRolesValue = mapToStaffRolesRole(input.role)
       const profilesValue = mapToProfilesRole(input.role)
 
-      const { error: staffError } = await serviceClient
-        .from("staff_roles")
-        .upsert({ user_id: input.targetUserId, role: staffRolesValue }, { onConflict: "user_id" })
+      // A grant is a transition, not an overwrite: grant_staff_role ends any
+      // differing active grant with reason role_change and inserts the new
+      // one. onConflict(user_id) is no longer possible — the unique index is
+      // partial on revoked_at IS NULL.
+      const { error: staffError } = await serviceClient.rpc("grant_staff_role", {
+        p_user: input.targetUserId,
+        p_role: staffRolesValue,
+        p_granted_by: actingUserId,
+        p_tenant: null,
+      })
 
-      if (staffError) throw new Error(`staff_roles: ${staffError.message}`)
+      if (staffError) throw new Error(`grant_staff_role: ${staffError.message}`)
 
       const { error: profileError } = await serviceClient
         .from("profiles")
@@ -298,14 +265,14 @@ export async function grantRole(input: GrantRoleInput): Promise<GrantRoleResult>
       if (tmError) throw new Error(`tenant_memberships: ${tmError.message}`)
 
       // staff_roles upsert
-      const { error: srError } = await serviceClient
-        .from("staff_roles")
-        .upsert(
-          { user_id: input.targetUserId, role: staffRolesValue },
-          { onConflict: "user_id" }
-        )
+      const { error: srError } = await serviceClient.rpc("grant_staff_role", {
+        p_user: input.targetUserId,
+        p_role: staffRolesValue,
+        p_granted_by: actingUserId,
+        p_tenant: input.tenantId ?? null,
+      })
 
-      if (srError) throw new Error(`staff_roles: ${srError.message}`)
+      if (srError) throw new Error(`grant_staff_role: ${srError.message}`)
 
       // profiles update
       const { error: pError } = await serviceClient
