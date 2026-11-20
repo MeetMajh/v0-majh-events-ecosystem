@@ -30,6 +30,7 @@ import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { requireStaffAction } from "@/lib/auth/require-staff"
+import { toStaffRoleValue } from "@/lib/auth/role-grant"
 
 // ── Menu Items ──
 
@@ -344,10 +345,22 @@ export async function createUserManually(formData: FormData) {
     })
 
     if (role) {
-      await supabase.from("staff_roles").upsert({
-        user_id: newUser.user.id,
-        role,
-      }, { onConflict: "user_id" })
+      // Normalised for the same reason as acceptInvitation: the
+      // staff_roles_role_check constraint accepts only the uppercase
+      // taxonomy, and an unmappable value should fail loudly rather than be
+      // silently refused by the database.
+      const staffRole = toStaffRoleValue(role)
+      if (staffRole) {
+        const { error: staffError } = await supabase.from("staff_roles").upsert({
+          user_id: newUser.user.id,
+          role: staffRole,
+        }, { onConflict: "user_id" })
+        if (staffError) {
+          console.error("[createUser] staff_roles upsert failed:", staffError.message)
+        }
+      } else {
+        console.error(`[createUser] role "${role}" maps to no permitted staff_roles value; not granted.`)
+      }
     }
 
     revalidatePath("/dashboard/admin/users")
@@ -395,10 +408,45 @@ export async function acceptInvitation(token: string, userId: string) {
     .eq("id", invitation.id)
 
   if (invitation.invitation_type === "staff" && invitation.role) {
-    await supabase.from("staff_roles").upsert({
+    /*
+      FIXED 2026-11-19 (D-011 item 1). This used to copy invitation.role
+      STRAIGHT into staff_roles with no mapping and no error check.
+
+      public.invitations holds lowercase values — 4 pending rows with
+      role='manager' and 2 with 'organizer'. Writing 'manager' into
+      staff_roles would have armed 84 permissive policies for that user,
+      because those policies test for the lowercase strings and nothing in
+      the table held them. It was blocked only by accident: the query above
+      filters on expires_at and all six expired in June. A NEW staff
+      invitation with role='manager' would not have been blocked.
+
+      Now normalised to the permitted uppercase taxonomy, and the write is
+      checked — previously a refused upsert left the invitation marked
+      accepted with no role granted, silently.
+    */
+    const staffRole = toStaffRoleValue(invitation.role)
+    if (!staffRole) {
+      console.error(
+        `[acceptInvitation] invitation ${invitation.id} carries role ` +
+        `"${invitation.role}", which maps to no permitted staff_roles value. ` +
+        `Invitation accepted; role NOT granted.`
+      )
+      return {
+        success: true,
+        invitation,
+        warning: `Role "${invitation.role}" could not be granted — it is not a recognised staff role.`,
+      }
+    }
+
+    const { error: staffError } = await supabase.from("staff_roles").upsert({
       user_id: userId,
-      role: invitation.role,
+      role: staffRole,
     }, { onConflict: "user_id" })
+
+    if (staffError) {
+      console.error("[acceptInvitation] staff_roles upsert failed:", staffError.message)
+      return { error: `Invitation accepted but the role could not be granted: ${staffError.message}` }
+    }
   } else if (invitation.invitation_type === "tournament_participant" && invitation.tournament_id) {
     await supabase.from("tournament_registrations").insert({
       tournament_id: invitation.tournament_id,
@@ -485,10 +533,20 @@ export async function approveOrganizerRequest(formData: FormData) {
     redirect(`/dashboard/admin/organizers?error=${encodeURIComponent(updateError.message)}`)
   }
 
-  await supabase.from("staff_roles").upsert({
+  /*
+    Was role: "organizer" — a lowercase literal that 31 policies test for and
+    that staff_roles_role_check no longer permits. TENANT_ORGANIZER was added
+    to the taxonomy in migration 20261119_011 so this grant has a permitted
+    value to write.
+  */
+  const { error: organizerError } = await supabase.from("staff_roles").upsert({
     user_id: request.user_id,
-    role: "organizer",
+    role: "TENANT_ORGANIZER",
   }, { onConflict: "user_id" })
+
+  if (organizerError) {
+    redirect(`/dashboard/admin/organizers?error=${encodeURIComponent(organizerError.message)}`)
+  }
 
   revalidatePath("/dashboard/admin/organizers")
   redirect(`/dashboard/admin/organizers?success=${encodeURIComponent("Request approved - user is now an organizer")}`)
