@@ -139,6 +139,7 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Transactions", href: "/dashboard/financial/transactions", icon: DollarSign },
       { label: "API Keys", href: "/dashboard/financial/api-keys", icon: Key },
       { label: "Payout Methods", href: "/dashboard/financials/payout-methods", icon: CreditCard },
+      { label: "Sales on our behalf", href: "/dashboard/my-sales", icon: DollarSign },
     ],
     isVisible: () => true, // Visible to all users (their own financials)
   },
