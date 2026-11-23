@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth/require-admin";
+import { createClient } from "@/lib/supabase/server";
 import { getSchema, getRLS } from "@/lib/supabase/introspection";
 import { manifestFor } from "@/lib/grounding/manifest";
 import { Session, gate } from "@/lib/grounding/gate";
 import { guardIdentity } from "@/lib/grounding/identity";
 import { ralphSystemPrompt, auditPrompt } from "@/lib/grounding/prompt";
+import { persistTurn } from "@/lib/ralph/transcript";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +32,14 @@ export const dynamic = "force-dynamic";
 
   See majh-foundry/03-deliverables/ralph/GROUNDING_FINDING.md for why a
   firmer instruction was not the fix.
+
+  A fifth problem, closed 2026-11-22: the route answered and remembered
+  nothing. public.guide_conversations and public.guide_messages have existed
+  all along, correctly shaped and RLS-protected, at zero rows, because no
+  code wrote them — guide_messages even carries a `tools_called` column for
+  exactly the ledger this route builds and then threw away. Every turn is now
+  recorded, including the ones the gate refuses, because a transcript that
+  only keeps the successes is not evidence of anything.
 */
 
 /*
@@ -74,15 +84,27 @@ export async function POST(req: Request) {
   }
 
   let task: string;
+  let conversationId: string | undefined;
   try {
     const body = await req.json();
     task = String(body?.task ?? "").trim();
+    const raw = body?.conversationId;
+    conversationId = typeof raw === "string" && raw.length > 0 ? raw : undefined;
   } catch {
     return NextResponse.json({ error: "Expected JSON body" }, { status: 400 });
   }
   if (!task) {
     return NextResponse.json({ error: "A task is required" }, { status: 400 });
   }
+
+  /*
+    The transcript is written with the CALLER'S client, not a service-role
+    one. Both guide_* policies are `FOR ALL USING (user_id = auth.uid())`,
+    which Postgres also applies as the insert check, so ownership is enforced
+    by the database rather than by this route remembering to filter.
+  */
+  const supabase = await createClient();
+  const model = process.env.CLAUDE_MODEL ?? "claude-sonnet-5";
 
   /*
     The evidence ledger for this turn.
@@ -120,11 +142,39 @@ export async function POST(req: Request) {
   if (evidence.length === 0) {
     // Nothing was read, so nothing can be grounded. Say that rather than
     // asking a model to improvise around it.
+    const answer =
+      "I could not read the schema just now, so I have nothing to work " +
+      "from. I would rather say that than describe the database from " +
+      "memory.";
+
+    /*
+      This turn is recorded too. A thread that silently skips the times
+      Ralph could not see anything would misrepresent how often that
+      happens, which is one of the few things a transcript is uniquely able
+      to tell you.
+    */
+    const transcript = await persistTurn(
+      supabase,
+      auth.user.id,
+      {
+        task,
+        answer,
+        calls: session.calls,
+        verdict: {
+          allowed: false,
+          reason: "no successful tool call",
+          replacement: answer,
+          claims: [],
+        },
+        model,
+      },
+      conversationId
+    );
+
     return NextResponse.json({
-      result:
-        "I could not read the schema just now, so I have nothing to work " +
-        "from. I would rather say that than describe the database from " +
-        "memory.",
+      result: answer,
+      conversationId: transcript.conversationId,
+      transcript: transcript.ok ? { saved: true } : { saved: false, reason: transcript.reason },
       grounding: { allowed: false, reason: "no successful tool call", evidence: [] },
     });
   }
@@ -147,7 +197,7 @@ export async function POST(req: Request) {
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      model: process.env.CLAUDE_MODEL ?? "claude-sonnet-5",
+      model,
       max_tokens: 4096,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: userPrompt }],
@@ -181,8 +231,35 @@ export async function POST(req: Request) {
   const verdict = gate(afterIdentity, session);
   const answer = verdict.allowed ? afterIdentity : verdict.replacement;
 
+  /*
+    Persisted after the gate, so `content` is what the user was actually
+    shown. When the gate refused, the draft it refused is kept in
+    `grounding.withheld` — unrecoverable once discarded, and precisely what
+    an audit of a grounded assistant goes looking for.
+
+    A failed write never costs the user their answer: persistTurn returns an
+    outcome rather than throwing, and the answer is returned either way with
+    the failure reported alongside it.
+  */
+  const transcript = await persistTurn(
+    supabase,
+    auth.user.id,
+    {
+      task,
+      answer,
+      calls: session.calls,
+      verdict,
+      identityViolations: identity.clean ? undefined : identity.violations,
+      withheld: verdict.allowed ? undefined : afterIdentity,
+      model,
+    },
+    conversationId
+  );
+
   return NextResponse.json({
     result: answer,
+    conversationId: transcript.conversationId,
+    transcript: transcript.ok ? { saved: true } : { saved: false, reason: transcript.reason },
     grounding: {
       allowed: verdict.allowed,
       claims: verdict.claims.map((c) => c.why),
