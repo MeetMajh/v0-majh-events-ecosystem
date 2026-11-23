@@ -149,11 +149,13 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { label: "Team Management", href: "/dashboard/team", icon: Users },
       { label: "Permission Manager", href: "/dashboard/admin/permissions", icon: Shield },
+      { label: "Admin Console Access", href: "/dashboard/admin/console-access", icon: Shield },
     ],
     isVisible: (p) => p.isManager || p.canManagePermissions,
     filterItems: (items, p) => {
       return items.filter(item => {
-        if (item.href === "/dashboard/admin/permissions") {
+        if (item.href === "/dashboard/admin/permissions"
+            || item.href === "/dashboard/admin/console-access") {
           return p.canManagePermissions
         }
         return true
