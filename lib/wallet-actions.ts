@@ -240,7 +240,7 @@ export async function requestWalletWithdrawal(amountCents: number) {
 
   // Check if user has Stripe Connect set up
   const { data: profile } = await supabase
-    .from("profiles")
+    .from("my_profile")
     .select("stripe_connect_account_id, stripe_connect_payouts_enabled, kyc_verified")
     .eq("id", user.id)
     .single()

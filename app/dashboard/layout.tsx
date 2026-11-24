@@ -18,7 +18,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   // Get user profile and permissions using the unified authorization system
   const [{ data: profile }, permissions] = await Promise.all([
-    supabase.from("profiles").select("*").eq("id", user.id).single(),
+    supabase.from("my_profile").select("*").eq("id", user.id).single(),
     getUserPermissions(),
   ])
 

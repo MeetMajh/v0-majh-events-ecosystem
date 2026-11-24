@@ -17,7 +17,7 @@ export default async function VerificationPage() {
 
   // Get profile with KYC status
   const { data: profile } = await supabase
-    .from("profiles")
+    .from("my_profile")
     .select(`
       id,
       full_name,

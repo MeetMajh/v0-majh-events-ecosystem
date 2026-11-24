@@ -45,7 +45,10 @@ export default async function UsersAdminPage({
     // Admin client not available
   }
 
-  const { data: profiles } = await supabase
+  // Listing every member is the ADMIN acting, guarded by requireStaff("manager")
+  // above. It runs with the service role rather than relying on
+  // profiles_public_read USING (true) to hand over every row.
+  const { data: profiles } = await createAdminClient()
     .from("profiles")
     .select("*")
     .order("created_at", { ascending: false })

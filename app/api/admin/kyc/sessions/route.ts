@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
 
 export async function GET(req: Request) {
@@ -25,7 +25,14 @@ export async function GET(req: Request) {
   const status = searchParams.get("status") || "all"
   const search = searchParams.get("search") || ""
 
-  let query = supabase
+  // The SERVICE acting: a compliance reviewer reading OTHER users' identity
+  // verification state. The staff_roles check above runs under the caller's
+  // own authority and is what authorizes this; the read itself is the
+  // platform's, not the caller's. It worked before only because
+  // profiles_public_read USING (true) handed every column of every row to
+  // any signed-in account, which is the thing being removed - kyc_status is
+  // withheld from the public column grant.
+  let query = createAdminClient()
     .from("kyc_sessions")
     .select(`
       id,

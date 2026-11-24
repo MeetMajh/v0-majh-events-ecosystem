@@ -1,6 +1,6 @@
 "use server"
 
-import { createClient } from "@/lib/supabase/server"
+import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { stripe } from "@/lib/stripe"
 import { redirect } from "next/navigation"
 import { revalidatePath } from "next/cache"
@@ -357,7 +357,10 @@ export async function initiatePrizePayout(
 
   for (const payout of payouts) {
     try {
-      const { data: profile } = await supabase
+      // The SERVICE acting: reading each PAYEE's Stripe account to pay prizes.
+      // initiatePrizePayout already checked the caller is the tournament's
+      // creator or a manager+.
+      const { data: profile } = await createAdminClient()
         .from("profiles")
         .select("stripe_connect_account_id, first_name, last_name")
         .eq("id", payout.playerId)
@@ -450,7 +453,7 @@ export async function createConnectOnboardingLink() {
   if (!user) return { error: "Must be signed in" }
 
   const { data: profile } = await supabase
-    .from("profiles")
+    .from("my_profile")
     .select("stripe_connect_account_id, first_name, last_name")
     .eq("id", user.id)
     .single()
@@ -492,7 +495,7 @@ export async function getConnectAccountStatus() {
   if (!user) return null
 
   const { data: profile } = await supabase
-    .from("profiles")
+    .from("my_profile")
     .select("stripe_connect_account_id")
     .eq("id", user.id)
     .single()

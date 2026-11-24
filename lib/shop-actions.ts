@@ -40,7 +40,7 @@ export async function placeOnlineOrder(formData: FormData) {
   let discountCents = 0
   if (pointsToRedeem > 0) {
     const { data: profile } = await supabase
-      .from("profiles")
+      .from("my_profile")
       .select("points_balance")
       .eq("id", user.id)
       .single()
@@ -96,7 +96,7 @@ export async function placeOnlineOrder(formData: FormData) {
     })
 
     const { data: profile } = await supabase
-      .from("profiles")
+      .from("my_profile")
       .select("points_balance")
       .eq("id", user.id)
       .single()

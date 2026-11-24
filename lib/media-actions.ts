@@ -26,7 +26,7 @@
   only way to see a failure is to read `error` off the resolved result.
 */
 
-import { createClient } from "@/lib/supabase/server"
+import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import { requireStaffAction } from "@/lib/auth/require-staff"
 import { generateEmbedUrl, generateThumbnailUrl, checkContentViolations, isAllowedUrl } from "@/lib/media-utils"
@@ -162,7 +162,7 @@ export async function createMedia(data: {
   if (!user) return { error: "Must be logged in to upload media" }
 
   const { data: profile } = await supabase
-    .from("profiles")
+    .from("my_profile")
     .select("is_content_banned, content_ban_until")
     .eq("id", user.id)
     .single()
@@ -857,7 +857,9 @@ export async function moderateMedia(
       p_column: column,
     })
 
-    const { data: profile } = await supabase
+    // The SERVICE acting: moderation reading the UPLOADER's counts.
+    // Guarded by requireStaffAction("organizer").
+    const { data: profile } = await createAdminClient()
       .from("profiles")
       .select("approved_uploads, rejected_uploads")
       .eq("id", media.player_id)

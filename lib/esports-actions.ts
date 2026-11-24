@@ -720,7 +720,15 @@ export async function getPlayerProfile(userId: string) {
     { data: recentMatchesAsP1 },
     { data: recentMatchesAsP2 },
   ] = await Promise.all([
-    supabase.from("profiles").select("*").eq("id", userId).single(),
+    supabase.from("profiles").select(
+      // Public player profile: the display and statistics columns only.
+      // select("*") used to work here because profiles_public_read
+      // USING (true) handed every column to anyone, including anon.
+      // Migration 047 limited anon to the public column grant, so a
+      // star select on this PUBLIC page now fails with 42501 - and it
+      // was fetching phone, address and kyc_status to render none of them.
+      "id, username, display_name, first_name, last_name, avatar_url, country, rating, career_wins, career_losses, career_tournaments, prediction_points, predictions_correct, predictions_total, follower_count, following_count, total_uploads, approved_uploads, is_organizer, created_at"
+    ).eq("id", userId).single(),
     supabase.from("leaderboard_entries").select("*, games(name, slug, category)").eq("user_id", userId).eq("season", "all-time"),
     supabase
       .from("tournament_results")

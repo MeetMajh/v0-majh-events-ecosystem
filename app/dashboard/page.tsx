@@ -14,7 +14,7 @@ export default async function DashboardOverviewPage() {
 
   const [{ data: profile }, { data: myTournaments }, { data: wallet }] = await Promise.all([
     supabase
-      .from("profiles")
+      .from("my_profile")
       .select("*")
       .eq("id", user.id)
       .single(),

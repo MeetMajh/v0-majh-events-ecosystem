@@ -1,6 +1,6 @@
 "use server"
 
-import { createClient } from "@/lib/supabase/server"
+import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { stripe } from "@/lib/stripe"
 import { revalidatePath } from "next/cache"
 import { requireStaffAction } from "@/lib/auth/require-staff"
@@ -28,7 +28,7 @@ export async function createStripeConnectAccount() {
   if (!user) return { error: "Must be signed in" }
 
   const { data: profile } = await supabase
-    .from("profiles")
+    .from("my_profile")
     .select("stripe_connect_account_id, stripe_connect_status")
     .eq("id", user.id)
     .single()
@@ -81,7 +81,7 @@ export async function getStripeConnectStatus() {
   if (!user) return null
 
   const { data: profile } = await supabase
-    .from("profiles")
+    .from("my_profile")
     .select("stripe_connect_account_id, stripe_connect_status, stripe_connect_payouts_enabled")
     .eq("id", user.id)
     .single()
@@ -131,7 +131,7 @@ export async function createStripeConnectLoginLink() {
   if (!user) return { error: "Must be signed in" }
 
   const { data: profile } = await supabase
-    .from("profiles")
+    .from("my_profile")
     .select("stripe_connect_account_id")
     .eq("id", user.id)
     .single()
@@ -258,7 +258,12 @@ async function processStripeConnectPayout(payout: {
 }) {
   const supabase = await createClient()
 
-  const { data: profile } = await supabase
+  // The SERVICE acting: reading the PAYEE's Stripe Connect account to send
+  // their prize. executeStripePayout already checked that the caller is
+  // either the payout's owner or a manager+. This read worked only because
+  // profiles_public_read USING (true) let any signed-in account read any
+  // row - which is the thing being removed.
+  const { data: profile } = await createAdminClient()
     .from("profiles")
     .select("stripe_connect_account_id, stripe_connect_payouts_enabled")
     .eq("id", payout.user_id)
@@ -423,7 +428,7 @@ export async function selectPayoutMethod(
 
   if (method === "stripe_connect") {
     const { data: profile } = await supabase
-      .from("profiles")
+      .from("my_profile")
       .select("stripe_connect_account_id, stripe_connect_payouts_enabled")
       .eq("id", user.id)
       .single()
@@ -493,7 +498,7 @@ export async function initiateWalletWithdrawal(
 
   if (method === "stripe_connect") {
     const { data: profile } = await supabase
-      .from("profiles")
+      .from("my_profile")
       .select("stripe_connect_account_id, stripe_connect_payouts_enabled")
       .eq("id", user.id)
       .single()

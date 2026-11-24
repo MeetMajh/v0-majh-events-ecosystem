@@ -28,7 +28,7 @@
 
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
-import { createClient } from "@/lib/supabase/server"
+import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { requireStaffAction } from "@/lib/auth/require-staff"
 import { toStaffRoleValue } from "@/lib/auth/staff-roles"
 
@@ -161,7 +161,10 @@ export async function updateOrderStatus(formData: FormData) {
           // Fallback for a deployment where the RPC is absent. The inner
           // queries are now awaited; previously they were floating thenables
           // that may never have been sent.
-          const { data: profile } = await supabase
+          // The SERVICE acting: a staff member adjusting a CUSTOMER's points.
+          // Guarded by requireStaffAction("staff"); the read of someone
+          // else's balance belongs to the service.
+          const { data: profile } = await createAdminClient()
             .from("profiles")
             .select("points_balance")
             .eq("id", order.customer_id)
@@ -273,7 +276,8 @@ export async function getAllUsers() {
   const { supabase } = await requireStaffAction("manager")
 
   const { data: authUsers } = await supabase.auth.admin.listUsers()
-  const { data: profiles } = await supabase
+  // The ADMIN acting, guarded by requireStaffAction("manager").
+  const { data: profiles } = await createAdminClient()
     .from("profiles")
     .select("*")
     .order("created_at", { ascending: false })

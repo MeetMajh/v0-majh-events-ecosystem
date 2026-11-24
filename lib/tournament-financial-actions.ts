@@ -116,7 +116,7 @@ export async function createConnectAccount() {
   if (!user) return { error: "Must be signed in" }
 
   const { data: profile } = await supabase
-    .from("profiles")
+    .from("my_profile")
     .select("stripe_connect_account_id, stripe_connect_status")
     .eq("id", user.id)
     .single()
@@ -171,7 +171,7 @@ export async function getConnectAccountStatus() {
   if (!user) return { error: "Not authenticated" }
 
   const { data: profile } = await supabase
-    .from("profiles")
+    .from("my_profile")
     .select("stripe_connect_account_id, stripe_connect_status, stripe_connect_payouts_enabled")
     .eq("id", user.id)
     .single()
@@ -225,7 +225,7 @@ export async function createConnectLoginLink() {
   if (!user) return { error: "Not authenticated" }
 
   const { data: profile } = await supabase
-    .from("profiles")
+    .from("my_profile")
     .select("stripe_connect_account_id")
     .eq("id", user.id)
     .single()
@@ -471,7 +471,7 @@ export async function requestOrganizerPayout(
 
   if (!payoutMethod) {
     const { data: profile } = await supabase
-      .from("profiles")
+      .from("my_profile")
       .select("preferred_payout_method, stripe_connect_account_id, stripe_connect_payouts_enabled")
       .eq("id", user.id)
       .single()
@@ -577,7 +577,7 @@ export async function initiateKYCVerification() {
   if (!user) return { error: "Must be signed in" }
 
   const { data: profile } = await supabase
-    .from("profiles")
+    .from("my_profile")
     .select("kyc_verified")
     .eq("id", user.id)
     .single()
@@ -616,7 +616,7 @@ export async function checkKYCStatus() {
   if (!user) return { status: "not_started" }
 
   const { data: profile } = await supabase
-    .from("profiles")
+    .from("my_profile")
     .select("kyc_verified, kyc_verified_at")
     .eq("id", user.id)
     .single()
