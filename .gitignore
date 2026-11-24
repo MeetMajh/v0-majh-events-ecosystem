@@ -17,3 +17,7 @@ node_modules/
 # tsc incremental build cache — a local artifact, not source
 tsconfig.tsbuildinfo
 *.tsbuildinfo
+
+# Python helper scripts in scripts/
+__pycache__/
+*.pyc
