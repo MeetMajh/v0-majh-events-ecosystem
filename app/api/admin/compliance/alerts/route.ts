@@ -32,7 +32,7 @@ export async function GET(req: Request) {
       created_at,
       resolved_at,
       resolution_notes,
-      profiles(username, display_name)
+      profiles!compliance_alerts_user_id_fkey(username, display_name)
     `)
     .order("created_at", { ascending: false })
     .limit(50)

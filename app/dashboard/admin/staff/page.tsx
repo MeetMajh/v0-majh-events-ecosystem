@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { requireStaff } from "@/lib/auth/require-staff"
 import { assignStaffRole, removeStaffRole, cancelInvitation, resendInvitation } from "@/lib/admin-actions"
 import { Button } from "@/components/ui/button"
@@ -41,7 +41,7 @@ export default async function StaffAdminPage({
     .select("*, profiles(first_name, last_name)")
     .order("created_at")
 
-  const { data: authUsers } = await supabase.auth.admin.listUsers()
+  const { data: authUsers } = await createAdminClient().auth.admin.listUsers()
   const emailMap = new Map(authUsers?.users?.map((u) => [u.id, u.email]) ?? [])
 
   const { data: pendingInvitations } = await supabase

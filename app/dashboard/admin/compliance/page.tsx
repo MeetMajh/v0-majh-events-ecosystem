@@ -70,7 +70,7 @@ export default async function ComplianceDashboardPage() {
         created_at,
         completed_at,
         risk_score,
-        profiles!inner(id, username, display_name)
+        profiles!compliance_alerts_user_id_fkey(id, username, display_name)
       `)
       .order("created_at", { ascending: false })
       .limit(5),
@@ -83,7 +83,7 @@ export default async function ComplianceDashboardPage() {
         title,
         status,
         created_at,
-        profiles(username, display_name)
+        profiles!compliance_alerts_user_id_fkey(username, display_name)
       `)
       .order("created_at", { ascending: false })
       .limit(5),

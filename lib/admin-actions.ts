@@ -191,7 +191,7 @@ export async function assignStaffRole(formData: FormData) {
   const email = formData.get("email") as string
   const role = formData.get("role") as string
 
-  const { data: users } = await supabase.auth.admin.listUsers()
+  const { data: users } = await createAdminClient().auth.admin.listUsers()
   const targetUser = users?.users?.find((u) => u.email === email)
 
   if (!targetUser) {
@@ -275,7 +275,12 @@ export async function getPendingInvitations(type?: string) {
 export async function getAllUsers() {
   const { supabase } = await requireStaffAction("manager")
 
-  const { data: authUsers } = await supabase.auth.admin.listUsers()
+  // The Supabase Admin Auth API requires the SERVICE ROLE key. Called on a
+  // user-scoped client it returns nothing and fails silently - which is why
+  // User Management showed "Total Users 0" while profiles loaded fine: the
+  // whole result is mapped over authUsers.users, so an empty list empties
+  // the page. Guarded above.
+  const { data: authUsers } = await createAdminClient().auth.admin.listUsers()
   // The ADMIN acting, guarded by requireStaffAction("manager").
   const { data: profiles } = await createAdminClient()
     .from("profiles")
@@ -308,7 +313,7 @@ export async function createUserManually(formData: FormData) {
   const role = formData.get("role") as string | null
   const sendInvite = formData.get("send_invite") === "on"
 
-  const { data: authUsers } = await supabase.auth.admin.listUsers()
+  const { data: authUsers } = await createAdminClient().auth.admin.listUsers()
   const existingUser = authUsers?.users?.find(u => u.email === email.toLowerCase())
 
   if (existingUser) {
@@ -332,7 +337,7 @@ export async function createUserManually(formData: FormData) {
     revalidatePath("/dashboard/admin/users")
     redirect(`/dashboard/admin/users?success=${encodeURIComponent(`Invitation sent to ${email}`)}`)
   } else {
-    const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
+    const { data: newUser, error: createError } = await createAdminClient().auth.admin.createUser({
       email: email.toLowerCase(),
       email_confirm: true,
       user_metadata: { first_name: firstName, last_name: lastName },
@@ -376,7 +381,7 @@ export async function deleteUser(formData: FormData) {
   const { supabase } = await requireStaffAction("owner")
   const userId = formData.get("user_id") as string
 
-  const { error } = await supabase.auth.admin.deleteUser(userId)
+  const { error } = await createAdminClient().auth.admin.deleteUser(userId)
 
   if (error) {
     redirect(`/dashboard/admin/users?error=${encodeURIComponent(error.message)}`)
@@ -633,7 +638,7 @@ export async function createPosOrder(formData: FormData) {
 
   let customerId: string | null = null
   if (customerEmail) {
-    const { data: users } = await supabase.auth.admin.listUsers()
+    const { data: users } = await createAdminClient().auth.admin.listUsers()
     const found = users?.users?.find((u) => u.email === customerEmail)
     customerId = found?.id ?? null
   }

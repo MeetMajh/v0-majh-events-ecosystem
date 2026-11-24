@@ -1,6 +1,6 @@
 "use server"
 
-import { createClient } from "@/lib/supabase/server"
+import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import { generateBracket, type TournamentFormat } from "@/lib/bracket-utils"
@@ -956,7 +956,11 @@ export async function inviteTeamMember(teamId: string, email: string) {
     .limit(1)
 
   // Use auth.admin if available, otherwise search profiles
-  const { data: authUsers } = await supabase.auth.admin.listUsers()
+  // Captain-guarded above. NOTE: this makes the route able to confirm whether
+  // an email has an account, which it could not do while broken. The error
+  // message already distinguished the two cases, so the disclosure is not new,
+  // but a future invite flow should avoid revealing account existence.
+  const { data: authUsers } = await createAdminClient().auth.admin.listUsers()
   const targetUser = authUsers?.users?.find((u) => u.email?.toLowerCase() === email.toLowerCase())
 
   if (!targetUser) {
