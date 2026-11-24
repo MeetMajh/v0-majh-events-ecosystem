@@ -11,7 +11,7 @@ import { createClient } from "@/lib/supabase/server"
 // SPLIT CONFIGURATIONS
 // ══════════════════════════════════════════
 
-export const REVENUE_SPLIT_CONFIGS = {
+const REVENUE_SPLIT_CONFIGS = {
   // Standard clip ad revenue
   clip_ad: {
     platform: 0.40,    // 40%
@@ -54,7 +54,7 @@ export const REVENUE_SPLIT_CONFIGS = {
 }
 
 // Payout settings
-export const PAYOUT_CONFIG = {
+const PAYOUT_CONFIG = {
   minimum_payout_cents: 5000, // $50 minimum
   payout_schedule: "weekly", // weekly, biweekly, monthly
   payout_methods: ["stripe", "paypal", "bank_transfer"],

@@ -33,7 +33,7 @@ export interface MembershipPlan {
   isPopular?: boolean
 }
 
-export const MEMBERSHIP_PLANS: MembershipPlan[] = [
+const MEMBERSHIP_PLANS: MembershipPlan[] = [
   {
     id: "free",
     name: "Free",

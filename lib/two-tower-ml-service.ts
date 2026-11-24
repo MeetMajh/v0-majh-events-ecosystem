@@ -139,7 +139,7 @@ export async function extractUserFeatures(userId: string): Promise<UserFeatures>
 /**
  * Extract item features from clip data
  */
-export function extractItemFeatures(item: any): ItemFeatures {
+function extractItemFeatures(item: any): ItemFeatures {
   const now = Date.now()
   const createdAt = new Date(item.created_at).getTime()
   const ageHours = (now - createdAt) / (1000 * 60 * 60)

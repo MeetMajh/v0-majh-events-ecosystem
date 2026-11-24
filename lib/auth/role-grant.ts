@@ -35,6 +35,8 @@
   createAdminClient() call above its authorization check.
 */
 import { createClient, createAdminClient } from "@/lib/supabase/server"
+import { PLATFORM_ROLES, TENANT_ROLES, ROLE_HIERARCHY } from "@/lib/auth/role-constants"
+import type { PlatformRole, TenantRole, AssignableRole } from "@/lib/auth/role-constants"
 import {
   STAFF_ROLE_VALUES,
   type StaffRoleValue,
@@ -47,37 +49,6 @@ import { revalidatePath } from "next/cache"
 // Role Taxonomy
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// Platform-scoped roles (apply across all tenants)
-export const PLATFORM_ROLES = ["platform_owner", "platform_admin"] as const
-export type PlatformRole = (typeof PLATFORM_ROLES)[number]
-
-// Tenant-scoped roles (apply within a single tenant)
-export const TENANT_ROLES = [
-  "tenant_owner",
-  "tenant_admin",
-  "tenant_manager",
-  "admin",
-  "manager",
-  "organizer",
-  "staff",
-] as const
-export type TenantRole = (typeof TENANT_ROLES)[number]
-
-// All assignable roles
-export type AssignableRole = PlatformRole | TenantRole
-
-// Role hierarchy for trust ordering (high → low)
-export const ROLE_HIERARCHY: AssignableRole[] = [
-  "platform_owner",
-  "platform_admin",
-  "tenant_owner",
-  "tenant_admin",
-  "tenant_manager",
-  "admin",
-  "manager",
-  "organizer",
-  "staff",
-]
 
 // Maps our unified role names to the constrained role values in each legacy table.
 // This is a transitional bridge — after the architectural cleanup, these mappings disappear.

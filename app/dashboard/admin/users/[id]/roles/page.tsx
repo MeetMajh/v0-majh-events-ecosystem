@@ -6,9 +6,8 @@ import {
   grantRole,
   getRoleAuditLog,
   getUserRoleState,
-  PLATFORM_ROLES,
-  TENANT_ROLES,
 } from "@/lib/auth/role-grant"
+import { PLATFORM_ROLES, TENANT_ROLES } from "@/lib/auth/role-constants"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"

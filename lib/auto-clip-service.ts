@@ -167,7 +167,7 @@ export async function detectHighlights(
 /**
  * Compute highlight score with all signals
  */
-export function computeHighlightScore(signals: {
+function computeHighlightScore(signals: {
   gameImpact: number    // 0-1: How significant is this to the game
   engagement: number    // 0-1: Viewer reactions
   audioSpike: number    // 0-1: Audio excitement level

@@ -335,7 +335,7 @@ export async function getMultiPlatformStreams(config: {
 // Stream URL Parser
 // ══════════════════════════════════════════════════════════════════════════════
 
-export function parseStreamUrl(url: string): { platform: "twitch" | "kick" | "youtube" | "unknown"; channel: string } | null {
+function parseStreamUrl(url: string): { platform: "twitch" | "kick" | "youtube" | "unknown"; channel: string } | null {
   if (!url) return null
 
   // Twitch
@@ -365,7 +365,7 @@ export function parseStreamUrl(url: string): { platform: "twitch" | "kick" | "yo
 // Generate Embed URLs
 // ══════════════════════════════════════════════════════════════════════════════
 
-export function generateEmbedUrl(platform: string, channel: string, options?: { muted?: boolean; autoplay?: boolean }): string {
+function generateEmbedUrl(platform: string, channel: string, options?: { muted?: boolean; autoplay?: boolean }): string {
   const parent = process.env.NEXT_PUBLIC_APP_URL?.replace(/^https?:\/\//, "").split("/")[0] || "localhost"
   const muted = options?.muted ?? true
   const autoplay = options?.autoplay ?? true
@@ -382,7 +382,7 @@ export function generateEmbedUrl(platform: string, channel: string, options?: { 
   }
 }
 
-export function generateChatEmbedUrl(platform: string, channel: string): string | null {
+function generateChatEmbedUrl(platform: string, channel: string): string | null {
   const parent = process.env.NEXT_PUBLIC_APP_URL?.replace(/^https?:\/\//, "").split("/")[0] || "localhost"
 
   switch (platform) {
