@@ -41,6 +41,7 @@
 */
 import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
+import { requireStaffRoute } from "@/lib/auth/require-staff-route"
 
 /**
  * GET /api/admin/controls
@@ -56,18 +57,9 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Check admin access
-    const { data: staffRole } = await supabase
-      .from("staff_roles")
-      .select("role")
-      .eq("user_id", user.id)
-      .in("role", ["owner", "manager"])
-      .single()
-
-    if (!staffRole) {
-      return NextResponse.json({ error: "Admin access required" }, { status: 403 })
-    }
-
+    // Tier: "manager". Technical/operational authority; financial reads.
+    const guard = await requireStaffRoute("manager")
+    if (!guard.ok) return guard.response
     const { data: controls, error } = await supabase
       .from("system_controls")
       .select("*")

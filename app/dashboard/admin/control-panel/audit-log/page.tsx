@@ -36,7 +36,7 @@ export default async function AuditLogPage() {
   ])]
 
   const { data: profilesData } = await supabase
-    .from("profiles")
+    .from("staff_user_directory")
     .select("id, display_name, email")
     .in("id", userIds.length > 0 ? userIds : [""])
 

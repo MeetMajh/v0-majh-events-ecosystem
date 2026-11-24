@@ -44,7 +44,7 @@ async function shouldSendEmail(
 
   // Get user email
   const { data: profile } = await supabase
-    .from("profiles")
+    .from("staff_user_directory")
     .select("email")
     .eq("id", userId)
     .single()

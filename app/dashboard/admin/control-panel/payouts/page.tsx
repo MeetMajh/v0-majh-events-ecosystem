@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
+import { requireStaff } from "@/lib/auth/require-staff"
 import { PayoutsManager } from "@/components/control-panel/payouts-manager"
 
 export default async function PayoutsPage() {
@@ -8,16 +9,8 @@ export default async function PayoutsPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect("/login")
 
-  // Check admin/staff access
-  const { data: staffRole } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .in("role", ["owner", "manager"])
-    .single()
-
-  if (!staffRole) redirect("/dashboard")
-
+  // Tier: "manager". Read surface; financial reads, not writes.
+  await requireStaff("manager")
   // Fetch tournament payouts
   const { data: payouts } = await supabase
     .from("tournament_payouts")
@@ -40,7 +33,7 @@ export default async function PayoutsPage() {
 
   const [{ data: tournaments }, { data: profiles }] = await Promise.all([
     supabase.from("tournaments").select("id, title").in("id", tournamentIds.length > 0 ? tournamentIds : [""]),
-    supabase.from("profiles").select("id, display_name, email").in("id", userIds.length > 0 ? userIds : [""]),
+    supabase.from("staff_user_directory").select("id, display_name, email").in("id", userIds.length > 0 ? userIds : [""]),
   ])
 
   const tournamentsMap = new Map(tournaments?.map(t => [t.id, t]) || [])

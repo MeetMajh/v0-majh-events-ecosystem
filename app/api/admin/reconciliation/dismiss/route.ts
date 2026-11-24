@@ -22,8 +22,9 @@ export async function POST(request: Request) {
     }
 
     // Check if admin
+    // my_profile: email is joined from auth.users there.
     const { data: profile } = await supabase
-      .from("profiles")
+      .from("my_profile")
       .select("is_admin, email")
       .eq("id", user.id)
       .single()

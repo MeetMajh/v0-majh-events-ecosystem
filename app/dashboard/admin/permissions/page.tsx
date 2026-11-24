@@ -19,7 +19,7 @@ export default async function PermissionManagerPage() {
   
   // Get all users with their current roles
   const { data: profiles } = await supabase
-    .from("profiles")
+    .from("staff_user_directory")
     .select(`
       id,
       first_name,

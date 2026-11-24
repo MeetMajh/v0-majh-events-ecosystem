@@ -30,7 +30,7 @@ export async function GET(request: Request) {
 
     // Look up user by email (case-insensitive)
     const { data: foundUser, error } = await supabase
-      .from("profiles")
+      .from("staff_user_directory")
       .select("id, email, display_name")
       .ilike("email", email)
       .single()

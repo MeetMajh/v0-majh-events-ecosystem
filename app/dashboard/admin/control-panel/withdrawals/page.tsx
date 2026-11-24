@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
+import { requireStaff } from "@/lib/auth/require-staff"
 import { WithdrawalsManager } from "@/components/control-panel/withdrawals-manager"
 
 export default async function WithdrawalsPage() {
@@ -8,16 +9,8 @@ export default async function WithdrawalsPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect("/login")
 
-  // Check admin/staff access
-  const { data: staffRole } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .in("role", ["owner", "manager"])
-    .single()
-
-  if (!staffRole) redirect("/dashboard")
-
+  // Tier: "manager". Read surface; financial reads, not writes.
+  await requireStaff("manager")
   // Fetch withdrawal requests
   const { data: withdrawals } = await supabase
     .from("financial_transactions")
@@ -37,7 +30,7 @@ export default async function WithdrawalsPage() {
   // Fetch profiles separately
   const userIds = [...new Set(withdrawals?.map(w => w.user_id).filter(Boolean) || [])]
   const { data: profiles } = await supabase
-    .from("profiles")
+    .from("staff_user_directory")
     .select("id, display_name, email")
     .in("id", userIds.length > 0 ? userIds : [""])
 

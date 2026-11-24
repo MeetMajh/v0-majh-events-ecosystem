@@ -13,8 +13,12 @@ export async function POST() {
     }
 
     // Get user profile
+    // my_profile, not profiles: email lives in auth.users and full_name is
+    // derived there. Selecting them from profiles returned 400 "column does
+    // not exist", which this route reported as "Profile not found" - the
+    // error on the identity-verification page.
     const { data: profile } = await supabase
-      .from("profiles")
+      .from("my_profile")
       .select("id, full_name, email")
       .eq("id", user.id)
       .single()

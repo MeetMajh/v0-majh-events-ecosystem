@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
+import { requireStaff } from "@/lib/auth/require-staff"
 import { ReversalsManager } from "@/components/control-panel/reversals-manager"
 
 export default async function ReversalsPage() {
@@ -8,16 +9,8 @@ export default async function ReversalsPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect("/login")
 
-  // Check admin/staff access
-  const { data: staffRole } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .in("role", ["owner", "manager"])
-    .single()
-
-  if (!staffRole) redirect("/dashboard")
-
+  // Tier: "manager". Read surface; financial reads, not writes.
+  await requireStaff("manager")
   // Fetch reversals
   const { data: reversals } = await supabase
     .from("financial_transactions")
@@ -61,7 +54,7 @@ export default async function ReversalsPage() {
   ])]
 
   const { data: profiles } = await supabase
-    .from("profiles")
+    .from("staff_user_directory")
     .select("id, display_name, email")
     .in("id", allUserIds.length > 0 ? allUserIds : [""])
 

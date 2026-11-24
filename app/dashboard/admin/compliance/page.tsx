@@ -70,7 +70,7 @@ export default async function ComplianceDashboardPage() {
         created_at,
         completed_at,
         risk_score,
-        profiles!inner(id, username, display_name, email)
+        profiles!inner(id, username, display_name)
       `)
       .order("created_at", { ascending: false })
       .limit(5),

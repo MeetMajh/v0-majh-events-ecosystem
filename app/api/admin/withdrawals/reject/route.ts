@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
+import { requireStaffRoute } from "@/lib/auth/require-staff-route"
 
 export async function POST(req: Request) {
   try {
@@ -10,18 +11,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Check admin/staff access
-    const { data: staffRole } = await supabase
-      .from("staff_roles")
-      .select("role")
-      .eq("user_id", user.id)
-      .in("role", ["owner", "manager"])
-      .single()
-
-    if (!staffRole) {
-      return NextResponse.json({ error: "Admin access required" }, { status: 403 })
-    }
-
+    // Tier: "owner". Moves money, so account authority only.
+    const guard = await requireStaffRoute("owner")
+    if (!guard.ok) return guard.response
     const { withdrawalId, reason } = await req.json()
 
     if (!withdrawalId) {

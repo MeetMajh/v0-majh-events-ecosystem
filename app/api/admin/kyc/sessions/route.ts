@@ -1,5 +1,6 @@
 import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
+import { requireStaffRoute } from "@/lib/auth/require-staff-route"
 
 export async function GET(req: Request) {
   const supabase = await createClient()
@@ -9,18 +10,9 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  // Check admin access
-  const { data: staffRole } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .in("role", ["owner", "manager"])
-    .single()
-
-  if (!staffRole) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-  }
-
+  // Tier: "manager". Technical/operational authority; financial reads.
+  const guard = await requireStaffRoute("manager")
+  if (!guard.ok) return guard.response
   const { searchParams } = new URL(req.url)
   const status = searchParams.get("status") || "all"
   const search = searchParams.get("search") || ""
@@ -45,7 +37,7 @@ export async function GET(req: Request) {
       document_country,
       created_at,
       completed_at,
-      profiles!inner(id, username, display_name, email, kyc_status)
+      profiles!inner(id, username, display_name, kyc_status)
     `)
     .order("created_at", { ascending: false })
     .limit(50)
@@ -55,7 +47,8 @@ export async function GET(req: Request) {
   }
 
   if (search) {
-    query = query.or(`profiles.username.ilike.%${search}%,profiles.display_name.ilike.%${search}%,profiles.email.ilike.%${search}%`)
+    // email dropped from the search for the same reason as the select above.
+    query = query.or(`profiles.username.ilike.%${search}%,profiles.display_name.ilike.%${search}%`)
   }
 
   const { data: sessions, error } = await query

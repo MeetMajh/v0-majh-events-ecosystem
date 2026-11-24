@@ -645,7 +645,7 @@ export async function findWalletInconsistencies() {
     .select(`
       user_id,
       balance_cents,
-      profiles!inner(email)
+      profiles!inner(id, display_name)
     `)
 
   if (walletError) {

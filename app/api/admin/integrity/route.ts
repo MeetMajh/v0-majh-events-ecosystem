@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
+import { requireStaffRoute } from "@/lib/auth/require-staff-route"
 
 /**
  * GET /api/admin/integrity
@@ -18,18 +19,9 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Check admin access
-    const { data: staffRole } = await supabase
-      .from("staff_roles")
-      .select("role")
-      .eq("user_id", user.id)
-      .in("role", ["owner", "manager"])
-      .single()
-
-    if (!staffRole) {
-      return NextResponse.json({ error: "Admin access required" }, { status: 403 })
-    }
-
+    // Tier: "manager". Technical/operational authority; financial reads.
+    const guard = await requireStaffRoute("manager")
+    if (!guard.ok) return guard.response
     // Run reconciliation check
     const { data: reconciliationResult, error: reconcileError } = await supabase.rpc(
       "run_daily_reconciliation"
@@ -104,18 +96,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Check admin access
-    const { data: staffRole } = await supabase
-      .from("staff_roles")
-      .select("role")
-      .eq("user_id", user.id)
-      .in("role", ["owner", "manager"])
-      .single()
-
-    if (!staffRole) {
-      return NextResponse.json({ error: "Admin access required" }, { status: 403 })
-    }
-
+    // Tier: "manager". Technical/operational authority; financial reads.
+    const guard = await requireStaffRoute("manager")
+    if (!guard.ok) return guard.response
     const { action } = await req.json()
 
     if (action === "reconcile") {

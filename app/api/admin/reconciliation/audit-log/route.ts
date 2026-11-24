@@ -82,7 +82,7 @@ export async function GET(request: NextRequest) {
     // Get admin emails for display
     const adminIds = [...new Set(auditLogs?.map(log => log.performed_by) || [])]
     const { data: admins } = await supabase
-      .from("profiles")
+      .from("staff_user_directory")
       .select("id, email")
       .in("id", adminIds)
 

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
+import { requireStaff } from "@/lib/auth/require-staff"
 import { TransactionsLedger } from "@/components/control-panel/transactions-ledger"
 
 export default async function TransactionsPage() {
@@ -8,16 +9,8 @@ export default async function TransactionsPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect("/login")
 
-  // Check admin/staff access
-  const { data: staffRole } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .in("role", ["owner", "manager"])
-    .single()
-
-  if (!staffRole) redirect("/dashboard")
-
+  // Tier: "manager". Read surface; financial reads, not writes.
+  await requireStaff("manager")
   // Fetch transactions
   const { data: transactions } = await supabase
     .from("financial_transactions")
@@ -42,7 +35,7 @@ export default async function TransactionsPage() {
   // Fetch profiles separately
   const userIds = [...new Set(transactions?.map(t => t.user_id).filter(Boolean) || [])]
   const { data: profiles } = await supabase
-    .from("profiles")
+    .from("staff_user_directory")
     .select("id, display_name, email")
     .in("id", userIds.length > 0 ? userIds : [""])
 

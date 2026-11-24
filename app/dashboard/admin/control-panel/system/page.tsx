@@ -29,7 +29,7 @@ export default async function SystemControlsPage() {
   // Fetch user profiles for frozen wallets
   const frozenUserIds = frozenWallets?.map(w => w.user_id) || []
   const { data: profiles } = await supabase
-    .from("profiles")
+    .from("staff_user_directory")
     .select("id, display_name, email")
     .in("id", frozenUserIds.length > 0 ? frozenUserIds : [""])
 

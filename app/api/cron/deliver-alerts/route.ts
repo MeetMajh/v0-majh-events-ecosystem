@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
 import { requireCronAuth } from "@/lib/cron-auth"
 
@@ -124,7 +124,12 @@ export async function GET(request: Request) {
   const authError = requireCronAuth(request)
   if (authError) return authError
 
-  const supabase = await createClient()
+  // A cron has no session, so a user-scoped client authenticates as `anon`.
+  // get_pending_alerts grants EXECUTE to authenticated and service_role only,
+  // so every run answered 401 / 42501 "permission denied for function
+  // get_pending_alerts" - once a minute, which is this route's schedule.
+  // The SERVICE is acting here; requireCronAuth above is what authorizes it.
+  const supabase = createAdminClient()
 
   try {
     // Get pending alerts

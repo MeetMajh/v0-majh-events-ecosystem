@@ -16,6 +16,27 @@ export async function GET(request: Request) {
   const authError = requireCronAuth(request)
   if (authError) return authError
 
+  // DO NOT "fix" this to createAdminClient() without a deliberate decision.
+  //
+  // A cron has no session, so this client authenticates as `anon`, and anon
+  // sees 0 rows in `tenants`. The loop below therefore never executes: this
+  // route is a silent no-op today, which is why it logs no errors.
+  //
+  // Measured 2026-11-24:
+  //     as anon          0 tenants match (deleted_at null, active/trialing)
+  //     as service_role  5 tenants match
+  //
+  // So switching to the service role does not repair a broken job - it
+  // STARTS one. It would begin calling process_auto_payouts for five tenants
+  // every five minutes, moving money without anyone choosing to turn it on.
+  //
+  // The sibling cron deliver-alerts WAS switched to createAdminClient(),
+  // because it only reads and delivers alerts. The difference is what the
+  // loop does, not which client is tidier.
+  //
+  // Turning this on is a product decision about automatic payouts. It needs
+  // an owner's sign-off, a dry-run mode, and a kill switch before the client
+  // changes.
   const supabase = await createClient()
   const results = {
     tenants_processed: 0,

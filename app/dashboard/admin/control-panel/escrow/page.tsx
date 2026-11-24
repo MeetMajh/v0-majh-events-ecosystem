@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
+import { requireStaff } from "@/lib/auth/require-staff"
 import { EscrowManager } from "@/components/control-panel/escrow-manager"
 
 export default async function EscrowPage() {
@@ -8,16 +9,8 @@ export default async function EscrowPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect("/login")
 
-  // Check admin/staff access
-  const { data: staffRole } = await supabase
-    .from("staff_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .in("role", ["owner", "manager"])
-    .single()
-
-  if (!staffRole) redirect("/dashboard")
-
+  // Tier: "manager". Read surface; financial reads, not writes.
+  await requireStaff("manager")
   // Fetch escrow accounts
   const { data: escrows } = await supabase
     .from("escrow_accounts")
