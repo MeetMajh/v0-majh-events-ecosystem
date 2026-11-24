@@ -47,7 +47,7 @@ export default async function RewardsPage() {
   if (!user) redirect("/auth/login")
 
   const { data: profile } = await supabase
-    .from("profiles")
+    .from("my_profile")
     .select("points_balance")
     .eq("id", user.id)
     .single()

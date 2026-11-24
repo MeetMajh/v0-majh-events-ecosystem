@@ -28,7 +28,7 @@ export default async function PayoutMethodsPage({
 
   // Get profile for Stripe Connect status
   const { data: profile } = await supabase
-    .from("profiles")
+    .from("my_profile")
     .select("preferred_payout_method, kyc_verified, stripe_connect_account_id, stripe_connect_status, stripe_connect_payouts_enabled")
     .eq("id", user.id)
     .single()

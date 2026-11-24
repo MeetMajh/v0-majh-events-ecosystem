@@ -27,7 +27,7 @@ export default async function WithdrawPage() {
 
   // Get profile for Stripe Connect
   const { data: profile } = await supabase
-    .from("profiles")
+    .from("my_profile")
     .select(`
       stripe_connect_account_id,
       stripe_connect_status,

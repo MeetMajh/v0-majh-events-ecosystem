@@ -26,7 +26,7 @@ export default async function BarCafePage() {
   let pointsBalance = 0
   if (user) {
     const { data: profile } = await supabase
-      .from("profiles")
+      .from("my_profile")
       .select("points_balance")
       .eq("id", user.id)
       .single()

@@ -42,7 +42,7 @@ export default async function FinancialsPage() {
 
   // Get profile for connect status
   const { data: profile } = await supabase
-    .from("profiles")
+    .from("my_profile")
     .select(`
       stripe_connect_account_id,
       stripe_connect_status,
