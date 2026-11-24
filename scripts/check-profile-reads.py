@@ -190,16 +190,41 @@ def parse_chain(text, start):
 
 
 def split_args(raw):
-    """Split a raw argument string on top-level commas."""
+    """Split a raw argument string on top-level commas, ignoring comments.
+
+    Comments are skipped rather than copied, because a comma inside one
+    otherwise splits the argument list. That is not hypothetical: the comment
+    explaining the public player-profile column list contains the phrase
+    "phone, address and kyc_status", and its comma made the column list look
+    like a non-literal argument, so the query this script exists to protect
+    was reported unprovable.
+    """
     out, cur, depth, quote = [], [], 0, None
-    for idx, c in enumerate(raw):
+    i, n = 0, len(raw)
+    while i < n:
+        c = raw[i]
         if quote:
             if c == "\\":
                 cur.append(c)
+                i += 1
+                if i < n:
+                    cur.append(raw[i])
+                    i += 1
                 continue
             if c == quote:
                 quote = None
-        elif c in "\"'`":
+            cur.append(c)
+            i += 1
+            continue
+        if raw.startswith("//", i):
+            j = raw.find("\n", i)
+            i = n if j < 0 else j + 1
+            continue
+        if raw.startswith("/*", i):
+            j = raw.find("*/", i)
+            i = n if j < 0 else j + 2
+            continue
+        if c in "\"'`":
             quote = c
         elif c in "([{":
             depth += 1
@@ -208,15 +233,28 @@ def split_args(raw):
         elif c == "," and depth == 0:
             out.append("".join(cur))
             cur = []
+            i += 1
             continue
         cur.append(c)
+        i += 1
     out.append("".join(cur))
     return out
 
 
 def literal(arg):
-    """The contents of arg if it is a single string/template literal, else None."""
-    a = arg.strip()
+    """The contents of arg if it is a single string/template literal, else None.
+
+    Leading // and /* comments are skipped first. A column list is often
+    preceded by a comment explaining it, and an earlier version treated that
+    as "not a literal" and skipped the whole select - which is how the public
+    player-profile read passed this check by omission rather than by being
+    correct.
+
+    Returns None for an interpolated literal, where the column is not static
+    and cannot be checked here. `--verbose` lists those so they are visible
+    rather than merely absent.
+    """
+    a = arg[skip_ws(arg, 0):].rstrip()
     if len(a) >= 2 and a[0] == a[-1] and a[0] in "\"'`":
         body = a[1:-1]
         if "${" in body:        # interpolated: the column is not static
@@ -294,14 +332,22 @@ def iter_source_files():
                 yield os.path.join(base, name)
 
 
-def columns_touched(chain, own_table):
-    """Every profiles column a parsed chain names, with where it was named."""
+def columns_touched(chain, own_table, unchecked=None):
+    """Every profiles column a parsed chain names, with where it was named.
+
+    `unchecked` collects the method names whose column argument is not a
+    static literal. Those cannot be proved safe here, so they are surfaced
+    rather than skipped - silently skipping is how three separate real
+    violations got past earlier versions of this script.
+    """
     found = []   # (column, place)
     for name, raw in chain:
         args = split_args(raw) if raw.strip() else []
         if name == "select":
             body = literal(args[0]) if args else None
             if body is None:
+                if args and args[0].strip() and unchecked is not None:
+                    unchecked.append(name)
                 continue
             if own_table:
                 for tok in split_args(body):
@@ -331,7 +377,10 @@ def columns_touched(chain, own_table):
                         found.append((cc, "match"))
         elif name in COLUMN_FIRST_ARG:
             body = literal(args[0]) if args else None
-            if body is not None:
+            if body is None:
+                if args and args[0].strip() and unchecked is not None:
+                    unchecked.append(name)
+            else:
                 place = "order" if name == "order" else "filter"
                 for c in owned_columns(body, own_table):
                     cc = column_of(c)
@@ -358,7 +407,7 @@ def main():
         return 0
 
     allowed = PUBLIC_COLUMNS | AUTHENTICATED_EXTRA
-    violations, missing, seen = [], [], []
+    violations, missing, seen, unprovable = [], [], [], []
     direct = embedded = 0
 
     for path in sorted(iter_source_files()):
@@ -371,8 +420,10 @@ def main():
             continue
         rel = os.path.relpath(path, ROOT)
 
-        def record(start, shape, table, found):
+        def record(start, shape, table, found, skipped=()):
             line = text[:start].count("\n") + 1
+            if skipped and table != "my_profile" and not client_is_service(text, start):
+                unprovable.append((rel, line, ",".join(sorted(set(skipped)))))
             names = sorted({c for c, _ in found})
             where = {}
             for c, place in found:
@@ -398,8 +449,9 @@ def main():
         for m in FROM_RE.finditer(text):
             direct += 1
             chain = parse_chain(text, m.end())
-            record(m.start(), "direct", m.group(1),
-                   columns_touched(chain, own_table=True))
+            skipped = []
+            found = columns_touched(chain, own_table=True, unchecked=skipped)
+            record(m.start(), "direct", m.group(1), found, skipped)
 
         # 2. Chains rooted elsewhere that embed profiles.
         for m in ANY_FROM_RE.finditer(text):
@@ -427,6 +479,16 @@ def main():
         for f, l, c in sorted(set(missing)):
             print("    %s:%s  -> %s" % (f, l, c))
 
+    if unprovable:
+        print("")
+        print("  %d user-scoped quer%s build a column argument at runtime, so"
+              % (len(set(unprovable)),
+                 "y" if len(set(unprovable)) == 1 else "ies"))
+        print("  this script cannot prove it safe. Name the columns, or move")
+        print("  the query to createAdminClient() if the SERVICE is acting:")
+        for f, l, c in sorted(set(unprovable)):
+            print("    %s:%s  -> %s(<not a literal>)" % (f, l, c))
+
     if violations:
         print("")
         print("  %d user-scoped quer%s touch a WITHHELD column:"
@@ -440,6 +502,9 @@ def main():
         print("    - touch only the public columns  (--list-safe)")
         print("    - read the caller's own row via public.my_profile")
         print("    - use createAdminClient() where the SERVICE is acting")
+        return 1
+
+    if unprovable:
         return 1
 
     print("  no user-scoped query touches a withheld column")
