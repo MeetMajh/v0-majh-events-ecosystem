@@ -1,0 +1,74 @@
+# Profiles column-floor gate.
+#
+# public.profiles holds contact, payout and compliance data. The floor
+# narrows what `anon` and `authenticated` may SELECT from it to a named
+# column list, and column privileges are checked BEFORE row-level security:
+# a query naming a withheld column does not return null, it fails outright
+# with 42501.
+#
+# scripts/check-profile-reads.py is what keeps a new read from reintroducing
+# that. Until this workflow existed it only protected the days somebody
+# remembered to run it.
+#
+# What it checks, and why each was added:
+#
+#   * the select list                 - the obvious case
+#   * every filter, and the order     - a WHERE or ORDER BY on a withheld
+#                                       column fails exactly like selecting
+#                                       it, so `count: exact, head: true`
+#                                       is no protection
+#   * embedded joins                  - `profiles!inner(...)` never says
+#                                       .from("profiles") but PostgREST
+#                                       resolves it against profiles
+#   * queries with no terminator      - inside Promise.all([...]) a query
+#                                       ends at a comma, not at .single()
+#   * runtime column arguments        - reported and FATAL, because a guard
+#                                       that silently skips what it cannot
+#                                       parse is how three real violations
+#                                       got through earlier versions
+#
+# It does NOT check the database. RLS policies that subquery profiles are
+# evaluated with the CALLER's privileges, and that is what migration 047
+# broke - eight tables, none of them visible to any TypeScript analysis.
+# scripts/verify-profile-floor.sql covers that half and is run by hand
+# against the project, per 04-evidence/floor-verification-procedure.md.
+#
+# It also does NOT check what is deployed. See that procedure's deploy gate:
+# on 2026-11-24 the floor was applied while production was still serving the
+# pre-my_profile code, and every own-row read returned 403 until it was
+# rolled back. The guard was green throughout, because the guard reads the
+# repository and the floor hits the live site.
+
+name: profiles-floor
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: profiles-floor-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Standard library only, and no syntax newer than 3.6, so the version
+      # here is not load-bearing.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: No user-scoped query may touch a withheld column
+        run: python3 scripts/check-profile-reads.py
+
+      # The granted columns, printed on failure so the fix is in the log
+      # rather than in someone's memory of the migration.
+      - name: Granted columns (on failure)
+        if: failure()
+        run: python3 scripts/check-profile-reads.py --list-safe
