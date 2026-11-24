@@ -53,8 +53,12 @@ async function getAnalyticsData(period: "today" | "7d" | "30d") {
     { data: eventViews },
     { data: clipViews },
   ] = await Promise.all([
-    supabase.from("profiles").select("*", { count: "exact", head: true }),
-    supabase.from("profiles").select("*", { count: "exact", head: true }).gte("created_at", startDate.toISOString()),
+    // A count needs no columns, but select("*") asks for all 58 of them and
+    // so fails with 42501 under the public column grant. `id` is granted and
+    // the count is identical. Probed: count(*) with no filter is allowed;
+    // select * is not.
+    supabase.from("profiles").select("id", { count: "exact", head: true }),
+    supabase.from("profiles").select("id", { count: "exact", head: true }).gte("created_at", startDate.toISOString()),
     supabase.from("player_media").select("player_id", { count: "exact", head: true }).eq("visibility", "public"),
     supabase.from("events").select("*", { count: "exact", head: true }),
     supabase.from("tournaments").select("*", { count: "exact", head: true }),

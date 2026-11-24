@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { requireStaff } from "@/lib/auth/require-staff"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -36,17 +36,23 @@ export default async function ComplianceDashboardPage() {
     { data: recentKycSessions },
     { data: recentAlerts },
   ] = await Promise.all([
-    supabase
+    // The SERVICE acting: compliance review counts users BY their identity
+    // verification state. requireStaff("manager") above runs under the
+    // caller's own authority and is what authorizes this. kyc_status is
+    // withheld from the public column grant, and a FILTER on a withheld
+    // column fails with 42501 exactly like selecting it - so this cannot
+    // stay on the caller's client at all, whatever it selects.
+    createAdminClient()
       .from("profiles")
-      .select("*", { count: "exact", head: true })
+      .select("id", { count: "exact", head: true })
       .eq("kyc_status", "pending"),
-    supabase
+    createAdminClient()
       .from("profiles")
-      .select("*", { count: "exact", head: true })
+      .select("id", { count: "exact", head: true })
       .eq("kyc_status", "verified"),
-    supabase
+    createAdminClient()
       .from("profiles")
-      .select("*", { count: "exact", head: true })
+      .select("id", { count: "exact", head: true })
       .eq("kyc_status", "rejected"),
     supabase
       .from("compliance_alerts")

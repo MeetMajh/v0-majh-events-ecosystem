@@ -1,6 +1,6 @@
 "use server"
 
-import { createClient } from "@/lib/supabase/server"
+import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { createNotification, NotificationType } from "@/lib/notification-actions"
 
 // ==========================================
@@ -348,7 +348,15 @@ export async function checkDormantUsers(): Promise<void> {
   // Find users who haven't been active in 3+ days
   const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString()
 
-  const { data: dormantUsers } = await supabase
+  // The SERVICE acting: a batch re-engagement sweep over OTHER people's rows,
+  // filtered on last_active_at, which the public column grant withholds. A
+  // filter on a withheld column fails with 42501, so this belongs on the
+  // service role regardless of who triggers the sweep.
+  //
+  // NOTE: this function is currently exported and never called. When it is
+  // wired to a cron route, that route needs its own guard - running as the
+  // service role means nothing here checks who asked.
+  const { data: dormantUsers } = await createAdminClient()
     .from("profiles")
     .select("id, first_name")
     .lt("last_active_at", threeDaysAgo)
